@@ -10,10 +10,10 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import { planMap, THEMES } from "./mapgen.js";
 /* Which field this is. "classic" is the refinery built by hand; anything else is "<kit>-<number>" and is made by
    mf/mapgen.js. The key comes from the address (?map=), or from the last one chosen on this machine. */
-const okKey = (k) => !!k && (k === "classic" || (/^[a-z]+-\d{1,6}$/.test(k) && !!THEMES[k.split("-")[0]]));
-export const MAPKEY = (() => { let k = null; try { if (sessionStorage.getItem("ab-autojoin")) k = sessionStorage.getItem("ab-map-join"); else sessionStorage.removeItem("ab-map-join"); } catch (e) {} if (!okKey(k)) k = new URLSearchParams(location.search).get("map"); try { if (!okKey(k)) k = localStorage.getItem("ab-map"); } catch (e) {} if (!okKey(k)) { k = "mixed-" + (1000 + Date.now() % 9000); try { localStorage.setItem("ab-map", k); } catch (e) {} } return k; })();
+const okKey = (k) => !!k && /^[a-z]+-\d{1,6}-[sml][ad]$/.test(k) && !!THEMES[k.split("-")[0]];
+export const MAPKEY = (() => { let k = null; try { if (sessionStorage.getItem("ab-autojoin")) k = sessionStorage.getItem("ab-map-join"); else sessionStorage.removeItem("ab-map-join"); } catch (e) {} if (!okKey(k)) k = new URLSearchParams(location.search).get("map"); try { if (!okKey(k)) k = localStorage.getItem("ab-map"); } catch (e) {} if (!okKey(k)) { k = "mixed-" + (1000 + Date.now() % 9000) + "-sa"; try { localStorage.setItem("ab-map", k); } catch (e) {} } return k; })();
 export const setMap = (k, extra) => { if (!okKey(k)) return false; try { localStorage.setItem("ab-map", k); sessionStorage.removeItem("ab-map-join"); if (extra) sessionStorage.setItem("ab-map-go", JSON.stringify(extra)); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("map"); location.href = u.toString(); return true; };
-const KEYN = MAPKEY === "classic" ? 0 : [...MAPKEY].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
+const KEYN = [...MAPKEY.slice(0, -1)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
 export { THREE };
 export const U = 1 / .06;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -241,7 +241,7 @@ const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t 
 const NOX = (KEYN % 977) * 1.3, NOZ = ((KEYN >>> 10) % 991) * 1.7;   // every made field has its own hills
 const HK = KEYN ? .78 : 1, hillsRaw = (x, z) => 4 + HK * 17 * fbm(x * .011 + 3 + NOX, z * .011 + NOZ) + HK * 8 * fbm(x * .034 + 9 + NOX, z * .034 + NOZ) + Math.max(0, Math.hypot(x, z + 20) - 150) * .5 + clamp((-z - 40) / 150, 0, 1) * 7 + clamp((-x - 40) / 120, 0, 1) * 5;
 const genDims = (model) => { try { const e = GEN.entry(model); return e ? [e.dims[0] / U, e.dims[1] / U, e.dims[2] / U] : null; } catch (e) { return null; } };
-export const PLAN = MAPKEY !== "classic" && GEN ? planMap(MAPKEY, { hills: hillsRaw, dims: genDims, isVeh: (t) => !!(GEN.TYPES[t] && GEN.TYPES[t].vehicle) }) : null;
+export const PLAN = GEN ? planMap(MAPKEY, { hills: hillsRaw, dims: genDims, isVeh: (t) => !!(GEN.TYPES[t] && GEN.TYPES[t].vehicle) }) : null;
 export const MAPNAME = PLAN ? PLAN.name : "The refinery", SITES = PLAN ? PLAN.sites : [["A", 100, 14, "Town square"], ["B", -6, -4, "Refinery"], ["C", -95, -20, "Lodge"], ["D", 52, -118, "Ridge relay"], ["E", -34, 86, "Depot"]];
 // built ground: [x0, z0, x1, z1, height, how far it takes to blend into the hills]
 const ZONES = PLAN ? PLAN.zones : [[-56, -56, 56, 56, 0, 34], [62, -48, 152, 66, 0, 30], [-34, 104, 34, 150, 0, 26], [-34, -190, 34, -146, 2, 26], [-8, 56, 8, 104, 0, 16], [-8, -146, 8, -56, 1, 16], [56, -7, 62, 7, 0, 14], [-112, -36, -80, -6, 9, 22], [36, -134, 66, -108, 17, 18], [-54, 68, -18, 98, 3, 20]];
@@ -325,6 +325,7 @@ for (const [x, z, y] of [[-10, 112, 0], [10, 112, 0], [0, 108, 0], [-18, 120, 0]
 if (PLAN) for (const p of PLAN.prims) { const k = p[0], x = p[1], z = p[2], y = groundH(x, z);
   if (k === "s") { const sink = p[8] ? 0 : .15; solid(x, y + p[8] - sink, z, p[3], p[4] + sink, p[5], p[6], p[7]); } else if (k === "d") deco(x, y + p[7], z, p[3], p[4], p[5], p[6], true); else if (k === "g") glow(x, y + p[6], z, p[3], p[4], p[5]);
   else if (k === "sb") sandbags(x, z, p[3], p[4], y - .05); else if (k === "br") barrels(x, z, p[3], undefined, groundH(x + .4, z + .8) - .05); else if (k === "ct") { cyl(x, y - .15, z, p[3], p[4] + .15, p[5], 12); cyl(x, y + p[4], z, p[3] * .8, .12, "#3c4046", 12); BOXES.push({ min: [x - p[3] * .8, y - .3, z - p[3] * .8], max: [x + p[3] * .8, y + p[4], z + p[3] * .8] }); }
+  else if (k === "li") { lamp(x, y + p[3], z, "#ffd9a0", 1100); glow(x, y + p[3] + .35, z, .9, .12, .9); }
   else if (k === "lp") lampPost(x, z, p[3], p[4], undefined, undefined, y - .1); else if (k === "fb") fireBarrel(x, z, y - .05); }
 // the land itself
 { const N = 176, M = 184, g = new THREE.PlaneGeometry(440, 460, N, M).rotateX(-Math.PI / 2).translate(0, 0, -20).toNonIndexed(); g.deleteAttribute("uv"); const P = g.attributes.position, a = new Float32Array(P.count * 3), c2 = new THREE.Color();

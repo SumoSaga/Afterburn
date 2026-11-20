@@ -5,7 +5,7 @@
    The Frontier Militia are the Table's soldiers; the Machine's infantry are the Table's machine troopers (cb/cbmech.js) on
    the same skeleton. Vehicles are the Table's generated models; the Machine's walk and track on their own rigs.
    Everything here is in metres; the engine draws at U. */
-import { THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, SITES, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
+import { THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, SITES, PLAN, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
 
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
 const WPN = { rifle: { range: 48, dmg: 22, burst: 3, acc: .5, cd: [1.4, 2.4] }, lmg: { range: 52, dmg: 16, burst: 6, acc: .42, cd: [1.6, 2.4] }, dmr: { range: 75, dmg: 48, burst: 1, acc: .7, cd: [1.6, 2.2] }, shotgun: { range: 16, dmg: 50, burst: 1, acc: .75, cd: [1.1, 1.6] } };
@@ -75,13 +75,38 @@ export function legNodes(a, b, big = false) { const G = big ? PASS : WALK, [bx, 
   out[out.length - 1] = end; return out; }
 
 /* ---------- the three points ---------- */
-for (const [name, x, z, label] of SITES) { const gy = groundH(x, z);
+for (const [name, x, z, label, sector = 0, roof = 0] of SITES) { const gy = groundH(x, z);
   const lamp = new THREE.Mesh(new THREE.BoxGeometry(.5 * U, .5 * U, .5 * U), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL.none) })); lamp.position.set(x * U, (gy + 5.2) * U, z * U);
   const pole = new THREE.Mesh(new THREE.BoxGeometry(.14 * U, 5 * U, .14 * U), new THREE.MeshToonMaterial({ color: "#2a2724" })); pole.position.set(x * U, (gy + 2.5) * U, z * U); pole.castShadow = true;
   const ring = fxLayer(new THREE.Mesh(new THREE.RingGeometry(8.6 * U, 9 * U, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: lamp.material.color, transparent: true, opacity: .75, depthWrite: false, side: THREE.DoubleSide }))); ring.position.set(x * U, gy * U + 3, z * U);
   const light = new THREE.PointLight("#ffffff", 900, 300, 1.5); light.position.set(x * U, (gy + 4.6) * U, z * U);
-  scene.add(lamp, pole, ring, light); POINTS.push({ name, label, x, z, prog: 0, owner: null, lamp, light, n: { you: 0, foe: 0 } });
+  scene.add(lamp, pole, ring, light); POINTS.push({ name, label, x, z, sector, roof: !!roof, prog: 0, owner: null, lamp, light, n: { you: 0, foe: 0 }, w: { you: 0, foe: 0 } });
 }
+
+/* ---------- the operation: one side attacks through the sectors in turn, the other holds them ----------
+   Only the points of the active sector can change hands. When the attackers hold all of them the sector falls, the
+   defenders get 40 seconds to fall back, and the next sector opens. The attackers have tickets: a pilot coming back costs
+   one (or, with no pilots on that side, a bought squad wiped costs one and a Titan lost costs three). At no tickets the
+   first battalion is spent and a second comes in where the first stopped. When the second is spent the defenders have won. */
+export const OP = { atk: PLAN ? PLAN.atk : "you", sector: 0, tickets: 30, max: 30, batt: 1, phase: "fight", t: 0, wave: 4, ot: 0, ai: false };
+export const SECN = 1 + Math.max(0, ...SITES.map((q) => q[4] || 0)), ATK = PLAN ? PLAN.atk : "you", HOMES = PLAN ? PLAN.homes : [{ atk: [0, 126], def: [0, -152] }];
+const say = (t, n) => { if (B.hooks.say) B.hooks.say(t, n); };
+export function setHomes() { const k = Math.min(OP.sector, SECN - 1), kd = Math.min(SECN - 1, k + (OP.phase === "retreat" ? 1 : 0)), fix = (p, raw) => (raw ? p.slice() : nearestWalk(p[0], p[1])), pa = fix(HOMES[k].atk, k === 0), pd = fix(HOMES[kd].def, kd === SECN - 1), d = other(ATK);
+  BASE[ATK] = pa; RALLY[ATK] = pa; BASE[d] = pd; RALLY[d] = pd; }
+export const homeOf = (side) => BASE[side];   // side as the map has it: "you" is the south end
+export function spend(side, n = 1) { if (B.mp === "guest" || B.over || side !== OP.atk || OP.phase !== "fight") return; OP.tickets = Math.max(0, OP.tickets - n); }
+const tgtSector = (side) => (OP.phase === "retreat" && side !== OP.atk ? Math.min(SECN - 1, OP.sector + 1) : OP.sector);
+function sectorFalls() { const a = OP.atk; if (OP.sector >= SECN - 1) { B.over = a; say(a === "you" ? "The citadel is yours. The operation is won. Press T to fight it again." : "The citadel has fallen. The operation is lost. Press T to fight it again.", 0); return; }
+  OP.phase = "retreat"; OP.t = 40; OP.tickets = Math.min(OP.max, OP.tickets + Math.round(OP.max / 3)); setHomes(); for (const sq of SQUADS) if (sq.side !== a && (sq.auto || sq.wave !== undefined)) { sq.think = 0; sq.order = null; sq.wave = undefined; }
+  say(a === "you" ? "Sector " + (OP.sector + 1) + " is yours. They are falling back. The next sector opens in 40 seconds." : "Sector " + (OP.sector + 1) + " has fallen. Fall back to the next line. You have 40 seconds.", 5); }
+function waveSquad(side, i) { const who = B.cmds.find((w) => B.side[w] === side); if (!who) return; const U2 = FACTIONS[B.fac[who]].units, id = Object.keys(U2).find((k) => !U2[k].veh), sq = id && deploy(who, id, false); if (!sq) return; sq.owner = "wave"; sq.wave = i; sq.auto = false; sq.order = { type: "point", i }; sq.path = legNodes(sq.c.set(BASE[side][0], 0, BASE[side][1]), V3(POINTS[i].x + (rnd() - .5) * 6, 0, POINTS[i].z + (rnd() - .5) * 6), false); }
+function stepOp(dt) { const a = OP.atk, d = other(a);
+  if (OP.phase === "retreat") { OP.t -= dt; if (OP.t <= 0) { OP.sector++; OP.phase = "fight"; OP.wave = 2; setHomes(); say(a === "you" ? "Sector " + (OP.sector + 1) + " is open. Push on." : "They are coming. Hold sector " + (OP.sector + 1) + ".", 4); } return; }
+  if (OP.phase === "regroup") { OP.t -= dt; if (OP.t <= 0) { OP.phase = "fight"; OP.batt = 2; OP.tickets = OP.max; OP.wave = 1; for (const w of B.cmds) if (B.side[w] === a) B.supply[w] = Math.min(300, B.supply[w] + 100); if (B.hooks.surge) B.hooks.surge(a); say(a === "you" ? "Your second battalion is in. This is the last of it." : "Their second battalion is in. Hold them once more.", 5); } return; }
+  OP.wave -= dt; if (OP.wave <= 0) { OP.wave = 40; for (const side of ["you", "foe"]) POINTS.forEach((p, i) => { if (p.sector === OP.sector && SQUADS.filter((q) => !q.dead && q.wave === i && q.side === side).length < 2) waveSquad(side, i); }); }
+  if (OP.tickets <= 0) { if (POINTS.some((p) => p.sector === OP.sector && p.n[a] > 0)) OP.ot = 5; else { OP.ot -= dt; if (OP.ot <= 0) { if (OP.batt < 2) { OP.phase = "regroup"; OP.t = 20; say(a === "you" ? "Your first battalion is spent. The second comes in where you stand in 20 seconds." : "Their first battalion is spent. A second is coming in 20 seconds.", 5); } else { B.over = d; say(d === "you" ? "You held. Both battalions are spent and the operation is yours. Press T to fight it again." : "Both battalions are spent. The operation is lost. Press T to fight it again.", 0); } } } } }
+export const opLine = () => { const a = OP.atk === "you", pts = POINTS.filter((p) => p.sector === Math.min(OP.sector + (OP.phase === "retreat" ? 1 : 0), SECN - 1)).map((p) => `<i class="${p.owner || "none"}" title="${p.roof ? "Roofed: pilots and troops only" : "Open air"}">${p.name}${p.roof ? "&#9650;" : ""}</i>`).join("");
+  return `<span class="${a ? "you" : "foe"}">${a ? "ATTACK" : "DEFEND"}</span> Sector ${Math.min(OP.sector + (OP.phase === "retreat" ? 2 : 1), SECN)}/${SECN} ${pts} <span class="${a ? "you" : "foe"}">${OP.phase === "retreat" ? "opens in " + Math.ceil(OP.t) : OP.phase === "regroup" ? "battalion 2 in " + Math.ceil(OP.t) : OP.tickets + " tickets" + (OP.batt > 1 ? " · last battalion" : "")}</span>`; };
 
 /* ---------- squads, soldiers and vehicles ---------- */
 function spotFree(x, z, r) { for (let i = 0; i < 12; i++) { const px = x + (rnd() - .5) * (2 + i), pz = z + (rnd() - .5) * (2 + i * .6); if (freeG(px, pz, 1.8, r)) return [px, pz]; } return [x, z]; }
@@ -180,8 +205,8 @@ function stepSquad(sq, dt) {
   const mem = sq.members.filter((g) => g.s.dead < 0); if (!mem.length && !(sq.veh && sq.veh.alive)) { sq.dead = true; return; }
   if (sq.veh) sq.c.copy(sq.veh.pos); else { sq.c.set(0, 0, 0); for (const g of mem) { sq.c.x += g.s.root.position.x / U; sq.c.z += g.s.root.position.z / U; } sq.c.divideScalar(mem.length); }
   sq.n = mem.length; sq.eng = sq.veh ? !!(sq.veh.tgt && tgtAlive(sq.veh.tgt)) : mem.some((g) => g.tgt && tgtAlive(g.tgt));
-  sq.think -= dt; if (sq.auto && (sq.think <= 0 || !sq.order)) { sq.think = 5 + rnd() * 3; let best = -1e9, bi = 0;
-    POINTS.forEach((p, i) => { const d = Math.hypot(p.x - sq.c.x, p.z - sq.c.z), mates = SQUADS.filter((o) => o !== sq && o.side === sq.side && !o.dead && o.order && o.order.type === "point" && o.order.i === i).length;
+  sq.think -= dt; if (sq.auto && (sq.think <= 0 || !sq.order)) { sq.think = 5 + rnd() * 3; const ts = tgtSector(sq.side); let best = -1e9, bi = Math.max(0, POINTS.findIndex((p) => p.sector === ts));
+    POINTS.forEach((p, i) => { if (p.sector !== ts) return; const d = Math.hypot(p.x - sq.c.x, p.z - sq.c.z), mates = SQUADS.filter((o) => o !== sq && o.side === sq.side && !o.dead && o.order && o.order.type === "point" && o.order.i === i).length;
       const v = (p.owner === sq.side ? (p.n[other(sq.side)] > 0 ? 7 : 1 + (sq.order && sq.order.i === i ? 1.5 : 0)) : 10) - d * .035 - mates * 3 + (sq.order && sq.order.type === "point" && sq.order.i === i ? 2 : 0); if (v > best) { best = v; bi = i; } });
     if (!sq.order || sq.order.i !== bi) { sq.order = { type: "point", i: bi }; sq.path = legNodes(sq.c, V3(POINTS[bi].x + (rnd() - .5) * 6, 0, POINTS[bi].z + (rnd() - .5) * 6), !!sq.veh); } }
   const o = sq.order || { type: "move", pos: V3(RALLY[sq.side][0], 0, RALLY[sq.side][1]) }, fin = o.pos || V3(POINTS[o.i].x, 0, POINTS[o.i].z), reach = sq.veh ? 5.5 : 4.5;
@@ -191,14 +216,19 @@ function stepSquad(sq, dt) {
   const where = o.type === "point" ? POINTS[o.i].name + ", the " + POINTS[o.i].label.toLowerCase() : null;
   sq.state = sq.eng ? (where ? (sq.arrived ? "Fighting on " : "Fighting on the way to ") + where : "Fighting") : sq.arrived ? (where ? (POINTS[o.i].owner === sq.side ? "Holding " : "Taking ") + where : "Holding position") : where ? "Moving to " + where + (sq.path.some((p) => p.stop) ? " by your stops" : "") : "Moving";
 }
-function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null;
-  for (const p of POINTS) { const n = { you: 0, foe: 0 }, near = (x, z) => Math.hypot(x - p.x, z - p.z) < 9;
-    for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && near(g.s.root.position.x / U, g.s.root.position.z / U)) n[side]++; for (const v of VEH) if (v.alive && v.side === side && near(v.pos.x, v.pos.z)) n[side] += 2; }
-    if (pl && pl.alive && near(pl.at.x, pl.at.z)) n.you += pl.titan ? 3 : 2; for (const rp of B.hooks.rpilots ? B.hooks.rpilots() : []) if (rp.ok && near(rp.pos.x, rp.pos.z)) n[rp.side] += 2; for (const t of B.hooks.titans ? B.hooks.titans() : []) if (t.alive && !t.piloted && near(t.pos.x, t.pos.z)) n[t.team] += 3;
-    p.n = n; const diff = clamp(n.you - n.foe, -3, 3); if (diff) p.prog = clamp(p.prog + diff * .055 * dt, -1, 1); else if (!n.you && !n.foe && p.owner) p.prog = clamp(p.prog + (p.owner === "you" ? 1 : -1) * .03 * dt, -1, 1);
+function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null, rps = B.hooks.rpilots ? B.hooks.rpilots() : [], tis = B.hooks.titans ? B.hooks.titans() : [];
+  for (const p of POINTS) { const n = { you: 0, foe: 0 }, w = { you: 0, foe: 0 }, ai = { you: 0, foe: 0 }, aura = { you: false, foe: false }, far = (x, z) => Math.hypot(x - p.x, z - p.z);
+    const pilot = (side, x, z, titan) => { const d = far(x, z); if (d < 20) aura[side] = true; if (d < 9) { n[side]++; w[side] += titan ? (p.roof ? 0 : 1.5) : 1; } };   // a pilot counts 1, a Titan 1.5 and only in the open
+    if (pl && pl.alive) pilot("you", pl.at.x, pl.at.z, pl.titan); for (const rp of rps) if (rp.ok || rp.inTitan) pilot(rp.side, rp.pos.x, rp.pos.z, rp.inTitan);
+    for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && far(g.s.root.position.x / U, g.s.root.position.z / U) < 9) { n[side]++; ai[side] += .3; } for (const v of VEH) if (v.alive && v.side === side && far(v.pos.x, v.pos.z) < 9) { n[side]++; ai[side] += .4; } }
+    for (const t of tis) if (t.alive && !t.piloted && t.remote == null && far(t.pos.x, t.pos.z) < 9) { n[t.team]++; if (!p.roof) w[t.team] += 1.5; }
+    for (const side of ["you", "foe"]) w[side] += ai[side] * (aura[side] ? 1.25 : 1);   // troops count 0.3 each, a quarter more with a pilot of theirs within 20 m
+    p.n = n; p.w = w; if (p.sector !== OP.sector || OP.phase !== "fight") continue;
+    const net = w.you - w.foe; if (Math.abs(net) > .01) p.prog = clamp(p.prog + Math.sign(net) * Math.min(Math.abs(net), 2.5) / 12 * dt, -1, 1); else if (!n.you && !n.foe && p.owner) p.prog = clamp(p.prog + (p.owner === "you" ? 1 : -1) * .03 * dt, -1, 1);
     const was = p.owner; if (p.prog >= 1) p.owner = "you"; else if (p.prog <= -1) p.owner = "foe"; else if ((p.owner === "you" && p.prog <= 0) || (p.owner === "foe" && p.prog >= 0)) p.owner = null;
-    if (was !== p.owner) ownerChanged(p); } }
-function ownerChanged(p) { const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
+    if (was !== p.owner) ownerChanged(p); }
+  if (OP.phase === "fight" && !B.over && POINTS.every((p) => p.sector !== OP.sector || p.owner === OP.atk)) sectorFalls(); }
+function ownerChanged(p, quiet) { const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (!quiet && p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
 
 // a commander that plays by a doctrine: what to bring in next, as supply allows
 function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[side] = 1.5; const doc = B.doctrine[side]; if (doc === "manual" || B.away[side]) return;
@@ -212,15 +242,14 @@ export function stepBattle(dt) { if (B.mp === "guest") return stepGuest(dt); if 
   for (const g of GRUNTS) stepSoldier(g, dt); for (const g of ALLIES) stepSoldier(g, dt); for (const v of VEH) stepVeh(v, dt);
   for (const L of [GRUNTS, ALLIES]) for (let i = L.length - 1; i >= 0; i--) if (L[i].gone) L.splice(i, 1);
   for (let i = VEH.length - 1; i >= 0; i--) if (!VEH[i].alive) VEH.splice(i, 1);
-  for (let i = SQUADS.length - 1; i >= 0; i--) { stepSquad(SQUADS[i], dt); if (SQUADS[i].dead) { const k = MAP.sels.indexOf(SQUADS[i]); if (k >= 0) MAP.sels.splice(k, 1); SQUADS.splice(i, 1); } }
-  stepPoints(dt); stepUtils(dt); for (const w of B.cmds) command(w, dt);
+  for (let i = SQUADS.length - 1; i >= 0; i--) { stepSquad(SQUADS[i], dt); if (SQUADS[i].dead) { if (OP.ai && SQUADS[i].side === OP.atk && SQUADS[i].owner !== "wave") spend(OP.atk, 1); const k = MAP.sels.indexOf(SQUADS[i]); if (k >= 0) MAP.sels.splice(k, 1); SQUADS.splice(i, 1); } }
+  stepPoints(dt); stepOp(dt); stepUtils(dt); for (const w of B.cmds) command(w, dt);
   for (const w of B.cmds) B.supply[w] = Math.min(300, B.supply[w] + income(w) * dt);   // supply comes in steadily; the side that is behind is sent more
-  tick += dt; if (tick >= 1) { tick -= 1; for (const side of ["you", "foe"]) { const own = POINTS.filter((p) => p.owner === side).length; B.score[side] += own * .5; }
-    if (B.score.you >= GOAL || B.score.foe >= GOAL) { B.over = B.score.you >= B.score.foe ? "you" : "foe"; if (B.hooks.say) B.hooks.say(B.over === "you" ? "The field is yours. Press T to fight it again." : "The enemy holds the field. Press T to fight it again.", 0); } }
 }
 export function resetBattle() { for (const L of [GRUNTS, ALLIES]) { for (const g of L) if (!g.gone) { try { g.s.remove(); } catch (e) {} } L.length = 0; }
   for (const v of VEH) { if (v.mid) removeMachine(v.mid); else scene.remove(v.group); } VEH.length = 0; SQUADS.length = 0; MAP.sels = [];
-  for (const p of POINTS) { p.prog = 0; p.owner = null; p.lamp.material.color.setRGB(...COL.none); p.light.color.setRGB(.5, .47, .4); }
+  OP.atk = ATK; OP.sector = 0; OP.batt = 1; OP.phase = "fight"; OP.t = 0; OP.wave = 4; OP.ot = 0; OP.ai = !B.mp && ATK === "foe"; OP.max = OP.tickets = 30 * Math.max(1, B.hooks.attackers ? B.hooks.attackers() : 1); setHomes();
+  for (const p of POINTS) { p.owner = other(ATK); p.prog = p.owner === "you" ? 1 : -1; ownerChanged(p, true); }
   GH.sq.clear(); GH.g.clear(); B.cmds = []; B.side = {}; B.away = {};
   const add = (key, side, fac, list, doc) => { fac = FACTIONS[fac] ? fac : "militia"; B.cmds.push(key); B.side[key] = side; B.fac[key] = fac; B.list[key] = (list || []).filter((id) => FACTIONS[fac].units[id]); B.doctrine[key] = DOCTRINES[doc] ? doc : "mixed"; B.supply[key] = 70; B.turn[key] = 0; B.ai[key] = 2; B.cd[key] = { strike: 0, shield: 0, med: 0 }; };
   add("you", "you", LOAD.side, LOAD.list[LOAD.side].slice(), LOAD.doctrine);
@@ -287,13 +316,14 @@ function stepUtils(dt) { for (const w in B.cd) for (const k in B.cd[w]) B.cd[w][
 const r1 = (v) => Math.round(v * 10) / 10, GH = { sq: new Map(), g: new Map() }, FACS = Object.keys(FACTIONS);
 // who is one commander's key on the host ("p1", "p2"...). Sides are sent as that player sees them: 1 is their own side.
 export function snapshot(who) { const my = B.side[who], rel = (sd) => (sd === my ? 1 : 0), cd = B.cd[who], sg = my === "you" ? 1 : -1;
-  return { t: r1(B.time), sc: [r1(B.score[my]), r1(B.score[other(my)])], sup: Math.floor(B.supply[who]), cd: [Math.ceil(cd.strike), Math.ceil(cd.shield), Math.ceil(cd.med)], ov: B.over ? (B.over === my ? 1 : 2) : 0,
+  return { t: r1(B.time), sc: [r1(B.score[my]), r1(B.score[other(my)])], sup: Math.floor(B.supply[who]), cd: [Math.ceil(cd.strike), Math.ceil(cd.shield), Math.ceil(cd.med)], ov: B.over ? (B.over === my ? 1 : 2) : 0, op: [OP.sector, OP.tickets, OP.max, OP.batt, ["fight", "retreat", "regroup"].indexOf(OP.phase), Math.ceil(OP.t), OP.atk === my ? 1 : 0],
     p: POINTS.map((p) => [Math.round(p.prog * 100 * sg), p.owner ? (p.owner === my ? 1 : 2) : 0, p.n[my], p.n[other(my)]]),
     q: SQUADS.map((q) => { const f = q.owner === who, o = q.order, v = q.veh; return [q.id, rel(q.side) | (f ? 2 : 0), FACS.indexOf(q.fac), q.defId, q.auto ? 1 : 0, q.state, f ? q.path.map((n) => [r1(n.x), r1(n.z), n.stop ? 1 : 0]) : 0, f && o ? [o.type === "point" ? o.i : -1, o.pos ? r1(o.pos.x) : 0, o.pos ? r1(o.pos.z) : 0, o.pos ? 1 : 0] : 0, v ? [r1(v.pos.x), r1(v.pos.z), r1(v.yaw), v.alive ? Math.ceil(v.hp) : 0] : 0]; }),
     s: [...ALLIES, ...GRUNTS].filter((g) => !g.gone).map((g) => { const p = g.s.root.position, t = g.s.dead < 0 && g.tgt && tgtAlive(g.tgt) ? tgtPos(g.tgt) : null; return [g.id, g.sq.id, g.slot, r1(p.x / U), r1(p.z / U), (g.s.dead >= 0 ? 1 : 0) | (g.s.crouch ? 2 : 0), g.shots, t ? [r1(t.x), r1(t.y), r1(t.z)] : 0]; }) }; }
 export function applySnap(o) { const now = performance.now();
   B.time = o.t; B.score.you = o.sc[0]; B.score.foe = o.sc[1]; B.supply.you = o.sup; B.cd.you.strike = o.cd[0]; B.cd.you.shield = o.cd[1]; B.cd.you.med = o.cd[2];
   if (o.ov && !B.over) { B.over = o.ov === 1 ? "you" : "foe"; if (B.hooks.say) B.hooks.say(B.over === "you" ? "The field is yours. The host can press T to fight it again." : "The enemy holds the field. The host can press T to fight it again.", 0); }
+  if (o.op) { const ch = OP.sector !== o.op[0] || OP.phase !== ["fight", "retreat", "regroup"][o.op[4]]; OP.sector = o.op[0]; OP.tickets = o.op[1]; OP.max = o.op[2]; OP.batt = o.op[3]; OP.phase = ["fight", "retreat", "regroup"][o.op[4]]; OP.t = o.op[5]; OP.atk = o.op[6] ? "you" : "foe"; if (ch) setHomes(); }
   o.p.forEach((a, i) => { const p = POINTS[i], ow = a[1] ? (a[1] === 1 ? "you" : "foe") : null; p.prog = a[0] / 100; p.n = { you: a[2], foe: a[3] }; if (ow !== p.owner) { p.owner = ow; ownerChanged(p); } });
   const seenQ = new Set(), seenG = new Set();
   for (const a of o.q) { let q = GH.sq.get(a[0]); const side = a[1] & 1 ? "you" : "foe", mine = !!(a[1] & 2);
@@ -384,7 +414,7 @@ export function mapFrame(dt) { cam.updateMatrixWorld(); live = new Set(); const 
 export const income = (who) => { const side = sideOf(who); return B.over ? 0 : (2.4 + POINTS.filter((p) => p.owner === side).length * .3 + POINTS.filter((p) => p.owner === other(side)).length * .8) * B.share; };
 let deckKey = "";
 function drawDeck() { const side = B.fac.you, Un = FACTIONS[side].units, S = MAP.sels, pl = B.hooks.pilot();
-  $("map-top").innerHTML = `<b class="you">YOU ${Math.floor(B.score.you)}</b> ${POINTS.map((p) => `<i class="${p.owner || "none"}">${p.name}</i>`).join("")} <b class="foe">${Math.floor(B.score.foe)} THEM</b> <span>first to ${GOAL}</span>${pl.dead > 0 ? ` <span class="warn">You are down. Back in ${pl.dead.toFixed(1)} s</span>` : ""}`;
+  $("map-top").innerHTML = `${opLine()}${pl.dead > 0 ? ` <span class="warn">You are down. Back in ${pl.dead.toFixed(1)} s</span>` : ""}`;
   $("sup-rate").textContent = "+" + income("you").toFixed(1) + " each second";
   const ticks = B.list.you.map((id) => `<s style="left:${Un[id].cost / 3}%" title="${Un[id].name}"><b>${Un[id].icon}</b></s>`).join(""); if ($("sup-ticks")._h !== ticks) { $("sup-ticks").innerHTML = ticks; $("sup-ticks")._h = ticks; }
   const dk = B.doctrine.you + "|" + Object.keys(UTILS).map((k) => Math.ceil(B.cd.you[k]) + (B.supply.you >= UTILS[k].cost ? "y" : "n")).join("") + (MAP.arm ? MAP.arm.kind + (MAP.arm.unit || "") : "") + B.list.you.map((id) => (B.supply.you >= Un[id].cost + POD_EXTRA ? "p" : "")).join("") + B.list.you.map((id) => (B.supply.you >= Un[id].cost ? 1 : 0) + (room("you", Un[id]) ? "r" : "f")).join("") + (B.over || "");

@@ -49,7 +49,7 @@ const CAPS = { apartment: 2, office: 2, terminal: 1, church: 2, firestation: 2, 
 const MIX = { mixed: null, town: ["town", "town", "town", "farm", "works"], works: ["works", "works", "works", "town", "airfield"], airfield: ["airfield", "works", "airfield", "town", "works"], farm: ["farm", "farm", "farm", "town", "works"] };
 
 export function planMap(key, api) {
-  const theme = THEMES[key.split("-")[0]] ? key.split("-")[0] : "mixed", R = rng(hashStr(key)), wear = R.range(.25, .7);
+  const kp = key.split("-"), theme = THEMES[kp[0]] ? kp[0] : "mixed", size = (kp[2] || "sa")[0], flip = (kp[2] || "sa")[1] === "d", R = rng(hashStr(kp[0] + "-" + kp[1] + "-" + size)), wear = R.range(.25, .7);
   const plan = { key, theme, zones: [], sites: [], districts: [], roads: [], prims: [], gens: [], trees: [], bushes: [], rocks: [], paint: [], yards: [], lit: 0 };
   const P = plan.prims, occ = [], keep = [], count = {};
   const fits = (x0, z0, x1, z1, m = 0, lists = [occ, keep]) => { for (const L of lists) for (const o of L) if (x0 - m < o[2] && x1 + m > o[0] && z0 - m < o[3] && z1 + m > o[1]) return false; return true; };
@@ -93,36 +93,56 @@ export function planMap(key, api) {
     count[type] = (count[type] || 0) + 1; plan.gens.push({ model, type, state: st, x, z, rot, kind: veh ? "v" : thin !== undefined ? "t" : "b", core: thin || 0, hw, hd }); return { hw, hd, model }; }
   const vehicle = (kit, x, z, rot, lists) => gen(R.w(kit.veh), x, z, rot + R.range(-.12, .12) + (R.chance(.5) ? Math.PI : 0), R.w([["timber", .45], ["damaged", .3], ["ruined", .25]]), .3, lists);
 
-  /* ---------- where the five places are ---------- */
-  const MIDZ = -19, s = R.sign(), dz = R.range(5, 34) * s, rx = R.range(100, 109), sx = s * R.range(46, 60), dn = 86;
-  const spots = [["A", rx, MIDZ + dz, 38], ["B", R.range(-5, 5), MIDZ + R.range(-4, 4), 38], ["C", -rx, MIDZ - dz, 38], ["D", sx, MIDZ - dn, 30], ["E", -sx, MIDZ + dn, 30]];
+  /* ---------- the sectors: bands across the field from the attackers' base to the citadel ----------
+     a is how far a band is from the attackers' base edge (0) toward the defenders' (250). Each band is [a, half size, points]. */
+  const SPEC = { s: { bands: [[42, 30, 2], [120, 30, 2], [206, 34, 1]], xr: [36, 44] }, m: { bands: [[30, 25, 2], [88, 25, 2], [146, 25, 2], [206, 28, 1]], xr: [34, 62] }, l: { bands: [[30, 25, 2], [88, 25, 3], [146, 25, 2], [206, 24, 2]], xr: [40, 66] } }[size] || null;
+  const zOf = (a) => (flip ? -146 + a : 104 - a), even = (v) => Math.round(v / 2) * 2, defH = flip ? 0 : 2, atkZ = flip ? -152 : 126, defZ = flip ? 126 : -152, HALLCOL = { town: "#8a5a44", works: "#5f676d", airfield: "#8a8e92", farm: "#76634c" };
   const kits = MIX[theme] ? MIX[theme].slice() : ["town", "works", "airfield", "farm", R.pick(["town", "works", "farm"])]; for (let i = kits.length - 1; i > 0; i--) { const j = R.int(0, i); [kits[i], kits[j]] = [kits[j], kits[i]]; }
-  const used = {};
-  spots.forEach(([name, x, z, r], i) => { const kn = kits[i], kit = KITS[kn], h = Math.round(clamp(api.hills(x, z) * (name === "B" ? .2 : .5) - 2, 0, name === "B" ? 3 : 11)); let label; do label = R.pick(kit.names); while (used[label] && Object.keys(used).length < 12); used[label] = 1;
-    const d = { name, label, x, z, r, h, kn, kit, ax: R.chance(.5) ? 1 : 0, blds: [] }; plan.districts.push(d); plan.sites.push([name, x, z, label]); plan.zones.push([x - r - 6, z - r - 6, x + r + 6, z + r + 6, h, 28]); plan.yards.push([x, z, r + 5]); });
+  const used = {}; plan.sectors = []; plan.atk = flip ? "foe" : "you"; plan.size = size; let li = 0;
+  SPEC.bands.forEach(([a, r, n], k) => { const last = k === SPEC.bands.length - 1, z = even(zOf(a)), xs = n === 1 ? [0] : n === 3 ? [-84, even(R.range(-4, 4)), 84] : last ? [-28, 28] : [-even(R.range(SPEC.xr[0], SPEC.xr[1])), even(R.range(SPEC.xr[0], SPEC.xr[1]))];
+    const h = last ? defH : Math.round(clamp(api.hills(0, z) * .3 - 1, 0, 6)), roofAt = n === 1 ? 0 : n === 3 ? 1 : R.int(0, 1), sec = { k, z, pts: [], gapX: n === 3 ? 42 : n === 1 ? 20 : 0, last }; plan.sectors.push(sec);
+    xs.forEach((x, i) => { const kn = kits[li % kits.length], kit = KITS[kn], name = "ABCDEFGHIJ"[li], roof = i === roofAt; let label; do label = last ? (n === 1 ? "The citadel" : i ? "Citadel east" : "Citadel west") : R.pick(kit.names); while (used[label] && Object.keys(used).length < 12); used[label] = 1;
+      const d = { name, label, x, z, r, h, kn, kit, ax: R.chance(.5) ? 1 : 0, blds: [], sector: k, roof, last }; plan.districts.push(d); sec.pts.push(li); plan.sites.push([name, x, z, label, k, roof ? 1 : 0]); plan.zones.push([x - r - 3, z - r - 3, x + r + 3, z + r + 3, h, 24]); plan.yards.push([x, z, r + 3]); li++; }); });
+  plan.homes = plan.sectors.map((sec, k) => ({ atk: k === 0 ? [0, atkZ] : [plan.sectors[k - 1].gapX, plan.sectors[k - 1].z], def: sec.last ? [0, defZ] : [plan.sectors[k + 1].gapX, plan.sectors[k + 1].z] }));
   plan.zones.push([-34, 104, 34, 150, 0, 26], [-34, -190, 34, -146, 2, 26]); keep.push([-10, 100, 10, 150], [-10, -190, 10, -142]);
 
   /* ---------- roads: out of a district by the street that points the right way, then straight to the next ---------- */
-  const exitOf = (d, tx, tz) => { const ex = d.r + 6, c = [[ex, 0], [-ex, 0], [0, ex], [0, -ex]]; let b = c[0], bs = -1e9; for (const q of c) { const sc = q[0] * (tx - d.x) + q[1] * (tz - d.z); if (sc > bs) { bs = sc; b = q; } } return [d.x + b[0], d.z + b[1], d.h]; };
-  const Dn = Object.fromEntries(plan.districts.map((d) => [d.name, d])), near = (d) => (Math.hypot(d.x - Dn.A.x, d.z - Dn.A.z) < Math.hypot(d.x - Dn.C.x, d.z - Dn.C.z) ? Dn.A : Dn.C);
-  const road = (a, b, k) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(2, Math.round(len / 6)), mid = api.hills((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) * .5; plan.roads.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], k, hw: k === "track" ? 2.4 : 3.6, len });
-    for (let i = 1; i < n; i++) { const t = i / n, x = lerp(a[0], b[0], t), z = lerp(a[1], b[1], t), base = lerp(a[2], b[2], sm(t)); plan.zones.push([x - 4.5, z - 4.5, x + 4.5, z + 4.5, base + clamp((mid - base) * .5, -2, 5) * Math.sin(Math.PI * t), 13]); } };
-  const link = (d1, d2) => road(exitOf(d1, d2.x, d2.z), exitOf(d2, d1.x, d1.z), d1.kit.street === "track" && d2.kit.street === "track" ? "track" : "asphalt");
-  road([clamp(Dn.E.x, -26, 26), 104, 0], exitOf(Dn.E, Dn.E.x, 200), "asphalt"); road([0, 104, 0], exitOf(Dn.B, 0, 200), "asphalt"); road([clamp(Dn.D.x, -26, 26), -146, 2], exitOf(Dn.D, Dn.D.x, -300), "asphalt"); road([0, -146, 2], exitOf(Dn.B, 0, -300), "asphalt");
-  link(Dn.B, Dn.A); link(Dn.B, Dn.C); link(Dn.E, near(Dn.E)); link(Dn.D, near(Dn.D));
+  const exitOf = (d, tx, tz) => { const ex = d.r + 3, c = [[ex, 0], [-ex, 0], [0, ex], [0, -ex]]; let b = c[0], bs = -1e9; for (const q of c) { const sc = q[0] * (tx - d.x) + q[1] * (tz - d.z); if (sc > bs) { bs = sc; b = q; } } return [d.x + b[0], d.z + b[1], d.h]; };
+  const road = (a, b, k) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len < 3) return; const n = Math.max(2, Math.round(len / 6)), mid = api.hills((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) * .5; plan.roads.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], k, hw: k === "track" ? 2.4 : 3.6, len });
+    for (let i = 1; i < n; i++) { const t = i / n, x = lerp(a[0], b[0], t), z = lerp(a[1], b[1], t), base = lerp(a[2], b[2], sm(t)); plan.zones.push([x - 4.5, z - 4.5, x + 4.5, z + 4.5, base + (len > 30 ? clamp((mid - base) * .5, -2, 5) * Math.sin(Math.PI * t) : 0), 13]); } };
+  const link = (d1, d2) => road(exitOf(d1, d2.x, d2.z), exitOf(d2, d1.x, d1.z), d1.kit.street === "track" && d2.kit.street === "track" ? "track" : "asphalt"), DS = (k) => plan.sectors[k].pts.map((i) => plan.districts[i]);
+  const baseEdge = (z0, d) => [clamp(d.x, -26, 26), z0, z0 > 0 ? 0 : 2], aEdge = flip ? -146 : 104, dEdge = flip ? 104 : -146;
+  for (const d of DS(0)) road(baseEdge(aEdge, d), exitOf(d, d.x, aEdge + (flip ? -200 : 200)), "asphalt"); for (const d of DS(plan.sectors.length - 1)) road(baseEdge(dEdge, d), exitOf(d, d.x, dEdge + (flip ? 200 : -200)), "asphalt");
+  for (let k = 0; k < plan.sectors.length; k++) { const row = DS(k); for (let i = 0; i + 1 < row.length; i++) link(row[i], row[i + 1]); if (k + 1 < plan.sectors.length) { const nx = DS(k + 1), seen = new Set(); for (const d of row) { const t = nx.reduce((b, q) => (Math.abs(q.x - d.x) < Math.abs(b.x - d.x) ? q : b)); seen.add(t); link(d, t); } for (const q of nx) if (!seen.has(q)) link(row.reduce((b, d) => (Math.abs(q.x - d.x) < Math.abs(b.x - d.x) ? d : b)), q); } }
+
+  /* ---------- an objective hall: the roofed point. Hollow, four doorways a squad can use and a mech cannot, a roof you
+     can run on with two skylights to drop through, a gallery inside and cover on the floor. 22 m by 16 m. ---------- */
+  function hall(d, W, rect) { const col = d.last ? CON : HALLCOL[d.kn] || CON, trim = d.last ? "#c9733a" : "#3c4046", HL = 11, HW = 8, T = .5, H = 5.5, DW = 2.2, DH = 3.2, dl = R.pick([-4, 4]);
+    const bx = (u0, v0, u1, v1, y, h, c, o) => { const q = rect(u0, v0, u1, v1); S((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], h, q[3] - q[1], c, o || { stripe: false, base: c, cap: c }, y); }, dc = (u0, v0, u1, v1, y, h, c) => { const q = rect(u0, v0, u1, v1); D((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], h, q[3] - q[1], c, y); };
+    for (const sd of [-1, 1]) { const v0 = sd * HW - T / 2, v1 = sd * HW + T / 2, du = sd * dl;   // the long walls, a doorway in each, off centre and not facing each other
+      bx(-HL, v0, du - DW, v1, .001, H, col); bx(du + DW, v0, HL, v1, .001, H, col); bx(du - DW, v0, du + DW, v1, DH, H - DH, col); dc(du - DW, v0 - .06, du + DW, v1 + .06, DH - .12, .14, trim);
+      const u0 = sd * HL - T / 2, u1 = sd * HL + T / 2;   // the end walls, a doorway in the middle of each where the main street runs in
+      bx(u0, -HW, u1, -DW, .001, H, col); bx(u0, DW, u1, HW, .001, H, col); bx(u0, -DW, u1, DW, DH, H - DH, col); dc(u0 - .06, -DW, u1 + .06, DW, DH - .12, .14, trim); }
+    for (const [u0, v0, u1, v1] of [[-HL - .4, -HW - .4, HL + .4, -1.5], [-HL - .4, 1.5, HL + .4, HW + .4], [-HL - .4, -1.5, -7, 1.5], [-4, -1.5, 4, 1.5], [7, -1.5, HL + .4, 1.5]]) bx(u0, v0, u1, v1, H, .4, "#3c4046");   // the roof, with two skylights
+    for (const u of [-7, -4, 4, 7]) dc(u - .08, -1.5, u + .08, 1.5, H + .4, .25, trim);
+    bx(-10.5, 4.6, -1.5, 7.6, 2.8, .3, WOOD2); dc(-10.5, 4.5, -1.5, 4.62, 3.1, .9, "#3c4046"); bx(-1.4, 5.2, .2, 7, .001, 1.9, DRAB); bx(.3, 5.4, 1.7, 6.8, .001, 1, DRAB2);   // a gallery along one wall, and crates to climb to it
+    for (const [u, v, w, dd, h, c] of [[-6, -3.5, 3, .5, 1.2, CON2], [6, 3.2, .5, 3, 1.2, CON2], [5.5, -4.5, 1.4, 1.4, 1.3, DRAB], [-4, 1.6, 1.3, 1.3, 1.1, WOOD2], [8.5, -1, 1.2, 2.4, 1, DRAB2], [-8.5, -5.5, 2.6, 1.2, 1.3, STEEL]]) bx(u - w / 2, v - dd / 2, u + w / 2, v + dd / 2, .001, h, c);
+    for (const sd of [-1, 1]) { const q = rect(sd * dl - 1.5, sd * (HW + .3), sd * dl + 1.5, sd * (HW + .5)); G((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], .16, q[3] - q[1], DH + .2); }
+    occ.push(rect(-HL - .6, -HW - .6, HL + .6, HW + .6)); for (const sd of [-1, 1]) keep.push(rect(sd * dl - 3, sd * HW, sd * dl + 3, sd * (HW + 6)), rect(sd * HL, -3, sd * (HL + 6), 3)); }
 
   /* ---------- a district ---------- */
   for (const d of plan.districts) { const kit = d.kit, r = d.r, hs = kit.sw / 2, W = (u, v) => (d.ax ? [d.x + v, d.z + u] : [d.x + u, d.z + v]), rect = (u0, v0, u1, v1) => { const a = W(u0, v0), b = W(u1, v1); return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]; };
     const rotOf = (fu, fv) => (d.ax ? Math.atan2(fv, fu) : Math.atan2(fu, fv)), turned = (alongU) => (alongU ? d.ax : 1 - d.ax);   // is a thing laid along this street turned a quarter turn on the map
     const pt = (k, q, extra) => plan.paint.push({ x0: q[0], z0: q[1], x1: q[2], z1: q[3], k, ...extra });
-    pt(kit.ground, [d.x - r - 5, d.z - r - 5, d.x + r + 5, d.z + r + 5]);
-    const main = rect(-r - 6, -hs, r + 6, hs), cross = rect(-hs + .5, -r - 6, hs - .5, r + 6), sq = rect(-10, -10, 10, 10);
-    pt(kit.street, main, { ax: d.ax, c: d.ax ? d.x : d.z, hw: hs }); pt(kit.street === "runway" ? "asphalt" : kit.street, cross, { ax: 1 - d.ax, c: d.ax ? d.z : d.x, hw: hs - .5 }); pt(kit.walk === "dirt" ? "dirt" : "pave", sq, {});
+    pt(kit.ground, [d.x - r - 3, d.z - r - 3, d.x + r + 3, d.z + r + 3]);
+    const main = rect(-r - 3, -hs, r + 3, hs), cross = rect(-hs + .5, -r - 3, hs - .5, r + 3), sq = d.roof ? rect(-13, -10, 13, 10) : rect(-10, -10, 10, 10);
+    pt(kit.street, main, { ax: d.ax, c: d.ax ? d.x : d.z, hw: hs }); pt(kit.street === "runway" ? "asphalt" : kit.street, cross, { ax: 1 - d.ax, c: d.ax ? d.z : d.x, hw: hs - .5 }); pt(d.roof ? "apron" : kit.walk === "dirt" ? "dirt" : "pave", sq, {});
     const mine = [main, cross, sq]; keep.push(...mine);
+    if (d.roof) hall(d, W, rect);
     // the landmark stands on one corner of the square
-    { const [x, z] = W(R.sign() * (hs + 7.5), R.sign() * (hs + 7.5)), g = gen(R.pick(kit.mark), x, z, R.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), "timber", .3, [occ]); if (g) d.blds.push([x, z, g.hw, g.hd]); }
+    if (!d.roof) { const [x, z] = W(R.sign() * (hs + 7.5), R.sign() * (hs + 7.5)), g = gen(R.pick(kit.mark), x, z, R.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), "timber", .3, [occ]); if (g) d.blds.push([x, z, g.hw, g.hd]); }
     // buildings along both sides of both streets, fronts to the street
-    for (const alongU of [true, false]) for (const dir of [-1, 1]) for (const side of [-1, 1]) { let t = (alongU ? 11.5 : 12.5) + R.range(0, 3), fails = 0; const off = (alongU ? hs : hs - .5) + (kit.walk === "dirt" ? R.range(1.5, 5) : 1.8);
+    for (const alongU of [true, false]) for (const dir of [-1, 1]) for (const side of [-1, 1]) { let t = (alongU ? (d.roof ? 15 : 11.5) : 12.5) + R.range(0, 3), fails = 0; const off = (alongU ? hs : hs - .5) + (kit.walk === "dirt" ? R.range(1.5, 5) : 1.8);
       while (t < r - 3 && fails < 6) { const type = R.w(kit.front), sd = R.int(0, 3), model = "gen:" + type + ":" + sd, dm = api.dims(model); if (!dm) { fails++; continue; } const w = dm[0], dp = dm[2]; if (t + w > r + 2 || dp > r - off) { fails++; continue; }
         const along = dir * (t + w / 2), across = side * (off + dp / 2), [x, z] = alongU ? W(along, across) : W(across, along), g = gen(type, x, z, alongU ? rotOf(0, -side) : rotOf(-side, 0), state(), .4, undefined, sd);
         if (!g) { fails++; t += 2; continue; } d.blds.push([x, z, g.hw, g.hd]); pt(kit.walk, [x - g.hw - 1.6, z - g.hd - 1.6, x + g.hw + 1.6, z + g.hd + 1.6], {});
@@ -130,23 +150,23 @@ export function planMap(key, api) {
         if (gap > 2.6 && R.chance(.7)) { const a2 = dir * (t + w + gap / 2), c2 = side * (off + R.range(1, dp * .7)), [px, pz] = alongU ? W(a2, c2) : W(c2, a2); prop(R.w(kit.wall), px, pz, R.chance(.5) ? 1 : 0, .15); }
         t += w + gap; } }
     // the ground behind: more buildings, then fields where the kit has them
-    for (let i = 0, n = 0; i < 40 && n < kit.yardN; i++) { const [x, z] = W(R.range(-r + 4, r - 4), R.range(-r + 4, r - 4)), g = gen(R.w(kit.yard), x, z, R.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), state(), 2.2); if (g) { n++; d.blds.push([x, z, g.hw, g.hd]); } }
+    for (let i = 0, n = 0; i < 40 && n < kit.yardN * (r / 40) * (r / 40); i++) { const [x, z] = W(R.range(-r + 4, r - 4), R.range(-r + 4, r - 4)), g = gen(R.w(kit.yard), x, z, R.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), state(), 2.2); if (g) { n++; d.blds.push([x, z, g.hw, g.hd]); } }
     for (let i = 0, n = 0; i < 30 && n < (kit.fields || 0); i++) { const fw = R.range(12, 20), fd = R.range(10, 16), [x, z] = W(R.range(-r + 8, r - 8), R.range(-r + 8, r - 8)); if (Math.abs(x - d.x) + fw / 2 > r + 3 || Math.abs(z - d.z) + fd / 2 > r + 3 || !fits(x - fw / 2, z - fd / 2, x + fw / 2, z + fd / 2, 1)) continue; n++;
       const fr = [x - fw / 2, z - fd / 2, x + fw / 2, z + fd / 2]; pt("field", fr, { ax: R.chance(.5) ? 1 : 0, c: R.int(0, 2) }); keep.push(fr); mine.push(fr);
       for (const [fx, fz, rr, len] of [[x, z - fd / 2, 0, fw], [x, z + fd / 2, 0, fw], [x - fw / 2, z, 1, fd], [x + fw / 2, z, 1, fd]]) for (let u = -len / 2 + 2.5; u < len / 2 - 2; u += 5) if (R.chance(.72)) { const px = fx + (rr ? 0 : u), pz = fz + (rr ? u : 0), hw = rr ? .15 : 2.5, hd = rr ? 2.5 : .15; if (!fits(px - hw, pz - hd, px + hw, pz + hd, 0, [occ])) continue; occ.push([px - hw, pz - hd, px + hw, pz + hd]); S(px, pz, rr ? .12 : 5, 1.05, rr ? 5 : .12, WOOD, { hide: true }); D(px, pz, rr ? .06 : 5, .1, rr ? 5 : .06, WOOD2, .95); D(px, pz, rr ? .06 : 5, .1, rr ? 5 : .06, WOOD2, .5); for (const e of [-2.5, 0]) D(px + (rr ? 0 : e), pz + (rr ? e : 0), .14, 1.2, .14, WOOD); }
       for (let k = 0; k < 3; k++) prop("bales", x + R.range(-fw / 2 + 2, fw / 2 - 2), z + R.range(-fd / 2 + 2, fd / 2 - 2), R.chance(.5) ? 1 : 0, .2, [occ]); }
     // round the square: cover to fight from, never in the very middle
-    for (let i = 0, n = 0; i < 40 && n < 7; i++) { const a = R.range(0, 6.283), rad = R.range(5.5, 10.5), x = d.x + Math.cos(a) * rad, z = d.z + Math.sin(a) * rad, name = R.w(kit.sq); if (name === "veh" ? vehicle(kit, x, z, R.range(0, 6.283), [occ]) : prop(name, x, z, R.chance(.5) ? 1 : 0, .9, [occ])) n++; }
+    for (let i = 0, n = 0; i < 40 && n < 7 && !d.roof; i++) { const a = R.range(0, 6.283), rad = R.range(5.5, 10.5), x = d.x + Math.cos(a) * rad, z = d.z + Math.sin(a) * rad, name = R.w(kit.sq); if (name === "veh" ? vehicle(kit, x, z, R.range(0, 6.283), [occ]) : prop(name, x, z, R.chance(.5) ? 1 : 0, .9, [occ])) n++; }
     // along the kerbs: parked and wrecked vehicles, lamps, a road block on the way in
     for (const alongU of [true, false]) { const h2 = alongU ? hs : hs - .5; for (let t = -r; t < r; t += R.range(6, 10)) { if (Math.abs(t) < 13) continue; const side = R.sign();
         if (R.chance(kit.park) && h2 > 3) { const [x, z] = alongU ? W(t, side * (h2 - 1.25)) : W(side * (h2 - 1.25), t); vehicle(kit, x, z, turned(alongU) ? 0 : Math.PI / 2, [occ]); }
         else if (R.chance(.3)) { const [x, z] = alongU ? W(t, side * (h2 + .7)) : W(side * (h2 + .7), t), [fx, fz] = alongU ? W(0, -side) : W(-side, 0), dx = Math.sign(Math.round(fx - d.x)), dzz = Math.sign(Math.round(fz - d.z)); if (fits(x - .3, z - .3, x + .3, z + .3, .1, [occ])) { occ.push([x - .2, z - .2, x + .2, z + .2]); if (kit.street === "track") PROPS.pole().put(x, z, turned(alongU) ? 0 : 1); else PROPS.lamp().put(x, z, 0, dx, dzz); } } }
       for (const dir of [-1, 1]) if (R.chance(.55) && h2 > 3) { const t = dir * R.range(r * .55, r * .8), tr = turned(alongU) ? 0 : 1, a = alongU ? W(t, -h2 + 1.6) : W(-h2 + 1.6, t), b = alongU ? W(t + 3.2, h2 - 1.6) : W(h2 - 1.6, t + 3.2); prop("barrier", a[0], a[1], tr, .1, [occ]); prop(R.pick(["barrier", "sandbag"]), b[0], b[1], tr, .1, [occ]); } }
-    { const [x, z] = W(-hs - .8, -hs - .8); plan.lit++; P.push(["lp", x, z, d.ax ? 0 : 1, d.ax ? 1 : 0]); occ.push([x - .2, z - .2, x + .2, z + .2]); }
+    if (d.roof) { plan.lit++; P.push(["li", d.x, d.z, 4.9]); } else { const [x, z] = W(-hs - .8, -hs - .8); plan.lit++; P.push(["lp", x, z, d.ax ? 0 : 1, d.ax ? 1 : 0]); occ.push([x - .2, z - .2, x + .2, z + .2]); }
     // against the walls: bins, crates, drums, whatever the kit keeps there
     for (const [bx, bz, hw, hd] of d.blds) for (let k = R.int(0, 3); k > 0; k--) { const sd = R.int(0, 3), name = R.w(kit.wall), q = .9, x = sd === 0 ? bx - hw - q : sd === 1 ? bx + hw + q : bx + R.range(-hw, hw) * .8, z = sd === 2 ? bz - hd - q : sd === 3 ? bz + hd + q : bz + R.range(-hd, hd) * .8; if (fits(x - 1, z - 1, x + 1, z + 1, 0, [mine])) prop(name, x, z, sd < 2 ? 1 : 0, .05, [occ]); }
     // in the open
-    for (let i = 0, n = 0; i < 120 && n < 26 + r * .4; i++) { const [x, z] = W(R.range(-r, r), R.range(-r, r)); if (prop(R.w(kit.open), x, z, R.chance(.5) ? 1 : 0, .7)) n++; }
+    for (let i = 0, n = 0; i < 120 && n < 10 + r * .8; i++) { const [x, z] = W(R.range(-r, r), R.range(-r, r)); if (prop(R.w(kit.open), x, z, R.chance(.5) ? 1 : 0, .7)) n++; }
     if (R.chance(.6)) for (let i = 0; i < 12; i++) { const [x, z] = W(R.range(-r + 3, r - 3), R.range(-r + 3, r - 3)); if (prop("tower", x, z, 0, 1.5)) break; }
   }
 
@@ -163,7 +183,7 @@ export function planMap(key, api) {
 
   /* ---------- out in the hills: small places with their own reason to be there ---------- */
   const OUT = { camp: 12, farmstead: 14, fuelstop: 13, relay: 11, checkpoint: 14, crash: 19, tankfarm: 13 }, kinds = Object.keys(OUT); plan.outposts = []; for (let i = kinds.length - 1; i > 0; i--) { const j = R.int(0, i); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
-  for (let i = 0; i < 400 && plan.outposts.length < 6; i++) { const kind = kinds[plan.outposts.length % kinds.length], hr = OUT[kind], x = R.range(-138, 138), z = R.range(-140, 96);
+  for (let i = 0; i < 400 && plan.outposts.length < (size === "s" ? 5 : 4); i++) { const kind = kinds[plan.outposts.length % kinds.length], hr = OUT[kind], x = R.range(-138, 138), z = R.range(-140, 96);
     if (inDistrict(x, z, hr + 20) || plan.outposts.some((o) => Math.hypot(o.x - x, o.z - z) < 48) || plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < hr + 12; })) continue;
     const h0 = api.hills(x, z); if (h0 > 24 || Math.abs(api.hills(x + 10, z) - h0) > 4 || Math.abs(api.hills(x, z + 10) - h0) > 4) continue; const h = Math.round(h0 * 2) / 2;
     plan.outposts.push({ x, z, kind, r: hr }); plan.zones.push([x - hr, z - hr, x + hr, z + hr, h, 16]); plan.paint.push({ x0: x - hr + 1, z0: z - hr + 1, x1: x + hr - 1, z1: z + hr - 1, k: kind === "fuelstop" || kind === "tankfarm" ? "apron" : "dirt" }); plan.yards.push([x, z, hr - 1]);
@@ -193,6 +213,6 @@ export function planMap(key, api) {
       case "grass": return n2 > .7 ? "#6a6842" : ["#4f5a3c", "#5c6a40", "#66704a", "#55603a", "#4a5636"][Math.floor(n * 4.99)];
       default: return n2 > .66 ? "#63603e" : ["#5c4c3a", "#64533f", "#6c5a44", "#544636", "#4f4434"][Math.floor(n * 4.99)]; } };
   plan.soft = (x, z) => { const p = plan.kindAt(x, z); return !!p && (p.k === "dirt" || p.k === "grass") && !p.road; };   // where grass and brush may grow inside a built place
-  plan.name = (theme === "mixed" ? "Mixed country" : THEMES[theme]) + " " + (key.split("-")[1] || "");
+  plan.name = (theme === "mixed" ? "Mixed country" : THEMES[theme]) + " " + (kp[1] || "");
   return plan;
 }

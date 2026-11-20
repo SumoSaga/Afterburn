@@ -167,7 +167,7 @@
   </div>
   <div id="cross"><i></i><i></i><i></i><i></i></div>
   <div id="state"></div>
-  <div id="tl" class="box"><div class="lab">Score, first to 400</div><div class="big" id="kills"></div><div class="lab" id="timer"></div>
+  <div id="tl" class="box"><div class="lab">The operation</div><div class="big" id="kills"></div><div class="lab" id="timer"></div>
     <div class="lab" id="meterlab" style="margin-top:8px">Titan 0%</div><div class="bar" style="width:150px"><div id="meterfill"></div></div></div>
   <div id="foe" class="box"><div class="lab">Opposition Titan</div><div class="bar"><div id="foefill"></div></div></div>
   <div id="tr" class="box">P: tuning &nbsp; T: restart &nbsp; Esc: free the mouse</div>
@@ -190,7 +190,7 @@
 
 <div id="start" class="box">
   <h1>AFTERBURN</h1>
-  <p><i>Prototype 7. You command one side of a fight over five places between two bases, and you are also in it.</i></p>
+  <p><i>Prototype 8. One side attacks through the sectors of a field and the other holds them. You command your troops, and you are also in the fight.</i></p>
   <p>Two sides fight over five points: the town square, the refinery, the lodge in the pines, the relay up on the ridge and the depot. Every second, each point you hold adds to your score, and the first side to 400 takes the field. You are the commander: you spend supply to bring squads and vehicles onto the field, you tell them exactly where to go, and you can call an air strike, a shield dome, a medical crate or a drop pod onto any spot on the map. You are also a pilot on the ground with a jumpkit, and your Titan is yours to call down.</p>
   <p>Press <b>Tab</b> at any time to open the battle map. It also opens while you are down and waiting to come back. On the map you can see every squad and what it is doing, bring in new ones, and give orders.</p>
   <div id="setup"></div>
@@ -211,8 +211,9 @@
     <tr><td>In a Titan</td><td>Left button fires the 40 mm cannon, right button fires the rocket pod, F throws a punch</td></tr>
     <tr><td>On the map</td><td>Left click a squad's card to pick it, or drag a box round several. Left click the ground or a point to send them there. Hold Shift and click to add stops on the way, then let go of Shift and click where they should end up. Right drag moves the map, middle drag turns it.</td></tr>
   </table></details>
-  <h2>The field</h2>
-  <p class="note" style="color:#b9a582;font-size:12px;margin:0">Every field is made from a kind and a number. The same kind and number always make the same field, so you can come back to one you like or give it to a friend. Building a field loads this page again. In a match, everyone plays on the host's field.</p>
+  <h2>The operation</h2>
+  <p class="note" style="color:#b9a582;font-size:12px;margin:0">One side attacks through the sectors of the field, one after another, and the other holds them. Attackers have tickets, and every pilot who comes back costs one. Every field is made from a kind and a number, so the same pair always makes the same field. Building a field loads this page again. In a match the host's side is the one chosen here, and everyone plays on the host's field.</p>
+  <div class="row"><select id="map-role" style="font:inherit;background:#1b1713;color:#efe2c8;border:2px solid #6b5438;padding:6px 8px"><option value="a">You attack</option><option value="d">You defend</option></select><select id="map-size" style="font:inherit;background:#1b1713;color:#efe2c8;border:2px solid #6b5438;padding:6px 8px"><option value="s">Small: 3 sectors, for 1 against 1</option><option value="m">Medium: 4 sectors, for 2 against 2</option><option value="l">Large: 4 sectors, for 3 against 3</option></select></div>
   <div class="row"><select id="map-kind" style="font:inherit;background:#1b1713;color:#efe2c8;border:2px solid #6b5438;padding:6px 8px"></select><input id="map-num" maxlength="6" placeholder="Number" autocomplete="off" spellcheck="false" style="font:inherit;width:90px;background:#1b1713;color:#efe2c8;border:2px solid #6b5438;padding:6px 8px"><button id="map-go">Build this field</button><button id="map-new">Surprise me</button></div>
   <p id="map-now" class="lab" style="margin-top:8px;text-transform:none;letter-spacing:0;color:#8fe0f0"></p>
   <div class="row"><button class="go" id="go" style="margin-top:0">Drop in alone</button><button id="lab">Open the sound lab</button></div>

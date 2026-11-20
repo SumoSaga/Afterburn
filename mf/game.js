@@ -5,7 +5,7 @@ import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, 
   flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat, PLAN, MAPKEY, MAPNAME, setMap as pickMap } from "./engine.js";
 import { VM } from "./hands.js";
 import { makeRig, TITAN } from "./titan.js";
-import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
+import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, OP, SECN, homeOf, setHomes, spend, opLine, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
 import { NET, onMsg, send, host, join, leave, cut } from "./net.js";
 import { makeFigure } from "./figure.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -48,11 +48,11 @@ function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .3 : 0), z
 const _down = V3(0, -1, 0);
 function groundBelow() { const t = rayWorld(P.pos.clone().setY(P.pos.y + .1), _down, 50); return P.pos.y + .1 - t; }
 function endWall(cd) { const w = P.wall; P.lastWall = { ax: w.ax, n: w.n, c: P.pos.getComponent(w.ax) }; P.wall = null; P.wallCd = cd; }
-function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; if (B.mp && !MY.south) P.pos.set(ox, groundH(ox, -152) + .1, -152); else P.pos.set(SPAWN[0] + ox, groundH(SPAWN[0] + ox, SPAWN[2]) + .1, SPAWN[2]); P.vel.set(0, 0, 0); P.yaw = B.mp && !MY.south ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
+function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; const north = B.mp && !MY.south, hm = homeOf(north ? "foe" : "you"), tz = north ? -400 : 400, pt0 = POINTS.find((p) => p.sector === Math.min(OP.sector, SECN - 1)) || { x: hm[0], z: hm[1] - tz }; P.pos.set(hm[0] + ox, groundH(hm[0] + ox, hm[1]) + .1, hm[1]); P.vel.set(0, 0, 0); P.yaw = Math.atan2(-(pt0.x - hm[0]), -(pt0.z - hm[1])); P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
 
 function stepPilot(dt) {
   P.jumpBuf -= dt; P.coyote -= dt; P.slideCd -= dt; P.wallCd -= dt; P.hurtT += dt;
-  if (P.dead > 0) { P.dead -= dt; if (P.dead <= 0) { respawn(); say("You are back at your drop point. Click to take the mouse back.", 3); if (MAP.auto) setMap(false); } return; }
+  if (P.dead > 0) { P.dead -= dt; if (P.dead <= 0) { respawn(); if (B.mp === "guest") relay("back", 1); else spend(B.mp && !MY.south ? "foe" : "you", 1); say("You are back at your drop point. Click to take the mouse back.", 3); if (MAP.auto) setMap(false); } return; }
   if (P.hurtT > 4 && P.hp < 100) P.hp = Math.min(100, P.hp + 25 * dt);
   if (P.seq) { stepSeq(dt); if (!P.titan) return; }
   if (P.titan) return stepRide(dt);
@@ -128,7 +128,7 @@ const PW = { carbine: { name: "Carbine", mag: 24, cd: .095, dmg: 25, spread: .00
 const pw = () => PW[LOAD.weapon] || PW.carbine;
 const CHASSIS = { vanguard: { name: "Vanguard", hull: 350, speed: 6.2, dash: 2, desc: "The all-round frame: 350 hull, two dashes." }, bastion: { name: "Bastion", hull: 470, speed: 5.2, dash: 1, desc: "Heavier plate and a slower stride: 470 hull, one dash." }, lancer: { name: "Lancer", hull: 270, speed: 7.4, dash: 3, desc: "Stripped for speed: 270 hull, three dashes." } };
 B.hooks = { pilot: () => ({ ok: P.dead <= 0 && !P.titan && !P.seq, alive: P.dead <= 0, dead: P.dead, pos: V3(P.pos.x, P.pos.y + P.h * .6, P.pos.z), at: P.pos, speed: hs(), grounded: P.grounded, titan: !!P.titan }),
-  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (slot, n) => relay("phit", [slot, Math.round(n), 0]), rpilots: () => (B.mp ? [...RPS.values()] : []),
+  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (slot, n) => relay("phit", [slot, Math.round(n), 0]), rpilots: () => (B.mp ? [...RPS.values()] : []), attackers: () => (B.mp ? Math.max(1, Math.ceil((1 + RPS.size) / 2)) : 1),
   shotSnd: (q, atPilot, hit) => { snd("grunt_shot", { pos: [q.x / U, q.y / U + 1.4, q.z / U] }); if (atPilot && !hit && rnd() < .6) snd("flyby", { pos: [P.pos.x + (rnd() - .5) * 5, P.pos.y + 1.5, P.pos.z + (rnd() - .5) * 5], delay: .02 + rnd() * .05 }); }, say: (t, sec) => say(t, sec) };
 
 /* ---------- Titans ---------- */
@@ -175,7 +175,7 @@ function stepTitans(dt) {
   for (let i = TITANS.length - 1; i >= 0; i--) { const t = TITANS[i]; if (t.remote != null) { stepPuppet(t, dt); continue; }
     if (t.doom > 0) { t.doom -= dt; t.vel.set(0, t.vel.y, 0); if (rnd() < dt * 12) { const q = toU(t.pos).add(V3((rnd() - .5) * 30, (1 + rnd() * 4) * U, (rnd() - .5) * 30)); puff(q, { n: 8, color: "#ff9a3c", hot: 3, size: 5, life: .4, vel: () => V3((rnd() - .5) * 50, 40 + rnd() * 50, (rnd() - .5) * 50) }); flash(q, "#ff8a3a", 1200, .15); }
       placeTitan(t, dt);
-      if (t.doom <= 0) { t.alive = false; blast(V3(t.pos.x, t.pos.y + 2.5, t.pos.z), 5, { team: t.team, titan: 60, pilot: 60 }); chunksFx(toU(t.pos).setY(t.pos.y * U + 60), "#34373a", 8, 90); t.rig.wreck(); HUSKS.push(t.rig); TITANS.splice(i, 1); if (t.team === "you") { P.mine = null; P.meter = 0; } checkDone(); }
+      if (t.doom <= 0) { t.alive = false; if (OP.ai && t.team === OP.atk) spend(OP.atk, 3); blast(V3(t.pos.x, t.pos.y + 2.5, t.pos.z), 5, { team: t.team, titan: 60, pilot: 60 }); chunksFx(toU(t.pos).setY(t.pos.y * U + 60), "#34373a", 8, 90); t.rig.wreck(); HUSKS.push(t.rig); TITANS.splice(i, 1); if (t.team === "you") { P.mine = null; P.meter = 0; } checkDone(); }
       continue; }
     t.shieldT += dt; t.hitT += dt; if (t.shieldT > 6 && t.shield < 150) t.shield = Math.min(150, t.shield + 25 * dt);
     t.fireCd -= dt; t.rk -= dt; if (t.reload > 0) { t.reload -= dt; if (t.reload <= 0) t.ammo = 18; }
@@ -366,7 +366,7 @@ function stepGun(dt) {
 /* ---------- the run ---------- */
 function checkDone() {}
 function restart() { for (const rp of RPS.values()) rp.titan = null; for (const t of TITANS) scene.remove(t.rig.root); TITANS.length = 0; for (const h of HUSKS) scene.remove(h.root); HUSKS.length = 0; for (const r of ROCKETS) scene.remove(r.mesh); ROCKETS.length = 0; P.seq = null; CK.mode = "off"; for (const D of DROPS) scene.remove(D.pod); DROPS.length = 0; LATER.length = 0; foeCalled = false; P.mine = null; P.meter = 0; P.weapon = 0; P.charge = 0;
-  respawn(); resetBattle(); if (MAP.on) setMap(false); runT = 0; runOn = true; runDone = false; say(""); }
+  resetBattle(); respawn(); if (MAP.on) setMap(false); runT = 0; runOn = true; runDone = false; say(""); }
 
 /* ---------- input ---------- */
 const cv = renderer.domElement;
@@ -464,7 +464,7 @@ function cockpit(dt) {
   const foe = TITANS.find((o) => o.team === "foe"), W = [];
   if (t.hitT < 1) W.push(["red", "INCOMING FIRE"]); if (t.hull < t.hullMax * .35) W.push(["red", "HULL CRITICAL"]); if (t.shield <= 0) W.push(["amber", "SHIELD DOWN"]); if (foe) W.push(["amber", "HOSTILE TITAN ON FIELD"]); if (DROPS.some((D) => D.team === "foe")) W.push(["amber", "TITANFALL DETECTED"]); if (t.reload > 0) W.push(["", "RELOADING"]);
   const key = W.map((w) => w[1]).join("|"); if (key !== warnKey) { warnKey = key; el["ck-warn"].innerHTML = W.map(([c, x]) => `<div class="${c}">${TRI}${x}</div>`).join(""); }
-  el["ck-sys"].innerHTML = `<u>VANGUARD FRAME 07</u>LINK &nbsp;&nbsp; PILOT ${segs(4, 4)}<br>REACTOR ${Math.round(60 + t.hull / t.hullMax * 38)}%<br>DASH &nbsp;&nbsp; ${segs(t.dash, t.dashMax, "■")}<br><br>SCORE &nbsp; ${Math.floor(B.score.you)} : ${Math.floor(B.score.foe)}<br>POINTS &nbsp;${POINTS.map((p) => (p.owner === "you" ? p.name : p.owner === "foe" ? p.name.toLowerCase() : "·")).join(" ")}<br>SUPPLY &nbsp;${Math.floor(B.supply.you)}<br><br>TAB &nbsp;&nbsp;&nbsp;COMMAND`;
+  el["ck-sys"].innerHTML = `<u>VANGUARD FRAME 07</u>LINK &nbsp;&nbsp; PILOT ${segs(4, 4)}<br>REACTOR ${Math.round(60 + t.hull / t.hullMax * 38)}%<br>DASH &nbsp;&nbsp; ${segs(t.dash, t.dashMax, "■")}<br><br>SECTOR &nbsp;${Math.min(OP.sector + 1, SECN)} OF ${SECN}<br>TICKETS ${OP.tickets}<br>POINTS &nbsp;${POINTS.filter((p) => p.sector === OP.sector).map((p) => (p.owner === "you" ? p.name : p.owner === "foe" ? p.name.toLowerCase() : "·")).join(" ")}<br>SUPPLY &nbsp;${Math.floor(B.supply.you)}<br><br>TAB &nbsp;&nbsp;&nbsp;COMMAND`;
   el["ck-wpn"].innerHTML = `<u>40 MM CANNON</u><em>${t.reload > 0 ? "RELOAD" : t.ammo + " / 18"}</em><span class="pips">${segs(t.reload > 0 ? 0 : t.ammo, 18)}</span><u>ROCKET POD</u><em class="${t.rk <= 0 ? "" : "dim"}">${t.rk <= 0 ? "READY" : "LOADING"}</em><span class="pips">${segs(t.rk <= 0 ? 6 : Math.floor((1 - t.rk / 8) * 6), 6, "◆")}</span><u>FIST</u><em class="${t.punchCd <= 0 ? "" : "dim"}">${t.punchCd <= 0 ? "READY" : "..."}</em><small>LMB &nbsp;RMB &nbsp;F</small>`;
   el["ck-vit"].innerHTML = `<div><label>SHIELD</label><span class="sh">${segs(Math.ceil(t.shield / 10), 15)}</span><label>${Math.round(t.shield / 1.5)}%</label></div><div class="${t.hull < t.hullMax * .35 ? "crit" : ""}"><label>HULL</label><span class="hu">${segs(Math.ceil(t.hull / t.hullMax * 20), 20)}</span><label>${Math.round(t.hull / t.hullMax * 100)}%</label></div>`;
   // radar: what is around, turned so that ahead is up
@@ -475,7 +475,7 @@ function cockpit(dt) {
 function hud(dt) { el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
   hudT -= dt; if (hudT > 0) return; hudT = .08; const m = P.mine;
   el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp + "%"; el.speed.textContent = hs().toFixed(1); el.wname.textContent = (P.weapon ? "Charge rifle (Q)" : pw().name + " (Q)") + "  ·  Grenades " + P.nades + " (G)"; el.ammo.textContent = P.weapon ? (P.charge > 0 ? "charging" : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : P.ammo + " / " + pw().mag;
-  el.kills.innerHTML = `<span class="you">${Math.floor(B.score.you)}</span> ${POINTS.map((p) => `<i class="${p.owner || "none"}">${p.name}</i>`).join("")} <span class="foe">${Math.floor(B.score.foe)}</span>`; el.timer.textContent = "Supply " + Math.floor(B.supply.you) + " · Tab: command";
+  el.kills.innerHTML = opLine(); el.timer.textContent = "Supply " + Math.floor(B.supply.you) + " · Tab: command";
   el.meterfill.style.width = (m ? 100 : P.meter) + "%"; el.meterlab.textContent = m ? "Titan: standing by" : DROPS.some((D) => D.team === "you") ? "Titan: on its way" : P.meter >= 100 ? "Titan ready: press V" : "Titan " + Math.floor(P.meter) + "%";
   const foe = TITANS.find((o) => o.team === "foe"); el.foe.style.display = foe ? "block" : "none"; if (foe) el.foefill.style.width = (foe.hull + foe.shield) / 5 + "%"; 
   const near = !P.seq && m && m.alive && m.doom <= 0 && Math.hypot(m.pos.x - P.pos.x, m.pos.z - P.pos.z) < 7;
@@ -507,7 +507,7 @@ function frame(now) {
   if (SND) { cam.getWorldDirection(_f); SND.listener(cam.position.x / U, cam.position.y / U, cam.position.z / U, _f.x, _f.y, _f.z); }
   if (started) hud(dt);
 }
-buildPass(); respawn();
+buildPass(); setHomes(); respawn();
 
 /* ---------- more than one player ----------
    Up to four: two sides of one or two. Each player's own pilot and Titan run on their own machine and are sent to the
@@ -550,6 +550,7 @@ function netTick(dt) { stepRemote(dt); netT += dt; snapT += dt; pingT += dt;
 // what happens on this screen when another player does something
 const ACT = {
   sh: (slot, a) => { const from = V3(a[0] * U, a[1] * U, a[2] * U), to = V3(a[3] * U, a[4] * U, a[5] * U); tracer(from, to, a[6] ? "#8fe0f0" : "#ffb890", a[6] ? 30000 : 9000, a[6] ? 1.6 : .5); flash(from, a[6] ? "#8fe0f0" : "#ffc477", 900, .06); snd("grunt_shot", { pos: [a[0], a[1], a[2]] }); },
+  back: (slot) => { const rp = RPS.get(slot); if (rp && B.mp === "host") spend(rp.side, 1); },
   pdown: (slot) => { const rp = RPS.get(slot); if (!rp) return; if (rp.side === "foe") { snd("kill"); say("An enemy pilot is down.", 2.5); } else say((rp.name || "Your teammate") + " is down.", 2.5); },
   tdrop: (slot, a) => { const rp = RPS.get(slot); if (!rp) return; callTitan(rp.side, a[0], a[1], a[2]); DROPS[DROPS.length - 1].ghost = true; say(rp.side === "foe" ? "An enemy Titan is dropping." : (rp.name || "Your teammate") + " has called a Titan.", 3); },
   tfx: (slot, a) => { const rp = RPS.get(slot), t = rp && rp.titan; if (!t) return;
@@ -606,11 +607,11 @@ $("mp-team").onclick = () => { if (NET.role === "guest") send("team", 0); else i
 $("mp-start").onclick = () => hostStart(false);
 try { const aj = JSON.parse(sessionStorage.getItem("ab-autojoin") || "null"); if (aj && aj.code) { sessionStorage.removeItem("ab-autojoin"); $("mp-code").value = aj.code; if (aj.name) $("mp-name").value = aj.name; setTimeout(() => $("mp-join").click(), 600); } } catch (e) {}
 // choosing the field: a kind and a number. The page loads again with the new field built.
-{ const kind = $("map-kind"), num = $("map-num"), cur = MAPKEY.split("-"); for (const [k, name] of [["mixed", "Mixed country"], ["town", "Town"], ["works", "Works"], ["airfield", "Airfield"], ["farm", "Farmland"], ["classic", "The refinery (built by hand)"]]) { const o = document.createElement("option"); o.value = k; o.textContent = name; kind.appendChild(o); }
-  kind.value = cur[0]; num.value = cur[1] || ""; num.disabled = cur[0] === "classic"; kind.onchange = () => { num.disabled = kind.value === "classic"; };
-  const go = (n) => pickMap(kind.value === "classic" ? "classic" : kind.value + "-" + (String(n).replace(/\D/g, "").slice(0, 6) || "1"));
-  $("map-go").onclick = () => go(num.value || "1"); $("map-new").onclick = () => { if (kind.value === "classic") kind.value = "mixed"; go(1000 + Math.floor(Math.random() * 9000)); };
-  $("map-now").textContent = PLAN ? "You are on " + MAPNAME + ": " + POINTS.map((p) => p.label).join(", ") + "." : "You are on the refinery, the field built by hand."; }
+{ const kind = $("map-kind"), num = $("map-num"), size = $("map-size"), role = $("map-role"), cur = MAPKEY.split("-"), tail = cur[2] || "sa"; for (const [k, name] of [["mixed", "Mixed country"], ["town", "Town"], ["works", "Works"], ["airfield", "Airfield"], ["farm", "Farmland"]]) { const o = document.createElement("option"); o.value = k; o.textContent = name; kind.appendChild(o); }
+  kind.value = cur[0]; num.value = cur[1] || ""; size.value = tail[0]; role.value = tail[1];
+  const go = (n) => pickMap(kind.value + "-" + (String(n).replace(/\D/g, "").slice(0, 6) || "1") + "-" + size.value + role.value);
+  $("map-go").onclick = () => go(num.value || "1"); $("map-new").onclick = () => go(1000 + Math.floor(Math.random() * 9000));
+  $("map-now").textContent = "You are on " + MAPNAME + ", and you " + (OP.atk === "you" ? "attack" : "defend") + ". " + SECN + " sectors: " + POINTS.map((p) => p.name + " " + p.label.toLowerCase() + (p.roof ? " (roofed)" : "")).join(", ") + "."; }
 window.__mf = { PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);
