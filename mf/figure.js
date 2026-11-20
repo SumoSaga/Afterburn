@@ -4,7 +4,7 @@
    the pilot's speed, a tucked jump, a second jump on the jumpkit's thrusters, a wall run leaning off the wall with one
    hand on it, a slide, a crouch, and going down. The kit's own walk is made for soldiers and is far too slow for a pilot. */
 import { THREE, U, V3, SOL, charMat, fxLayer, clamp } from "./engine.js";
-import { build, box as B, hull as H, drum as C } from "./parts.js";
+import { build, box as B, hull as H, drum as C, loft as Lf, ball as Bl } from "./parts.js";
 
 // a pilot's own kit, worn over the soldier: helmet with a lit visor, chest plate and pouches, shoulder and knee pads,
 // and the jumpkit on the back. Two paints: your side's pale shell, the other side's dark one.
@@ -12,7 +12,7 @@ const KIT = { you: { shell: "#d9d2bc", plate: "#8f8a80", accent: "#c45a1e", dark
 
 const E = new THREE.Euler(), Q = new THREE.Quaternion();
 export function makeFigure(fac, enemy, paint) {
-  const mil = fac === "militia", s = SOL.make({ x: 0, z: 0, yaw: 0, weapon: "rifle", role: "rifleman", camo: mil ? "ranger" : "urban", seed: 4242, helmet: !mil });
+  const mil = fac === "militia", s = SOL.make({ x: 0, z: 0, yaw: 0, weapon: "rifle", role: "rifleman", camo: mil ? "ranger" : "urban", seed: 4242, helmet: false });
   if (!mil && window.CBMech) { try { window.CBMech.dress(s, "light", THREE, charMat, { scheme: enemy ? "steel" : "worn" }); } catch (e) {} }
   // let it bring the rifle up and settle, alone, so that nobody else on the field is moved along with it
   const others = SOL.all.splice(0); SOL.all.push(s); try { s.aimAt(V3(0, 25, 600)); for (let i = 0; i < 40; i++) SOL.update(.05); } catch (e) {} SOL.all.length = 0; for (const o of others) if (o !== s) SOL.all.push(o);
@@ -24,11 +24,18 @@ export function makeFigure(fac, enemy, paint) {
   // the pilot's kit, in metres on each joint (the figure faces +z), and the jumpkit's flames under its two canisters
   const S = { ...KIT[enemy ? "foe" : "you"] }; if (paint && !enemy) S.accent = paint; const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) });
   const gear = (jt, list) => { const g = new THREE.Group(); g.scale.setScalar(U); jt.add(g); build(g, list, S, glowMat); };
-  gear(s.head, [H(.24, .17, .26, 0, .155, 0, "shell", { sx: .8, sz: .82 }), B(.25, .04, .12, 0, .085, .09, "shell"), B(.19, .05, .03, 0, .108, .135, "glow"), H(.2, .08, .1, 0, .03, .09, "dark", { sx: .8 }), C(.045, .05, .125, .11, 0, "dark", "x", 6), C(.045, .05, -.125, .11, 0, "dark", "x", 6), B(.035, .04, .22, 0, .25, -.01, "accent"), C(.005, .2, -.1, .33, -.06, "dark", "y", 4)]);
-  gear(s.chest, [C(.085, .05, 0, .27, 0, "accent", "y", 8), H(.3, .16, .07, 0, .14, .08, "plate", { sx: .85 }), ...[-.1, 0, .1].map((x) => B(.085, .09, .05, x, .0, .09, "canvas")), H(.13, .06, .17, .2, .245, 0, "plate", { sx: .8, sz: .85 }), H(.13, .06, .17, -.2, .245, 0, "plate", { sx: .8, sz: .85 }),
-    B(.26, .3, .07, 0, .1, -.11, "dark"), ...[-1, 1].flatMap((sd) => [C(.055, .3, sd * .1, -.02, -.18, "plate", "y", 8), C(.045, .06, sd * .1, -.2, -.18, "dark", "y", 8, .06), C(.058, .04, sd * .1, .14, -.18, "accent", "y", 8)])]);
-  for (const L of [s.LL, s.LR]) { gear(L.sh, [H(.1, .1, .05, 0, -.03, .065, "plate", { sx: .8 })]); gear(L.th, [B(.05, .12, .09, L.s * .08, -.2, 0, "canvas")]); }
-  for (const A of [s.AL, s.AR]) gear(A.fo, [B(.075, .12, .075, 0, -.12, 0, "plate")]);
+  // the helmet: a full shell shaped to the head, longer behind than in front, with a visor that wraps round the face,
+  // a breather over the mouth with a filter on each cheek, cups over the ears and a guard down the back of the neck
+  gear(s.head, [Bl(.25, .27, .3, 0, .128, -.012, "shell"), Bl(.23, .15, .2, 0, .07, -.07, "shell"), Bl(.19, .15, .19, 0, .045, .05, "dark"),
+    Bl(.262, .282, .312, 0, .128, -.012, "glow", { face: 0, wide: 2.3, from: 1.32, to: 1.74 }), Bl(.27, .29, .32, 0, .128, -.012, "accent", { face: 0, wide: 2.5, from: 1.16, to: 1.32 }),
+    C(.03, .05, .075, .03, .1, "plate", "z", 8), C(.03, .05, -.075, .03, .1, "plate", "z", 8), C(.05, .05, .125, .1, -.01, "dark", "x", 10), C(.05, .05, -.125, .1, -.01, "dark", "x", 10),
+    Lf([[0, .03, .2], [.03, .045, .26], [.05, .02, .18]], 0, .235, -.03, "accent", 6), C(.005, .2, -.11, .3, -.06, "dark", "y", 4)]);
+  // the body armour: a cuirass that follows the chest, caps on the shoulders, pouches, and the jumpkit: a hub with a canister each side
+  gear(s.chest, [C(.085, .05, 0, .27, 0, "accent", "y", 10), Lf([[-.03, .3, .21], [.09, .35, .24], [.2, .37, .23], [.27, .25, .17]], 0, 0, 0, "plate", 10, .35), Bl(.2, .14, .08, 0, .17, .1, "shell"),
+    ...[-.1, 0, .1].map((x) => Bl(.09, .1, .07, x, .01, .11, "canvas")), Bl(.15, .12, .17, .21, .235, 0, "shell"), Bl(.15, .12, .17, -.21, .235, 0, "shell"),
+    Bl(.26, .3, .14, 0, .12, -.13, "dark"), ...[-1, 1].flatMap((sd) => [Lf([[-.17, .06, .06], [-.12, .11, .11], [.1, .11, .11], [.16, .06, .06]], sd * .105, 0, -.19, "plate", 10), C(.04, .07, sd * .105, -.2, -.19, "dark", "y", 10, .055), C(.057, .03, sd * .105, .06, -.19, "accent", "y", 10)])]);
+  for (const L of [s.LL, s.LR]) { gear(L.sh, [Bl(.11, .13, .09, 0, -.01, .05, "shell"), Lf([[-.36, .09, .05, 0, .04], [-.2, .11, .06, 0, .05], [-.08, .1, .05, 0, .045]], 0, 0, 0, "plate", 8, .3)]); gear(L.th, [Bl(.06, .14, .11, L.s * .085, -.2, 0, "canvas")]); }
+  for (const A of [s.AL, s.AR]) gear(A.fo, [Lf([[-.2, .07, .07], [-.1, .09, .09], [-.03, .085, .085]], 0, 0, 0, "plate", 8)]);
   const flames = [];
   for (const sx of [-1, 1]) { const fl = fxLayer(new THREE.Mesh(new THREE.ConeGeometry(.95, 7, 6).rotateX(Math.PI).translate(0, -3.5, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(enemy ? "#ff9a4a" : "#7fdcff").multiplyScalar(3), transparent: true, opacity: .9, blending: THREE.AdditiveBlending, depthWrite: false }))); fl.position.set(sx * .1 * U, -.23 * U, -.18 * U); fl.scale.set(1, .01, 1); s.chest.add(fl); flames.push(fl); }
   const tag = new THREE.Mesh(new THREE.OctahedronGeometry(1.9), new THREE.MeshBasicMaterial({ color: enemy ? new THREE.Color(3.4, .5, .25) : new THREE.Color(.5, 2.4, 3) })); tag.position.y = 39; root.add(tag);
