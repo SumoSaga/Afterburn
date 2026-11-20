@@ -21,10 +21,12 @@ const MODEL = await loadModel("mech.glb", "mfMech");
    is turned here to point along -z from the butt of its stock, and its drum is cut away by where it sits (under the
    receiver, ahead of the grip) so it can come off in a reload. About 3.1 m long. */
 const TRIFLE = await loadModel("titan-rifle.glb", "mfTRifle"), TS = 2.4, R2 = Math.SQRT1_2;
-function modelGun(team) { let src = null; TRIFLE.scene.traverse((o) => { if (o.isMesh) src = o; }); const pos = src.geometry.attributes.position, idx = src.geometry.index.array, body = [], drum = [];
+// the same rifle as the pilot sees it from the cockpit: marked as something held, so it is drawn over the world
+export function cockpitRifle() { if (!TRIFLE) return null; return modelGun("you", TRIFLE.held || (TRIFLE.held = TRIFLE.mk("#ffffff", "held", "0.6"))); }
+function modelGun(team, mat0) { let src = null; TRIFLE.scene.traverse((o) => { if (o.isMesh) src = o; }); const pos = src.geometry.attributes.position, idx = src.geometry.index.array, body = [], drum = [];
   for (let i = 0; i < idx.length; i += 3) { let ul = 9, uh = -9, zm = 0, zh = -9; for (let k = 0; k < 3; k++) { const v = idx[i + k], u = (pos.getX(v) + pos.getY(v)) * R2, z = pos.getZ(v); ul = Math.min(ul, u); uh = Math.max(uh, u); zm += z / 3; zh = Math.max(zh, z); }
     (ul > -.335 && uh < -.03 && zm < -.065 && zh < -.035 ? drum : body).push(idx[i], idx[i + 1], idx[i + 2]); }
-  const M = new THREE.Matrix4().set(TS * R2, -TS * R2, 0, 0, 0, 0, TS, -.03 * TS, -TS * R2, -TS * R2, 0, -.68 * TS, 0, 0, 0, 1), mat = TRIFLE.mats[team] || TRIFLE.mats.you;
+  const M = new THREE.Matrix4().set(TS * R2, -TS * R2, 0, 0, 0, 0, TS, -.03 * TS, -TS * R2, -TS * R2, 0, -.68 * TS, 0, 0, 0, 1), mat = mat0 || TRIFLE.mats[team] || TRIFLE.mats.you;
   const part = (ix) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", pos.clone()); g.setAttribute("normal", src.geometry.attributes.normal.clone()); g.setAttribute("uv", src.geometry.attributes.uv.clone()); g.setIndex(ix); g.applyMatrix4(M); const m = new THREE.Mesh(g, mat); m.castShadow = true; m.frustumCulled = false; return m; };
   const g = new THREE.Group(), mag = new THREE.Group(), dm = part(drum); g.add(part(body)); mag.add(dm); g.add(mag);
   const at = (u, z) => new THREE.Vector3(0, (z - .03) * TS, -(u + .68) * TS);
