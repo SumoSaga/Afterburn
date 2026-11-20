@@ -158,7 +158,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "15";
+  window.AB_BUILD = "16";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "engine", "figure", "game", "garage", "hands", "mapgen", "net", "parts", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -216,7 +216,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 15 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 16 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -264,7 +264,7 @@
     <tr><td>Right mouse</td><td>Aim down the sights. In a Titan it fires the rocket pod</td></tr>
     <tr><td>Q</td><td>Your tactical kit: the grapple hook or the stim. Q again, or a jump, lets go of the grapple</td></tr>
     <tr><td>R</td><td>Reload</td></tr>
-    <tr><td>X</td><td>Throw a grenade. You carry two, and you get them back when you respawn</td></tr>
+    <tr><td>X</td><td>Your ordnance. Hold to cook a frag and let go to throw it; an arc grenade is thrown at once</td></tr>
     <tr><td>G</td><td>Tap, or click the middle mouse button: your squads within 35 metres go where you are looking. Hold for a wheel and flick the mouse: up for nearby, left for core infantry, right for specialists, down for every squad not locked to a point, and down twice to take the locked ones too</td></tr>
     <tr><td>Z, B</td><td>Call Fireteam Alpha, call Fireteam Beta. You put cards in a fireteam in your battlegroup</td></tr>
     <tr><td>F</td><td>Knife on foot, punch in a Titan</td></tr>
@@ -293,15 +293,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=15"></script>
-<script src="punch/punch-lab.js?v=15"></script>
-<script src="cb/genbuild.js?v=15"></script>
-<script src="cb/machines.js?v=15"></script>
-<script src="cb/soldiers.js?v=15"></script>
-<script src="cb/cbmechdata.js?v=15"></script>
-<script src="cb/cbmech.js?v=15"></script>
-<script src="cb/cbnature.js?v=15"></script>
-<script src="cb/cbweather.js?v=15"></script>
+<script src="punch/punch.js?v=16"></script>
+<script src="punch/punch-lab.js?v=16"></script>
+<script src="cb/genbuild.js?v=16"></script>
+<script src="cb/machines.js?v=16"></script>
+<script src="cb/soldiers.js?v=16"></script>
+<script src="cb/cbmechdata.js?v=16"></script>
+<script src="cb/cbmech.js?v=16"></script>
+<script src="cb/cbnature.js?v=16"></script>
+<script src="cb/cbweather.js?v=16"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
