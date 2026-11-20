@@ -326,11 +326,16 @@ function fireCannon(t) {
 /* A ping from the fight. Tap G or the middle mouse button: your squads within 35 metres go where you are looking.
    Hold G a moment longer: every squad of yours that is not locked to a point goes. Squads you sent to a point from
    the map are locked there and a ping never pulls them off. */
-let gDownT = 0;
-function ping(wide) { if (!started || P.dead > 0 || MAP.on) return; aimRay(0); const dist = Math.min(140, rayWorld(_o, _d, 140)), x = _o.x + _d.x * dist, z = _o.z + _d.z * dist, mine = SQUADS.filter((q) => q.owner === "you" && !q.dead && q.c && (wide || Math.hypot(q.c.x - P.pos.x, q.c.z - P.pos.z) < 35));
-  if (!mine.length) { say(wide ? "You have no squads on the field." : "None of your squads are within 35 metres. Hold G to call every squad that is not locked to a point.", 3); snd("dry"); return; }
-  pingTo(V3(x, 0, z), mine); snd("selector"); const pt = POINTS.find((p) => Math.hypot(p.x - x, p.z - z) < 8); say((mine.length === 1 ? "One squad" : mine.length + " squads") + (pt ? ": take point " + pt.name + "." : ": move there.") + " Locked squads stay where they are.", 2.5); }
-addEventListener("keyup", (e) => { if (e.code === "KeyG" && gDownT) { ping(performance.now() - gDownT > 350); gDownT = 0; } });
+let gDownT = 0; const WHEEL = { on: false, x: 0, y: 0, el: null }, WEDGE = { near: "Nearby", core: "Core infantry", spec: "Specialists", all: "All not locked" };
+const wheelPick = () => (Math.hypot(WHEEL.x, WHEEL.y) < 28 ? "near" : Math.abs(WHEEL.x) > Math.abs(WHEEL.y) ? (WHEEL.x < 0 ? "core" : "spec") : WHEEL.y < 0 ? "near" : "all");
+function wheelDraw() { if (!WHEEL.el) { WHEEL.el = document.createElement("div"); WHEEL.el.style.cssText = "position:fixed;left:50%;top:50%;width:300px;height:220px;margin:-110px 0 0 -150px;z-index:30;pointer-events:none;font:13px ui-monospace,Menlo,monospace;color:#efe2c8"; document.body.appendChild(WHEEL.el); }
+  const pk = wheelPick(), cell = (k, css) => `<div style="position:absolute;${css};padding:6px 10px;border:2px solid ${pk === k ? "#8fe0f0" : "#6b5438"};background:${pk === k ? "#17333a" : "#1b1713cc"}">${WEDGE[k]}</div>`;
+  WHEEL.el.style.display = WHEEL.on ? "block" : "none"; if (WHEEL.on) WHEEL.el.innerHTML = cell("near", "left:50%;top:0;transform:translateX(-50%)") + cell("core", "left:0;top:50%;transform:translateY(-50%)") + cell("spec", "right:0;top:50%;transform:translateY(-50%)") + cell("all", "left:50%;bottom:0;transform:translateX(-50%)"); }
+function ping(which) { if (!started || P.dead > 0 || MAP.on) return; aimRay(0); const dist = Math.min(140, rayWorld(_o, _d, 140)), x = _o.x + _d.x * dist, z = _o.z + _d.z * dist;
+  const mine = SQUADS.filter((q) => q.owner === "you" && !q.dead && q.c && !(q.def.veh && q.def.veh.static) && (which === "near" ? Math.hypot(q.c.x - P.pos.x, q.c.z - P.pos.z) < 35 : which === "core" ? !!q.def.core || q.def.capw >= .3 && !q.def.veh && q.def.hp < 150 : which === "spec" ? !(q.def.core || q.def.capw >= .3 && !q.def.veh && q.def.hp < 150) : true));
+  if (!mine.length) { say(which === "near" ? "None of your squads are within 35 metres. Hold G for the wheel to call the others." : "You have no squads of that kind on the field.", 3); snd("dry"); return; }
+  pingTo(V3(x, 0, z), mine); snd("selector"); const pt = POINTS.find((p) => Math.hypot(p.x - x, p.z - z) < 8); say(WEDGE[which] + ", " + (mine.length === 1 ? "one squad" : mine.length + " squads") + (pt ? ": take point " + pt.name + "." : ": move there.") + " Locked squads stay where they are.", 2.5); }
+addEventListener("keyup", (e) => { if (e.code === "KeyG" && gDownT) { const pk = WHEEL.on ? wheelPick() : "near"; WHEEL.on = false; wheelDraw(); gDownT = 0; ping(pk); } });
 const SWAP = .5, NADE = .8, KNIFE = .5, gunKind = () => P.weapon === 1 ? "charge" : PW[LOAD.weapon] ? LOAD.weapon : "carbine", handsBusy = () => P.swapT >= 0 || P.nadeT >= 0 || P.meleeT >= 0;
 const NADES = [];
 function startSwap(to) { if (P.titan || handsBusy() || to === P.weapon) return; P.swapFrom = gunKind(); P.swapTo = to; P.swapT = 0; P.reload = 0; P.charge = 0; snd("swap"); }
@@ -390,14 +395,14 @@ addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.p
   if (MAP.on) { MAP.keys[e.code] = true; if (e.code === "KeyT") again(); return; }
   if (!active()) return; const code = e.code === "ControlLeft" ? "KeyC" : e.code; K[code] = true;
   if (code === "Space") P.jumpBuf = .14; if (code === "KeyT") again(); if (code === "KeyE" && P.dead <= 0) useKey(); if (code === "KeyV" && P.dead <= 0 && !P.titan) tryCallTitan();
-  if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") { if (P.titan) K._punch = true; else startKnife(); } if (code === "KeyX" && !P.titan) startNade(); if (code === "KeyG" && !e.repeat) gDownT = performance.now();
+  if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") { if (P.titan) K._punch = true; else startKnife(); } if (code === "KeyX" && !P.titan) startNade(); if (code === "KeyG" && !e.repeat) { gDownT = performance.now(); WHEEL.x = WHEEL.y = 0; setTimeout(() => { if (gDownT && performance.now() - gDownT >= 190) { WHEEL.on = true; wheelDraw(); } }, 200); }
   if (!P.titan && (code === "KeyQ" || code === "Digit1" || code === "Digit2")) startSwap(code === "KeyQ" ? 1 - P.weapon : code === "Digit2" ? 1 : 0);
   if (!runOn && !runDone && ["KeyW", "KeyA", "KeyS", "KeyD"].includes(code)) runOn = true; });
 addEventListener("keyup", (e) => { K[e.code === "ControlLeft" ? "KeyC" : e.code] = false; MAP.keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in K) K[k] = false; mouseDown = false; });
-cv.addEventListener("mousedown", (e) => { if (!started || panelOpen) return; if (!locked && !noLock) { wantLock(); return; } if (e.button === 1) { e.preventDefault(); ping(false); } if (e.button === 0) mouseDown = true; if (e.button === 2 && P.titan) K._rockets = true; });
+cv.addEventListener("mousedown", (e) => { if (!started || panelOpen) return; if (!locked && !noLock) { wantLock(); return; } if (e.button === 1) { e.preventDefault(); ping("near"); } if (e.button === 0) mouseDown = true; if (e.button === 2 && P.titan) K._rockets = true; });
 addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; });
-addEventListener("mousemove", (e) => { if (!active() || MAP.on || P.dead > 0 || P.seq) return; const k = .0022 * CFG.sens * (P.titan ? .8 : 1); P.yaw -= e.movementX * k; P.pitch = clamp(P.pitch - e.movementY * k, -1.5, 1.5); });
+addEventListener("mousemove", (e) => { if (WHEEL.on) { WHEEL.x += e.movementX; WHEEL.y += e.movementY; wheelDraw(); return; } if (!active() || MAP.on || P.dead > 0 || P.seq) return; const k = .0022 * CFG.sens * (P.titan ? .8 : 1); P.yaw -= e.movementX * k; P.pitch = clamp(P.pitch - e.movementY * k, -1.5, 1.5); });
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* ---------- screen furniture ---------- */
