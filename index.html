@@ -190,7 +190,7 @@
 
 <div id="start" class="box">
   <h1>AFTERBURN</h1>
-  <p><i>Prototype 6. You command one side of a fight across a town, a refinery and the hills above them, and you are also in it.</i></p>
+  <p><i>Prototype 7. You command one side of a fight over five places between two bases, and you are also in it.</i></p>
   <p>Two sides fight over five points: the town square, the refinery, the lodge in the pines, the relay up on the ridge and the depot. Every second, each point you hold adds to your score, and the first side to 400 takes the field. You are the commander: you spend supply to bring squads and vehicles onto the field, you tell them exactly where to go, and you can call an air strike, a shield dome, a medical crate or a drop pod onto any spot on the map. You are also a pilot on the ground with a jumpkit, and your Titan is yours to call down.</p>
   <p>Press <b>Tab</b> at any time to open the battle map. It also opens while you are down and waiting to come back. On the map you can see every squad and what it is doing, bring in new ones, and give orders.</p>
   <div id="setup"></div>
@@ -211,6 +211,10 @@
     <tr><td>In a Titan</td><td>Left button fires the 40 mm cannon, right button fires the rocket pod, F throws a punch</td></tr>
     <tr><td>On the map</td><td>Left click a squad's card to pick it, or drag a box round several. Left click the ground or a point to send them there. Hold Shift and click to add stops on the way, then let go of Shift and click where they should end up. Right drag moves the map, middle drag turns it.</td></tr>
   </table></details>
+  <h2>The field</h2>
+  <p class="note" style="color:#b9a582;font-size:12px;margin:0">Every field is made from a kind and a number. The same kind and number always make the same field, so you can come back to one you like or give it to a friend. Building a field loads this page again. In a match, everyone plays on the host's field.</p>
+  <div class="row"><select id="map-kind" style="font:inherit;background:#1b1713;color:#efe2c8;border:2px solid #6b5438;padding:6px 8px"></select><input id="map-num" maxlength="6" placeholder="Number" autocomplete="off" spellcheck="false" style="font:inherit;width:90px;background:#1b1713;color:#efe2c8;border:2px solid #6b5438;padding:6px 8px"><button id="map-go">Build this field</button><button id="map-new">Surprise me</button></div>
+  <p id="map-now" class="lab" style="margin-top:8px;text-transform:none;letter-spacing:0;color:#8fe0f0"></p>
   <div class="row"><button class="go" id="go" style="margin-top:0">Drop in alone</button><button id="lab">Open the sound lab</button></div>
   <h2>Play with others</h2>
   <p class="note" style="color:#b9a582;font-size:12px;margin:0">Two to four players, in two sides of one or two. One of you hosts and gets a code; the others type the code and join. Each of you brings the side, pilot, Titan and army list chosen above. The host should keep this tab in front, since the battle runs on the host's machine. If your link drops, your place is held and your browser tries to get you back in.</p>

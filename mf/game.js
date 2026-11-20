@@ -2,7 +2,7 @@
    The battle itself (squads, vehicles, points, the commander's map) is in mf/battle.js.
    Everything here is in metres; the engine draws at U units to the metre. */
 import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, cam, gunScene, gunMat, makeRTs, render, BOXES, hitsBox, free, freeG, boxesNear, groundH, WORLD, rayBox, rayWorld,
-  flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat } from "./engine.js";
+  flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat, PLAN, MAPKEY, MAPNAME, setMap as pickMap } from "./engine.js";
 import { VM } from "./hands.js";
 import { makeRig, TITAN } from "./titan.js";
 import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
@@ -48,7 +48,7 @@ function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .3 : 0), z
 const _down = V3(0, -1, 0);
 function groundBelow() { const t = rayWorld(P.pos.clone().setY(P.pos.y + .1), _down, 50); return P.pos.y + .1 - t; }
 function endWall(cd) { const w = P.wall; P.lastWall = { ax: w.ax, n: w.n, c: P.pos.getComponent(w.ax) }; P.wall = null; P.wallCd = cd; }
-function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; if (B.mp && !MY.south) P.pos.set(ox, groundH(ox, -146) + .1, -146); else P.pos.set(SPAWN[0] + ox, groundH(SPAWN[0] + ox, SPAWN[2]) + .1, SPAWN[2]); P.vel.set(0, 0, 0); P.yaw = B.mp && !MY.south ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
+function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; if (B.mp && !MY.south) P.pos.set(ox, groundH(ox, -152) + .1, -152); else P.pos.set(SPAWN[0] + ox, groundH(SPAWN[0] + ox, SPAWN[2]) + .1, SPAWN[2]); P.vel.set(0, 0, 0); P.yaw = B.mp && !MY.south ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
 
 function stepPilot(dt) {
   P.jumpBuf -= dt; P.coyote -= dt; P.slideCd -= dt; P.wallCd -= dt; P.hurtT += dt;
@@ -572,8 +572,8 @@ function showRoster() { const el = $("mp-roster"); if (!ROSTER.length) { el.inne
   const row = (r) => `<div class="${r.team ? "foe" : "you"}">${r.slot === MY.slot ? "▸ " : ""}${(r.name || "Player " + (r.slot + 1)).replace(/[<>&]/g, "")}${r.slot === 0 ? " (host)" : ""}${r.here === false ? " (dropped)" : ""}</div>`;
   el.innerHTML = `<div><div class="lab">Side one</div>${ROSTER.filter((r) => !r.team).map(row).join("") || "<div class=\"dim\">nobody yet</div>"}</div><div><div class="lab">Side two</div>${ROSTER.filter((r) => r.team).map(row).join("") || "<div class=\"dim\">nobody yet</div>"}</div>`;
   $("mp-team").style.display = started ? "none" : ""; $("mp-start").style.display = NET.role === "host" && !started ? "" : "none"; }
-const lobbyOut = () => { for (const r of ROSTER) if (r.id) send("lobby", { you: r.slot, players: ROSTER.map(({ slot, name, team, here }) => ({ slot, name, team, here })) }, true, r.id); showRoster(); };
-const startMsg = (r, back) => ({ slot: r.slot, duo: B.duo, south: r.team === ROSTER[0].team, back: !!back, roster: ROSTER.map(({ slot, name, team, kit, here }) => ({ slot, name, team, kit, here })) });
+const lobbyOut = () => { for (const r of ROSTER) if (r.id) send("lobby", { you: r.slot, map: MAPKEY, players: ROSTER.map(({ slot, name, team, here }) => ({ slot, name, team, here })) }, true, r.id); showRoster(); };
+const startMsg = (r, back) => ({ map: MAPKEY, slot: r.slot, duo: B.duo, south: r.team === ROSTER[0].team, back: !!back, roster: ROSTER.map(({ slot, name, team, kit, here }) => ({ slot, name, team, kit, here })) });
 function mpBegin(role) { B.mp = role; mpOn = true; B.flip = !MY.south; if (role === "host") B.roster = ROSTER.map((r) => ({ key: keyOf(r.slot), side: r.team === ROSTER[0].team ? "you" : "foe", ...(r.kit || {}) })); begin(false); showRoster(); }
 function hostStart(again) { if (ROSTER.length < 2) { mpNote("Wait for at least one other player to join."); return; } if (!ROSTER.some((r) => r.team !== ROSTER[0].team)) { mpNote("Both sides need at least one player. Someone has to switch sides."); return; }
   ROSTER[0].kit = myKit(); B.duo = ROSTER.length > 2; MY.slot = 0; MY.south = true; MY.team = ROSTER[0].team; const list = ROSTER; setRoster(list); for (const r of ROSTER) if (r.id) send(again ? "again" : "start", startMsg(r), true, r.id);
@@ -586,9 +586,11 @@ onMsg("hello", (m, from) => { if (NET.role !== "host") return; let r = ROSTER.fi
   ROSTER.push({ slot, token: m.token, id: from, name: m.name || "Player " + (slot + 1), team: t1 < t0 ? 1 : 0, kit: m.kit, here: true }); ROSTER.sort((a, b) => a.slot - b.slot); mpNote("Your code is " + NET.code + ". " + (ROSTER.length - 1) + " joined. Start when everyone is in."); lobbyOut(); });
 onMsg("_leave", (id) => { const r = ROSTER.find((q) => q.id === id); if (!r) return; if (!started) { ROSTER = ROSTER.filter((q) => q !== r); lobbyOut(); return; } r.here = false; r.id = null; B.away[keyOf(r.slot)] = true; const rp = RPS.get(r.slot); if (rp) rp.on = false; say((r.name || "A player") + " has dropped. Their place is held for them.", 4); lobbyOut(); });
 onMsg("team", (x, from) => { if (NET.role !== "host" || started) return; const r = ROSTER.find((q) => q.id === from); if (r && ROSTER.filter((q) => q.team !== r.team).length < 2) { r.team = r.team ? 0 : 1; lobbyOut(); } });
-onMsg("lobby", (m) => { if (NET.role !== "guest") return; MY.slot = m.you; ROSTER = m.players; showRoster(); if (!started) mpNote("You are in. Waiting for the host to start the match."); });
+// the host's field is the field: if this page built another one, load the host's and come straight back in
+function wrongField(key) { if (!key || key === MAPKEY) return false; mpNote("The host is on another field. Loading it and joining again..."); try { sessionStorage.setItem("ab-map-join", key); sessionStorage.setItem("ab-autojoin", JSON.stringify({ code: NET.code, name: MY.name || "" })); } catch (e) { return false; } leave(); setTimeout(() => location.reload(), 300); return true; }
+onMsg("lobby", (m) => { if (NET.role !== "guest" || wrongField(m.map)) return; MY.slot = m.you; ROSTER = m.players; showRoster(); if (!started) mpNote("You are in. Waiting for the host to start the match."); });
 onMsg("no", (why) => { mpNote(why); leave(); ROSTER = []; showRoster(); });
-onMsg("start", (m) => { if (NET.role !== "guest") return; MY.slot = m.slot; MY.south = m.south; B.duo = m.duo; setRoster(m.roster); if (m.back && B.mp === "guest" && started) { B.over = null; say("You are back in.", 3); return; } mpBegin("guest"); say(m.back ? "You are back in." : "The match is on.", 3); });
+onMsg("start", (m) => { if (NET.role !== "guest" || wrongField(m.map)) return; MY.slot = m.slot; MY.south = m.south; B.duo = m.duo; setRoster(m.roster); if (m.back && B.mp === "guest" && started) { B.over = null; say("You are back in.", 3); return; } mpBegin("guest"); say(m.back ? "You are back in." : "The match is on.", 3); });
 onMsg("again", (m) => { if (B.mp !== "guest") return; MY.slot = m.slot; MY.south = m.south; B.duo = m.duo; B.flip = !MY.south; setRoster(m.roster); restart(); say("The host has started the match again.", 3); });
 const hello = () => send("hello", { token: MY.token, name: MY.name, kit: myKit() });
 onMsg("_open", () => { if (mpOn) hello(); });   // the link came back by itself: ask for the same place
@@ -602,6 +604,13 @@ $("mp-host").onclick = async () => { if (NET.role) return; nameOf(); mpNote("Ask
 $("mp-join").onclick = async () => { if (NET.role) return; nameOf(); const code = $("mp-code").value.trim(); if (code.length < 3 && !/[?&]local/.test(location.search)) { mpNote("Type the host's code first."); return; } mpNote("Linking..."); try { await join(code); try { sessionStorage.setItem("afterburn-code", NET.code); } catch (e) {} mpOn = true; mpNote("Linked."); hello(); } catch (e) { mpNote(e.message); } };
 $("mp-team").onclick = () => { if (NET.role === "guest") send("team", 0); else if (NET.role === "host") { const r = ROSTER[0]; if (ROSTER.filter((q) => q.team !== r.team).length < 2) { r.team = r.team ? 0 : 1; lobbyOut(); } } };
 $("mp-start").onclick = () => hostStart(false);
-window.__mf = { VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+try { const aj = JSON.parse(sessionStorage.getItem("ab-autojoin") || "null"); if (aj && aj.code) { sessionStorage.removeItem("ab-autojoin"); $("mp-code").value = aj.code; if (aj.name) $("mp-name").value = aj.name; setTimeout(() => $("mp-join").click(), 600); } } catch (e) {}
+// choosing the field: a kind and a number. The page loads again with the new field built.
+{ const kind = $("map-kind"), num = $("map-num"), cur = MAPKEY.split("-"); for (const [k, name] of [["mixed", "Mixed country"], ["town", "Town"], ["works", "Works"], ["airfield", "Airfield"], ["farm", "Farmland"], ["classic", "The refinery (built by hand)"]]) { const o = document.createElement("option"); o.value = k; o.textContent = name; kind.appendChild(o); }
+  kind.value = cur[0]; num.value = cur[1] || ""; num.disabled = cur[0] === "classic"; kind.onchange = () => { num.disabled = kind.value === "classic"; };
+  const go = (n) => pickMap(kind.value === "classic" ? "classic" : kind.value + "-" + (String(n).replace(/\D/g, "").slice(0, 6) || "1"));
+  $("map-go").onclick = () => go(num.value || "1"); $("map-new").onclick = () => { if (kind.value === "classic") kind.value = "mixed"; go(1000 + Math.floor(Math.random() * 9000)); };
+  $("map-now").textContent = PLAN ? "You are on " + MAPNAME + ": " + POINTS.map((p) => p.label).join(", ") + "." : "You are on the refinery, the field built by hand."; }
+window.__mf = { PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);

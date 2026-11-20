@@ -7,13 +7,20 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { planMap, THEMES } from "./mapgen.js";
+/* Which field this is. "classic" is the refinery built by hand; anything else is "<kit>-<number>" and is made by
+   mf/mapgen.js. The key comes from the address (?map=), or from the last one chosen on this machine. */
+const okKey = (k) => !!k && (k === "classic" || (/^[a-z]+-\d{1,6}$/.test(k) && !!THEMES[k.split("-")[0]]));
+export const MAPKEY = (() => { let k = null; try { if (sessionStorage.getItem("ab-autojoin")) k = sessionStorage.getItem("ab-map-join"); else sessionStorage.removeItem("ab-map-join"); } catch (e) {} if (!okKey(k)) k = new URLSearchParams(location.search).get("map"); try { if (!okKey(k)) k = localStorage.getItem("ab-map"); } catch (e) {} if (!okKey(k)) { k = "mixed-" + (1000 + Date.now() % 9000); try { localStorage.setItem("ab-map", k); } catch (e) {} } return k; })();
+export const setMap = (k, extra) => { if (!okKey(k)) return false; try { localStorage.setItem("ab-map", k); sessionStorage.removeItem("ab-map-join"); if (extra) sessionStorage.setItem("ab-map-go", JSON.stringify(extra)); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("map"); location.href = u.toString(); return true; };
+const KEYN = MAPKEY === "classic" ? 0 : [...MAPKEY].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
 export { THREE };
 export const U = 1 / .06;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // While the field is being built, every roll comes from one fixed sequence, so that two players' fields are the same field.
-const _mr = Math.random; { let sd = 20261120; Math.random = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const _mr = Math.random; { let sd = 20261120 ^ KEYN; Math.random = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 export const rnd = () => Math.random();
 export const $ = (id) => document.getElementById(id);
 function seeded(seed) { let s = seed; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
@@ -201,6 +208,7 @@ export function makeRTs() {
 }
 addEventListener("resize", makeRTs);
 
+export const GEN = window.RevelryGenBuild ? window.RevelryGenBuild(THREE, mergeGeometries) : null;
 /* ---------- the yard, built from boxes (authored in metres, drawn at U) ---------- */
 export const BOXES = [];                 // everything solid: { min: [x,y,z], max: [x,y,z] } in metres
 const geos = [], glowGeos = [], _c = new THREE.Color(), R1 = seeded(4242);
@@ -229,16 +237,22 @@ const CON = "#7d858a", CON2 = "#a1a7a8", STEEL = "#5f676d", DRAB = "#4f5a3c", DR
 
 /* ---------- the lie of the land: flat where things are built, hills and forest between ---------- */
 export const WORLD = { x0: -160, x1: 160, z0: -190, z1: 150 };
-// built ground: [x0, z0, x1, z1, height, how far it takes to blend into the hills]
-const ZONES = [[-56, -56, 56, 56, 0, 34], [62, -48, 152, 66, 0, 30], [-34, 104, 34, 150, 0, 26], [-34, -190, 34, -146, 2, 26], [-8, 56, 8, 104, 0, 16], [-8, -146, 8, -56, 1, 16], [56, -7, 62, 7, 0, 14], [-112, -36, -80, -6, 9, 22], [36, -134, 66, -108, 17, 18], [-54, 68, -18, 98, 3, 20]];
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }, fbm = (x, z) => noise2(x, z) * .65 + noise2(x * 2.1 + 5, z * 2.1 + 3) * .35;
-function zoneW(x, z) { let wm = 0, sw = 0, sh = 0, idx = -1; for (let i = 0; i < ZONES.length; i++) { const Z = ZONES[i], d = Math.hypot(Math.max(Z[0] - x, 0, x - Z[2]), Math.max(Z[1] - z, 0, z - Z[3])), w = 1 - sstep(0, Z[5], d); if (w > 0) { sw += w; sh += w * Z[4]; } if (w > wm) { wm = w; idx = i; } } return [wm, sw, sh, idx]; }
-function hraw(x, z) { const [wm, sw, sh] = zoneW(x, z), hills = 4 + 17 * fbm(x * .011 + 3, z * .011) + 8 * fbm(x * .034 + 9, z * .034) + Math.max(0, Math.hypot(x, z + 20) - 150) * .5 + clamp((-z - 40) / 150, 0, 1) * 7 + clamp((-x - 40) / 120, 0, 1) * 5; return (sh + (1 - wm) * hills) / (sw + (1 - wm)); }
+const NOX = (KEYN % 977) * 1.3, NOZ = ((KEYN >>> 10) % 991) * 1.7;   // every made field has its own hills
+const HK = KEYN ? .78 : 1, hillsRaw = (x, z) => 4 + HK * 17 * fbm(x * .011 + 3 + NOX, z * .011 + NOZ) + HK * 8 * fbm(x * .034 + 9 + NOX, z * .034 + NOZ) + Math.max(0, Math.hypot(x, z + 20) - 150) * .5 + clamp((-z - 40) / 150, 0, 1) * 7 + clamp((-x - 40) / 120, 0, 1) * 5;
+const genDims = (model) => { try { const e = GEN.entry(model); return e ? [e.dims[0] / U, e.dims[1] / U, e.dims[2] / U] : null; } catch (e) { return null; } };
+export const PLAN = MAPKEY !== "classic" && GEN ? planMap(MAPKEY, { hills: hillsRaw, dims: genDims, isVeh: (t) => !!(GEN.TYPES[t] && GEN.TYPES[t].vehicle) }) : null;
+export const MAPNAME = PLAN ? PLAN.name : "The refinery", SITES = PLAN ? PLAN.sites : [["A", 100, 14, "Town square"], ["B", -6, -4, "Refinery"], ["C", -95, -20, "Lodge"], ["D", 52, -118, "Ridge relay"], ["E", -34, 86, "Depot"]];
+// built ground: [x0, z0, x1, z1, height, how far it takes to blend into the hills]
+const ZONES = PLAN ? PLAN.zones : [[-56, -56, 56, 56, 0, 34], [62, -48, 152, 66, 0, 30], [-34, 104, 34, 150, 0, 26], [-34, -190, 34, -146, 2, 26], [-8, 56, 8, 104, 0, 16], [-8, -146, 8, -56, 1, 16], [56, -7, 62, 7, 0, 14], [-112, -36, -80, -6, 9, 22], [36, -134, 66, -108, 17, 18], [-54, 68, -18, 98, 3, 20]];
+function zoneW(x, z) { let wm = 0, sw = 0, sh = 0, idx = -1; for (let i = 0; i < ZONES.length; i++) { const Z = ZONES[i], ex = Math.max(Z[0] - x, 0, x - Z[2]), ez = Math.max(Z[1] - z, 0, z - Z[3]); if (ex >= Z[5] || ez >= Z[5]) continue; const d = Math.hypot(ex, ez), w = 1 - sstep(0, Z[5], d); if (w > 0) { sw += w; sh += w * Z[4]; } if (w > wm) { wm = w; idx = i; } } return [wm, sw, sh, idx]; }
+function hraw(x, z) { const [wm, sw, sh] = zoneW(x, z); return (sh + (1 - wm) * hillsRaw(x, z)) / (sw + (1 - wm)); }
 const HX0 = -220, HZ0 = -250, HW = 441, HD = 461, HM = new Float32Array(HW * HD); for (let j = 0; j < HD; j++) for (let i = 0; i < HW; i++) HM[j * HW + i] = hraw(HX0 + i, HZ0 + j);
 export function groundH(x, z) { const fx = clamp(x - HX0, 0, HW - 1.001), fz = clamp(z - HZ0, 0, HD - 1.001), i = fx | 0, j = fz | 0, u = fx - i, v = fz - j, k = j * HW + i; return (HM[k] * (1 - u) + HM[k + 1] * u) * (1 - v) + (HM[k + HW] * (1 - u) + HM[k + HW + 1] * u) * v; }
 export const wild = (x, z) => 1 - zoneW(x, z)[0];   // 0 on built ground, 1 out in the hills
 export const slopeAt = (x, z) => Math.hypot(groundH(x + 1, z) - groundH(x - 1, z), groundH(x, z + 1) - groundH(x, z - 1)) / 2;
 
+if (!PLAN) {
 // the refinery yard's walls, with a gate in the middle of each side
 for (const s of [-1, 1]) { solid(s * 29, 0, -48, 40, 10, 2, CON); solid(s * 29, 0, 48, 40, 10, 2, CON); solid(-48, 0, s * 28, 2, 10, 38, CON); solid(48, 0, s * 28, 2, 10, 38, CON); }
 // drop point
@@ -266,27 +280,34 @@ solid(34, 0, -30, 7, 13, 7, CON, { cap: "#b0312a" }); solid(34, 0, -24.6, 7, 3.4
 // tanks and cover
 solid(36, 0, 14, 6, 5, 6, RUST); solid(36, 0, 24, 6, 5, 6, RUST); solid(28, 0, 19, 2.4, 1.2, 2.4, DRAB); solid(20, 0, 26, 3, 1.3, 1.4, DRAB2); solid(16, 0, 12, 1.4, 1.3, 3.2, DRAB);
 solid(-12, 0, -2, 3.2, 1.3, 1.4, DRAB2); solid(-16, 0, 30, 1.4, 1.3, 3.2, DRAB); solid(12, 0, -14, 2.2, 2.2, 2.2, DRAB);
+}
 // barrels, sandbags, pallets, pipes and tyres
-function barrels(x, z, n, cols = [RUST, "#3b4430", "#5f676d"]) { for (let i = 0; i < n; i++) { const bx = x + (i % 2) * .75 + (R1() - .5) * .1, bz = z + Math.floor(i / 2) * .75; cyl(bx, 0, bz, .32, .95, cols[i % cols.length]); cyl(bx, .95, bz, .3, .03, "#231d17"); } const nx = Math.min(n, 2), nz = Math.ceil(n / 2); BOXES.push({ min: [x - .35, 0, z - .35], max: [x + (nx - 1) * .75 + .35, .98, z + (nz - 1) * .75 + .35] }); }
-function sandbags(x, z, len, rot) { const dx = rot ? 0 : 1, dz = rot ? 1 : 0; for (let r = 0; r < 3; r++) for (let i = 0; i < Math.floor(len / .7) - (r % 2); i++) { const u = -len / 2 + .35 + i * .7 + (r % 2) * .35; deco(x + dx * u, r * .3, z + dz * u, rot ? .42 : .66, .3, rot ? .66 : .42, tone("#8f7d5a", .85 + R1() * .25), false); } BOXES.push({ min: [x - (rot ? .25 : len / 2), 0, z - (rot ? len / 2 : .25)], max: [x + (rot ? .25 : len / 2), .9, z + (rot ? len / 2 : .25)] }); }
+function barrels(x, z, n, cols = [RUST, "#3b4430", "#5f676d"], y = 0) { for (let i = 0; i < n; i++) { const bx = x + (i % 2) * .75 + (R1() - .5) * .1, bz = z + Math.floor(i / 2) * .75; cyl(bx, y, bz, .32, .95, cols[i % cols.length]); cyl(bx, y + .95, bz, .3, .03, "#231d17"); } const nx = Math.min(n, 2), nz = Math.ceil(n / 2); BOXES.push({ min: [x - .35, y - .3, z - .35], max: [x + (nx - 1) * .75 + .35, y + .98, z + (nz - 1) * .75 + .35] }); }
+function sandbags(x, z, len, rot, y = 0) { const dx = rot ? 0 : 1, dz = rot ? 1 : 0; for (let r = 0; r < 3; r++) for (let i = 0; i < Math.floor(len / .7) - (r % 2); i++) { const u = -len / 2 + .35 + i * .7 + (r % 2) * .35; deco(x + dx * u, y + r * .3, z + dz * u, rot ? .42 : .66, .3, rot ? .66 : .42, tone("#8f7d5a", .85 + R1() * .25), false); } BOXES.push({ min: [x - (rot ? .25 : len / 2), y - .3, z - (rot ? len / 2 : .25)], max: [x + (rot ? .25 : len / 2), y + .9, z + (rot ? len / 2 : .25)] }); }
+if (!PLAN) {
 barrels(-21, 22.5, 4); barrels(14, 36, 3); barrels(30, 9, 4); barrels(-40, -14, 2); barrels(8.5, -31, 3); barrels(-9, -30, 2);
 sandbags(-7, 22, 4.2, 0); sandbags(10, 5, 3.5, 1); sandbags(-20, -6, 4.2, 0); sandbags(24, -18, 3.5, 0); sandbags(-36, 28, 3.5, 1);
 for (const [x, z, n] of [[18, 20, 4], [-30, -8, 3], [40, -12, 5], [-14, 40, 3]]) for (let i = 0; i < n; i++) deco(x + (R1() - .5) * .1, i * .16, z + (R1() - .5) * .1, 1.2, .14, 1, tone("#76634c", .85 + R1() * .3), false);
 for (const [x, z, l, r] of [[-41, 2, 9, 1], [-42, 2.4, 7, 1], [22, 42, 10, 0], [40, 2, 6, 1]]) deco(x, 0, z, r ? .3 : l, .3, r ? l : .3, "#5f676d", false);
 for (const [x, z, n] of [[26, 30, 3], [-6, -10, 2], [-38, -40, 4]]) for (let i = 0; i < n; i++) cyl(x + (R1() - .5) * .15, i * .22, z + (R1() - .5) * .15, .42, .22, "#231d17", 10);
+}
 // lamp posts: a pole, an arm, a bulb that throws real light
 const BULBS = [];
-function lampPost(x, z, dx, dz, color = "#ffc27a", power = 1500) { solid(x, 0, z, .22, 6, .22, "#2a2724", { stripe: false, base: "#2a2724", cap: "#2a2724" }); deco(x + dx * .7, 5.9, z + dz * .7, dx ? 1.5 : .16, .14, dz ? 1.5 : .16, "#2a2724", false);
-  const L = lamp(x + dx * 1.3, 5.6, z + dz * 1.3, color, power); BULBS.push({ L, at: [x + dx * 1.3, 5.72, z + dz * 1.3], s: [.4, .14, .34] }); }
+function lampPost(x, z, dx, dz, color = "#ffc27a", power = 1500, y = 0) { solid(x, y, z, .22, 6, .22, "#2a2724", { stripe: false, base: "#2a2724", cap: "#2a2724" }); deco(x + dx * .7, y + 5.9, z + dz * .7, dx ? 1.5 : .16, .14, dz ? 1.5 : .16, "#2a2724", false);
+  const L = lamp(x + dx * 1.3, y + 5.6, z + dz * 1.3, color, power); BULBS.push({ L, at: [x + dx * 1.3, y + 5.72, z + dz * 1.3], s: [.4, .14, .34] }); }
+function fireBarrel(x, z, y = 0) { const L = lamp(x, y + 1.6, z, "#ff7a2e", 1300, { flicker: .45 }); cyl(x, y, z, .34, .95, "#332a21"); BOXES.push({ min: [x - .34, y - .3, z - .34], max: [x + .34, y + .95, z + .34] }); BULBS.push({ L, at: [x, y + .95, z], s: [.5, .34, .5], fire: true }); }
+if (!PLAN) {
 lampPost(-6.5, 30, 1, 0); lampPost(17, -1, 0, 1); lampPost(-19, 4, 0, -1); lampPost(-9, -22, 1, 0); lampPost(26, 36, -1, 0); lampPost(40, -18, -1, 0);
 { const L = lamp(-18.5, 1.6, 23.6, "#ff7a2e", 1300, { flicker: .45 }); cyl(-18.5, 0, 23.6, .34, .95, "#332a21"); BULBS.push({ L, at: [-18.5, .95, 23.6], s: [.5, .34, .5], fire: true }); }
 { const L = lamp(34, 13.6, -30, "#ff3a3a", 2600, { blink: 1.2, reach: 500 }); BULBS.push({ L, at: [34, 13.25, -30], s: [.5, .4, .5] }); deco(34, 13, -30, .3, .3, .3, "#231d17", false); }
 
+}
 /* ---------- the ground: dirt, a cracked road, concrete aprons ---------- */
 /* ---------- beyond the yard: a town to the east, a lodge in the forest, a relay on the ridge, a depot ---------- */
 const R3 = seeded(777);
 function building(x, z, w, h, d, col) { solid(x, 0, z, w, h, d, col, { cap: "#3c4046", stripe: false });
   for (let y = 1.6; y < h - 1; y += 3) { for (let u = -w / 2 + 2; u < w / 2 - 1; u += 3.2) if (R3() < .5) glow(x + u, y, z + d / 2 + .04, 1.1, 1.3, .08); for (let u = -d / 2 + 2; u < d / 2 - 1; u += 3.2) if (R3() < .35) glow(x + w / 2 + .04, y, z + u, .08, 1.3, 1.1); if (R3() < .5) glow(x - w / 2 - .04, y, z + (R3() - .5) * (d - 3), .08, 1.3, 1.1); } }
+if (!PLAN) {
 for (const [x, z, w, h, d] of [[74, -34, 14, 9, 12], [74, -14, 14, 6, 14], [76, 34, 16, 12, 14], [74, 54, 12, 7, 10], [100, -36, 18, 8, 10], [100, 46, 18, 14, 12], [124, -32, 14, 12, 14], [126, -8, 12, 7, 16], [124, 30, 16, 9, 12], [122, 52, 12, 6, 10], [143, -20, 10, 10, 18], [143, 12, 10, 7, 22], [143, 44, 10, 12, 14]])
   building(x, z, w, h, d, [SAND, CON, CON2, "#8a6f5a", "#6f7a80"][Math.floor(R3() * 5)]);
 solid(100, 0, 10, 3, 1.2, 3, CON2); solid(100, 1.2, 10, 1.2, 2.6, 1.2, STEEL, { stripe: false });
@@ -298,15 +319,23 @@ for (const [x, z] of [[96, 24], [104, -4], [84, 8], [116, 10], [66, -20], [132, 
   for (const [x, z] of [[50, -114], [56, -124], [42, -116], [60, -110], [44, -130]]) solid(x, y, z, 1.6, 1.2, 1.6, DRAB); }
 { const y = 3; solid(-45, y, 76, 12, 6, 9, RUST, { cap: "#e4a050" }); glow(-38.95, y + 1.6, 76, .08, 1.2, 3);
   for (const [x, z, r, c] of [[-30, 80, 0, "#3f6f9a"], [-27, 90, 1, RUST], [-40, 92, 0, DRAB], [-23, 73, 1, "#5f676d"], [-34, 71, 0, "#c9733a"]]) solid(x, y, z, r ? 2.4 : 6, 2.6, r ? 6 : 2.4, c, { stripe: false }); for (const [x, z] of [[-36, 84], [-28, 96], [-22, 82]]) solid(x, y, z, 1.6, 1.2, 1.6, DRAB2); }
+}
 for (const [x, z, y] of [[-10, 112, 0], [10, 112, 0], [0, 108, 0], [-18, 120, 0], [18, 120, 0], [-12, -150, 2], [12, -150, 2], [2, -146, 2], [-18, -160, 2], [18, -160, 2]]) solid(x, y, z, 4, 1.1, .6, CON);
+// a made field: every piece the plan wrote down, stood on the ground where it falls
+if (PLAN) for (const p of PLAN.prims) { const k = p[0], x = p[1], z = p[2], y = groundH(x, z);
+  if (k === "s") { const sink = p[8] ? 0 : .15; solid(x, y + p[8] - sink, z, p[3], p[4] + sink, p[5], p[6], p[7]); } else if (k === "d") deco(x, y + p[7], z, p[3], p[4], p[5], p[6], true); else if (k === "g") glow(x, y + p[6], z, p[3], p[4], p[5]);
+  else if (k === "sb") sandbags(x, z, p[3], p[4], y - .05); else if (k === "br") barrels(x, z, p[3], undefined, groundH(x + .4, z + .8) - .05); else if (k === "ct") { cyl(x, y - .15, z, p[3], p[4] + .15, p[5], 12); cyl(x, y + p[4], z, p[3] * .8, .12, "#3c4046", 12); BOXES.push({ min: [x - p[3] * .8, y - .3, z - p[3] * .8], max: [x + p[3] * .8, y + p[4], z + p[3] * .8] }); }
+  else if (k === "lp") lampPost(x, z, p[3], p[4], undefined, undefined, y - .1); else if (k === "fb") fireBarrel(x, z, y - .05); }
 // the land itself
 { const N = 176, M = 184, g = new THREE.PlaneGeometry(440, 460, N, M).rotateX(-Math.PI / 2).translate(0, 0, -20).toNonIndexed(); g.deleteAttribute("uv"); const P = g.attributes.position, a = new Float32Array(P.count * 3), c2 = new THREE.Color();
   const grass = ["#4f5a3c", "#5c6a40", "#66704a", "#55603a", "#4a5636"], rock = ["#6f6a62", "#7a756c", "#625d56"];
   for (let i = 0; i < P.count; i++) P.setY(i, groundH(P.getX(i), P.getZ(i)) - .04);
   for (let q = 0; q < P.count / 6; q++) { const i = q * 6, x = (P.getX(i) + P.getX(i + 1) + P.getX(i + 2) + P.getX(i + 4)) / 4, z = (P.getZ(i) + P.getZ(i + 1) + P.getZ(i + 2) + P.getZ(i + 4)) / 4, [wm, , , idx] = zoneW(x, z), h = groundH(x, z), s = slopeAt(x, z), n = noise2(x * .09, z * .09), n2 = noise2(x * .4 + 40, z * .4);
-    if (idx === 1 && wm > .97) { _c.set(n2 > .75 ? "#33302e" : n > .5 ? "#454240" : "#3e3b39"); }
-    else if (idx >= 4 && idx <= 6 && wm > .7) _c.set(n2 > .6 ? "#5c4c3a" : "#6c5a44");
-    else if (wm > .9) _c.set(idx >= 7 ? (n > .5 ? "#6a6458" : "#5e584c") : n > .5 ? "#64533f" : "#5c4c3a");
+    const sf = PLAN && PLAN.surface(x, z, n, n2);
+    if (sf) _c.set(sf);
+    else if (!PLAN && idx === 1 && wm > .97) { _c.set(n2 > .75 ? "#33302e" : n > .5 ? "#454240" : "#3e3b39"); }
+    else if (!PLAN && idx >= 4 && idx <= 6 && wm > .7) _c.set(n2 > .6 ? "#5c4c3a" : "#6c5a44");
+    else if (wm > .9 && (!PLAN || Math.abs(x) < 34)) _c.set(!PLAN && idx >= 7 ? (n > .5 ? "#6a6458" : "#5e584c") : n > .5 ? "#64533f" : "#5c4c3a");
     else if (s > .8) _c.set(rock[Math.floor(n2 * 2.99)]);
     else if (h > 27 + n * 6) _c.set(n2 > .3 ? "#cfd4d8" : "#aab0b6");
     else { _c.set(grass[Math.floor(n * 4.99)]); if (n2 > .7) _c.lerp(c2.set("#7a7448"), .5); if (s > .55) _c.lerp(c2.set(rock[0]), .4); }
@@ -316,14 +345,21 @@ for (const [x, z, y] of [[-10, 112, 0], [10, 112, 0], [0, 108, 0], [-18, 120, 0]
 const APRONS = [[-36, 4, -20, 20], [-37, -33, -17, -19], [29, -35, 39, -22], [32, 10, 40, 28], [-5, -29, 9, -15], [-5, 33, 5, 43]];
 const inApron = (x, z) => APRONS.some(([x0, z0, x1, z1]) => x > x0 - 1.5 && x < x1 + 1.5 && z > z0 - 1.5 && z < z1 + 1.5);
 const isRoad = (x, z) => Math.abs(x) < 4.6 && z > -14 && z < 33;
-export const isDirt = (x, z) => !inApron(x, z) && !isRoad(x, z) && Math.abs(x) < 46 && Math.abs(z) < 46;
-{ const N = 208, g = new THREE.PlaneGeometry(104, 104, N, N).rotateX(-Math.PI / 2).toNonIndexed(); g.deleteAttribute("uv"); const P = g.attributes.position, a = new Float32Array(P.count * 3), dirt = ["#5c4c3a", "#64533f", "#6c5a44", "#544636", "#4f4434"];
+export const isDirt = (x, z) => (PLAN ? PLAN.soft(x, z) : !inApron(x, z) && !isRoad(x, z) && Math.abs(x) < 46 && Math.abs(z) < 46);
+if (!PLAN) { const N = 208, g = new THREE.PlaneGeometry(104, 104, N, N).rotateX(-Math.PI / 2).toNonIndexed(); g.deleteAttribute("uv"); const P = g.attributes.position, a = new Float32Array(P.count * 3), dirt = ["#5c4c3a", "#64533f", "#6c5a44", "#544636", "#4f4434"];
   for (let q = 0; q < P.count / 6; q++) { const i = q * 6, x = (P.getX(i) + P.getX(i + 1) + P.getX(i + 2) + P.getX(i + 4)) / 4, z = (P.getZ(i) + P.getZ(i + 1) + P.getZ(i + 2) + P.getZ(i + 4)) / 4, n = noise2(x * .13, z * .13), n2 = noise2(x * .5 + 40, z * .5), sp = .93 + hash2(x * 3.1, z * 2.7) * .14;
     if (isRoad(x, z)) { _c.set(n2 > .72 ? "#33302e" : n > .55 ? "#454240" : "#3e3b39"); if (Math.abs(x) < .3 && Math.floor((z + 60) / 1.5) % 3 === 0 && n2 < .8) _c.set("#b9a582"); if (Math.abs(Math.abs(x) - 4.2) < .2 && n2 < .6) _c.set("#7d7a72"); }
     else if (inApron(x, z)) { _c.set(n > .6 ? "#6f6d68" : "#66645f"); const fx = Math.abs(x - Math.round(x / 4) * 4), fz = Math.abs(z - Math.round(z / 4) * 4); if (fx < .3 || fz < .3) _c.multiplyScalar(.8); if (n2 > .8) _c.multiplyScalar(.86); }
     else { _c.set(dirt[Math.floor(n * 4.99)]); if (n2 > .66) _c.lerp(new THREE.Color("#6a6842"), .5); if (n < .22) _c.multiplyScalar(.88); }
     _c.multiplyScalar(sp); for (let k = 0; k < 6; k++) a.set([_c.r, _c.g, _c.b], (i + k) * 3); }
   g.setAttribute("color", new THREE.BufferAttribute(a, 3)); geos.push(g); }
+
+// a made field: a finer sheet of ground over every built place, so streets, kerbs and crop rows read
+if (PLAN) for (const [cx, cz, r] of PLAN.yards) { const N = Math.round(2 * r / .75), g = new THREE.PlaneGeometry(2 * r, 2 * r, N, N).rotateX(-Math.PI / 2).translate(cx, 0, cz).toNonIndexed(); g.deleteAttribute("uv"); const P = g.attributes.position, a = new Float32Array(P.count * 3);
+  for (let i = 0; i < P.count; i++) P.setY(i, groundH(P.getX(i), P.getZ(i)));
+  for (let q = 0; q < P.count / 6; q++) { const i = q * 6, x = (P.getX(i) + P.getX(i + 1) + P.getX(i + 2) + P.getX(i + 4)) / 4, z = (P.getZ(i) + P.getZ(i + 1) + P.getZ(i + 2) + P.getZ(i + 4)) / 4, n = noise2(x * .13, z * .13), n2 = noise2(x * .5 + 40, z * .5);
+    _c.set(PLAN.surface(x, z, n, n2) || "#5c4c3a"); if (n < .22) _c.multiplyScalar(.9); _c.multiplyScalar(.93 + hash2(x * 3.1, z * 2.7) * .14); for (let k = 0; k < 6; k++) a.set([_c.r, _c.g, _c.b], (i + k) * 3); }
+  g.setAttribute("color", new THREE.BufferAttribute(a, 3)); g.computeVertexNormals(); geos.push(g); }
 
 const world = new THREE.Mesh(mergeGeometries(geos), flatToon); world.scale.setScalar(U); world.castShadow = world.receiveShadow = true; scene.add(world);
 { const m = new THREE.Mesh(mergeGeometries(glowGeos), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.8, 1.8, .7) })); m.scale.setScalar(U); scene.add(m); }
@@ -365,7 +401,6 @@ export function rayWorld(o, d, maxT, land = true) { ensure(); let best = maxT; c
   return best; }
 
 /* ---------- the Table's own pieces: buildings and machines, soldiers, growing things, weather ---------- */
-export const GEN = window.RevelryGenBuild ? window.RevelryGenBuild(THREE, mergeGeometries) : null;
 export const SOL = window.RevelrySoldiers(THREE, { mergeGeometries, RoundedBoxGeometry, material: charMat, scene, fx: {
   tracer: (a, b) => tracer(a, b, "#ff8a5a"),
   impact: (p, from) => { const d = from.clone().sub(p).normalize(); flash(p.clone().addScaledVector(d, 2), "#ffd28a", 420, .08);
@@ -413,17 +448,41 @@ function placeGen(model, state, x, z, rot) { try {
   BOXES.push({ min: [bx.min.x / U + .15, 0, bx.min.z / U + .15], max: [bx.max.x / U - .15, Math.max(.6, bx.max.y / U - .1), bx.max.z / U - .15] });
   SOL.addCover({ x: (bx.min.x + bx.max.x) / 2, z: (bx.min.z + bx.max.z) / 2, yaw: 0, w: (bx.max.x - bx.min.x) / 2 - 2, d: (bx.max.z - bx.min.z) / 2 - 2, h: Math.min(40, bx.max.y) });
 } catch (e) { console.warn("[wreck]", model, e); } }
-if (GEN) { placeGen("gen:humvee:c1", "damaged", -12, 26, 0); placeGen("gen:sedan:a1", "ruined", 21, 2, Math.PI / 2); placeGen("gen:pickup:b1", "damaged", -22, -12, Math.PI / 2); placeGen("gen:sedan:e5", "ruined", 14, -40, 0); placeGen("gen:sedan:b3", "ruined", 88, 14, .0); placeGen("gen:pickup:c2", "damaged", 112, -12, Math.PI / 2); placeGen("gen:humvee:a4", "damaged", 132, 22, 0); placeGen("gen:sedan:d1", "ruined", 68, 44, Math.PI / 2); }
+// a made field's buildings, structures and vehicles. A building's shape is read off its own triangles into columns of
+// boxes a metre square, so a roof can be stood on, a ruin can be walked into and a gap in a wall is a gap.
+const GENGEO = new Map();
+function columns(mesh, y0) { const bb = new THREE.Box3().setFromObject(mesh), x0 = Math.floor(bb.min.x / U), z0 = Math.floor(bb.min.z / U), nx = Math.ceil(bb.max.x / U) - x0, nz = Math.ceil(bb.max.z / U) - z0, hi = new Float32Array(nx * nz).fill(-1), lo = new Float32Array(nx * nz).fill(99);
+  const P = mesh.geometry.attributes.position, I = mesh.geometry.index, n = I ? I.count : P.count, m = mesh.matrixWorld.elements, v = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let t = 0; t < n; t += 3) { for (let k = 0; k < 3; k++) { const i = I ? I.getX(t + k) : t + k, px = P.getX(i), py = P.getY(i), pz = P.getZ(i); v[k * 3] = (m[0] * px + m[4] * py + m[8] * pz + m[12]) / U - x0; v[k * 3 + 1] = (m[1] * px + m[5] * py + m[9] * pz + m[13]) / U - y0; v[k * 3 + 2] = (m[2] * px + m[6] * py + m[10] * pz + m[14]) / U - z0; }
+    const ax = v[0], ay = v[1], az = v[2], bx = v[3], by = v[4], bz = v[5], cx = v[6], cy = v[7], cz = v[8], i0 = Math.max(0, Math.floor(Math.min(ax, bx, cx))), i1 = Math.min(nx - 1, Math.floor(Math.max(ax, bx, cx))), j0 = Math.max(0, Math.floor(Math.min(az, bz, cz))), j1 = Math.min(nz - 1, Math.floor(Math.max(az, bz, cz)));
+    const det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz), top = Math.max(ay, by, cy), bot = Math.min(ay, by, cy), flat = Math.abs(det) < .02;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { let y = top, yl = bot; if (!flat) { const px = i + .5, pz = j + .5, l1 = ((bz - cz) * (px - cx) + (cx - bx) * (pz - cz)) / det, l2 = ((cz - az) * (px - cx) + (ax - cx) * (pz - cz)) / det, l3 = 1 - l1 - l2; if (l1 < -.05 || l2 < -.05 || l3 < -.05) continue; y = yl = clamp(l1 * ay + l2 * by + l3 * cy, bot, top); }
+      const k = j * nx + i; if (y > hi[k]) hi[k] = y; if (yl < lo[k]) lo[k] = yl; } }
+  let prev = []; for (let j = 0; j < nz; j++) { const row = []; for (let i = 0; i < nx; i++) { const k = j * nx + i; if (hi[k] < .45 || lo[k] > 2.3) continue; const h = Math.max(.5, Math.round(hi[k] * 2) / 2); let e = i; while (e + 1 < nx && hi[j * nx + e + 1] >= .45 && lo[j * nx + e + 1] <= 2.3 && Math.max(.5, Math.round(hi[j * nx + e + 1] * 2) / 2) === h) e++;
+      const old = prev.find((q) => q.i === i && q.e === e && q.h === h); if (old) { old.b.max[2] = z0 + j + 1; row.push(old); } else { const b = { min: [x0 + i, y0 - .4, z0 + j], max: [x0 + e + 1, y0 + h, z0 + j + 1] }; BOXES.push(b); row.push({ i, e, h, b }); } i = e; } prev = row; } }
+function placePlan(q) { try { const e = GEN.entry(q.model), y = groundH(q.x, q.z) - (q.kind === "v" ? 0 : .08), key = q.model + "|" + q.state; let geo = GENGEO.get(key);
+  if (!geo) { const parts = [GEN.geo(e.variants[q.state] || e.variants.timber)]; (e.floors || []).forEach((_, i) => parts.push(GEN.geo(GEN.floorKey(q.model, q.state, i)))); const live = parts.filter((g) => g && g.attributes.position && g.attributes.position.count); geo = live.length > 1 ? mergeGeometries(live) || live[0] : live[0]; GENGEO.set(key, geo); }
+  if (!geo) return; const m = new THREE.Mesh(geo, genToon); m.position.set(q.x * U, y * U, q.z * U); m.rotation.y = q.rot; m.castShadow = m.receiveShadow = true; scene.add(m); m.updateMatrixWorld(true);
+  const bx = new THREE.Box3().setFromObject(m), cxm = (bx.min.x + bx.max.x) / 2, czm = (bx.min.z + bx.max.z) / 2, top = bx.max.y / U;
+  if (q.kind === "v") { BOXES.push({ min: [bx.min.x / U + .15, y - .3, bx.min.z / U + .15], max: [bx.max.x / U - .15, Math.max(y + .6, top - .1), bx.max.z / U - .15] }); SOL.addCover({ x: cxm, z: czm, yaw: 0, w: Math.max(4, (bx.max.x - bx.min.x) / 2 - 2), d: Math.max(4, (bx.max.z - bx.min.z) / 2 - 2), h: Math.min(40, bx.max.y - y * U) }); }
+  else if (q.kind === "t") { if (q.core) { BOXES.push({ min: [q.x - q.core, y - .3, q.z - q.core], max: [q.x + q.core, top, q.z + q.core] }); SOL.addSolid({ x: q.x * U, z: q.z * U, yaw: 0, w: q.core * U, d: q.core * U, h: 80 }); } }
+  else { columns(m, y); SOL.addSolid({ x: cxm, z: czm, yaw: 0, w: (bx.max.x - bx.min.x) / 2, d: (bx.max.z - bx.min.z) / 2, h: Math.min(120, bx.max.y - y * U) }); }
+} catch (err) { console.warn("[map]", q.model, err); } }
+if (PLAN) { const t0 = performance.now(); for (const q of PLAN.gens) placePlan(q); console.log("[map] " + MAPKEY + ": " + PLAN.gens.length + " pieces, " + GENGEO.size + " shapes, " + BOXES.length + " boxes, " + Math.round(performance.now() - t0) + " ms"); }
+else if (GEN) { placeGen("gen:humvee:c1", "damaged", -12, 26, 0); placeGen("gen:sedan:a1", "ruined", 21, 2, Math.PI / 2); placeGen("gen:pickup:b1", "damaged", -22, -12, Math.PI / 2); placeGen("gen:sedan:e5", "ruined", 14, -40, 0); placeGen("gen:sedan:b3", "ruined", 88, 14, .0); placeGen("gen:pickup:c2", "damaged", 112, -12, Math.PI / 2); placeGen("gen:humvee:a4", "damaged", 132, 22, 0); placeGen("gen:sedan:d1", "ruined", 68, 44, Math.PI / 2); }
 
 // growing things: trees, brush, rocks, logs and a few thousand blades of grass, all moving in the wind
 export const NAT = window.CBNature ? window.CBNature(THREE, { leafMat, flatToon }) : null;
-if (NAT) { const R2 = seeded(9173), clear = (x, z, r) => free(x, .05, z, 1.5, r) && Math.hypot(x, z - 38) > 6;
-  const put = (geo, mat, x, z, rot = 0, cast = true) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.position.set(x * U, 0, z * U); m.rotation.y = rot; m.castShadow = cast; m.receiveShadow = true; if (cast && mat !== flatToon) m.customDepthMaterial = NAT.depth(); scene.add(m); return m; };
-  for (const [sp, x, z, sc] of [["dead", -41, 40, 1], ["pine", 41, 41, 1], ["pine", 43, 34, .8], ["oak", -42, -6, .9], ["dead", 14, 43, .9], ["birch", -43, 22, 1], ["pine", -43, -42, 1], ["dead", 43, -6, 1], ["oak", 20, 31, .75], ["birch", -9, -12, .8], ["dead", -38, -15, .8], ["pine", 44, 4, .9]]) {
-    if (!clear(x, z, .6)) continue; const t = NAT.tree(sp, sp + x + "|" + z, sc); put(t.bark, NAT.barkSway, x, z); put(t.leaves, NAT.leafSway, x, z);
-    const r = Math.max(.22, t.trunkR / U); BOXES.push({ min: [x - r, 0, z - r], max: [x + r, 4.5, z + r] }); SOL.addSolid({ x: x * U, z: z * U, yaw: 0, w: r * U, d: r * U, h: 80 }); }
-  let n = 0; while (n < 26) { const x = (R2() - .5) * 90, z = (R2() - .5) * 90; if (!isDirt(x, z) || !clear(x, z, .9)) continue; n++; const b = NAT.bush(["dry", "dry", "leafy", "nettle", "round", "fern"][Math.floor(R2() * 6)], "b" + n, .8 + R2() * .5); put(b.leaves, NAT.leafSway, x, z); put(b.bark, NAT.barkSway, x, z); }
-  n = 0; while (n < 22) { const x = (R2() - .5) * 90, z = (R2() - .5) * 90; if (!isDirt(x, z) || !clear(x, z, .7)) continue; n++; const k = R2(), o = k < .7 ? NAT.rock("r" + n, 4 + R2() * 9, .25) : k < .85 ? NAT.log("l" + n, .8) : NAT.stump("s" + n, .9); put(o.geo, flatToon, x, z, R2() * 6.28); }
+if (NAT) { const R2 = seeded(9173), clear = (x, z, r) => free(x, groundH(x, z) + .05, z, 1.5, r) && (PLAN || Math.hypot(x, z - 38) > 6);
+  const YARDS = PLAN ? PLAN.yards : [[0, 0, 45]], YA = YARDS.reduce((t, y) => t + y[2] * y[2], 0), inYard = () => { let k = R2() * YA, y = YARDS[0]; for (const q of YARDS) { k -= q[2] * q[2]; if (k <= 0) { y = q; break; } } return [y[0] + (R2() - .5) * 2 * y[2], y[1] + (R2() - .5) * 2 * y[2]]; }, BIG = PLAN ? 4 : 1;
+  const put = (geo, mat, x, z, rot = 0, cast = true, dy = 0) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.position.set(x * U, (groundH(x, z) + dy) * U, z * U); m.rotation.y = rot; m.castShadow = cast; m.receiveShadow = true; if (cast && mat !== flatToon) m.customDepthMaterial = NAT.depth(); scene.add(m); return m; };
+  for (const [sp, x, z, sc] of PLAN ? PLAN.trees : [["dead", -41, 40, 1], ["pine", 41, 41, 1], ["pine", 43, 34, .8], ["oak", -42, -6, .9], ["dead", 14, 43, .9], ["birch", -43, 22, 1], ["pine", -43, -42, 1], ["dead", 43, -6, 1], ["oak", 20, 31, .75], ["birch", -9, -12, .8], ["dead", -38, -15, .8], ["pine", 44, 4, .9]]) {
+    if (!clear(x, z, .6)) continue; const t = NAT.tree(sp, PLAN ? sp + Math.floor(R2() * 5) : sp + x + "|" + z, sc), gh = groundH(x, z); put(t.bark, NAT.barkSway, x, z); put(t.leaves, NAT.leafSway, x, z);
+    const r = Math.max(.22, t.trunkR / U); BOXES.push({ min: [x - r, gh - .5, z - r], max: [x + r, gh + 4.5, z + r] }); SOL.addSolid({ x: x * U, z: z * U, yaw: 0, w: r * U, d: r * U, h: 80 }); }
+  if (PLAN) PLAN.bushes.forEach(([kind, x, z, sc, dy], i) => { const b = NAT.bush(kind, "pb" + (i % 9), sc); put(b.leaves, NAT.leafSway, x, z, 0, true, dy); put(b.bark, NAT.barkSway, x, z, 0, true, dy); });
+  if (PLAN) PLAN.rocks.forEach(([x, z, size], i) => { const o = NAT.rock("pr" + (i % 7), size, .25); put(o.geo, flatToon, x, z, R2() * 6.28); });
+  let n = 0, guard = 0; while (n < 26 * BIG && guard++ < 20000) { const [x, z] = inYard(); if (!isDirt(x, z) || !clear(x, z, .9)) continue; n++; const b = NAT.bush(["dry", "dry", "leafy", "nettle", "round", "fern"][Math.floor(R2() * 6)], "b" + (PLAN ? n % 12 : n), .8 + R2() * .5); put(b.leaves, NAT.leafSway, x, z); put(b.bark, NAT.barkSway, x, z); }
+  n = 0; guard = 0; while (n < 22 * BIG && guard++ < 20000) { const [x, z] = inYard(); if (!isDirt(x, z) || !clear(x, z, .7)) continue; n++; const k = R2(), o = k < .7 ? NAT.rock("r" + n, 4 + R2() * 9, .25) : k < .85 ? NAT.log("l" + n, .8) : NAT.stump("s" + n, .9); put(o.geo, flatToon, x, z, R2() * 6.28); }
   // the forest on the hills: a few kinds of tree, each drawn many times over
   { const kinds = [["pine", 1], ["pine", 1.25], ["fir", 1], ["fir", 1.3], ["birch", .9], ["dead", 1], ["pine", .8]], vars = kinds.map(([sp, sc], i) => NAT.tree(sp, "forest" + i, sc)), lists = vars.map(() => []), M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), UP = V3(0, 1, 0); let got = 0, tries = 0;
     while (got < 340 && tries++ < 40000) { const x = -205 + R2() * 410, z = -235 + R2() * 430; if (wild(x, z) < .62 || slopeAt(x, z) > .85 || noise2(x * .028 + 50, z * .028) < .36 + R2() * .2 || groundH(x, z) > 30) continue; const k = Math.floor(R2() * vars.length), gh = groundH(x, z); lists[k].push([x, gh, z, R2() * 6.28, .8 + R2() * .5]); got++;
@@ -434,10 +493,10 @@ if (NAT) { const R2 = seeded(9173), clear = (x, z, r) => free(x, .05, z, 1.5, r)
     rocks.forEach((o, k) => { if (!rl[k].length) return; const im = new THREE.InstancedMesh(o.geo, flatToon, rl[k].length); rl[k].forEach(([x, y, z, rot, sc], i) => { M4.compose(V3(x * U, y * U, z * U), Q.setFromAxisAngle(UP, rot), V3(sc, sc, sc)); im.setMatrixAt(i, M4); }); im.castShadow = im.receiveShadow = true; im.frustumCulled = false; scene.add(im); }); }
   // grass grows where the ground is dirt, thicker in patches and along the foot of things
   const spots = { dry: [], tall: [], meadow: [], flowers: [], litter: [] }; let tries = 0, got = 0;
-  while (got < 2300 && tries++ < 60000) { const x = (R2() - .5) * 92, z = (R2() - .5) * 92; if (!isDirt(x, z)) continue; const patch = noise2(x * .09 + 7, z * .09 + 3); if (patch < .34 + R2() * .22) continue; if (!free(x, .02, z, .4, .12)) continue;
-    const k = noise2(x * .21 + 90, z * .21), kind = k > .82 ? "tall" : k < .25 ? "meadow" : R2() < .05 ? "flowers" : "dry"; spots[kind].push([x * U, 0, z * U, .7 + R2() * .8, got]); got++; }
+  while (got < 2300 * (PLAN ? 2.4 : 1) && tries++ < 90000) { const [x, z] = inYard(); if (!isDirt(x, z)) continue; const patch = noise2(x * .09 + 7, z * .09 + 3); if (patch < .34 + R2() * .22) continue; if (!free(x, groundH(x, z) + .02, z, .4, .12)) continue;
+    const k = noise2(x * .21 + 90, z * .21), kind = k > .82 ? "tall" : k < .25 ? "meadow" : R2() < .05 ? "flowers" : "dry"; spots[kind].push([x * U, groundH(x, z) * U, z * U, .7 + R2() * .8, got]); got++; }
   for (let i = 0, n = 0; i < 30000 && n < 2600; i++) { const x = WORLD.x0 + R2() * 320, z = WORLD.z0 + R2() * 340; if (wild(x, z) < .35 || noise2(x * .07 + 7, z * .07 + 3) < .4 + R2() * .2 || slopeAt(x, z) > .8 || groundH(x, z) > 28) continue; const k = noise2(x * .2 + 90, z * .2); spots[k > .8 ? "tall" : k < .3 ? "meadow" : R2() < .06 ? "flowers" : "dry"].push([x * U, groundH(x, z) * U, z * U, .8 + R2() * .9, 5000 + n]); n++; }
-  for (let i = 0; i < 420; i++) { const x = (R2() - .5) * 92, z = (R2() - .5) * 92; if (free(x, .02, z, .4, .1)) spots.litter.push([x * U, .5, z * U, 1, i]); }
+  for (let i = 0; i < 420 * BIG; i++) { const [x, z] = inYard(); if (free(x, groundH(x, z) + .02, z, .4, .1)) spots.litter.push([x * U, groundH(x, z) * U + .5, z * U, 1, i]); }
   for (const kind in spots) { const g = NAT.cover(spots[kind], kind); if (!g) continue; const m = new THREE.Mesh(g, NAT.leafSway); m.scale.y = kind === "litter" ? 1 : .5; m.receiveShadow = true; m.frustumCulled = false; scene.add(m); }
 }
 

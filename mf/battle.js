@@ -5,7 +5,7 @@
    The Frontier Militia are the Table's soldiers; the Machine's infantry are the Table's machine troopers (cb/cbmech.js) on
    the same skeleton. Vehicles are the Table's generated models; the Machine's walk and track on their own rigs.
    Everything here is in metres; the engine draws at U. */
-import { THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
+import { THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, SITES, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
 
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
 const WPN = { rifle: { range: 48, dmg: 22, burst: 3, acc: .5, cd: [1.4, 2.4] }, lmg: { range: 52, dmg: 16, burst: 6, acc: .42, cd: [1.6, 2.4] }, dmr: { range: 75, dmg: 48, burst: 1, acc: .7, cd: [1.6, 2.2] }, shotgun: { range: 16, dmg: 50, burst: 1, acc: .75, cd: [1.1, 1.6] } };
@@ -75,7 +75,7 @@ export function legNodes(a, b, big = false) { const G = big ? PASS : WALK, [bx, 
   out[out.length - 1] = end; return out; }
 
 /* ---------- the three points ---------- */
-for (const [name, x, z, label] of [["A", 100, 14, "Town square"], ["B", -6, -4, "Refinery"], ["C", -95, -20, "Lodge"], ["D", 52, -118, "Ridge relay"], ["E", -34, 86, "Depot"]]) { const gy = groundH(x, z);
+for (const [name, x, z, label] of SITES) { const gy = groundH(x, z);
   const lamp = new THREE.Mesh(new THREE.BoxGeometry(.5 * U, .5 * U, .5 * U), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL.none) })); lamp.position.set(x * U, (gy + 5.2) * U, z * U);
   const pole = new THREE.Mesh(new THREE.BoxGeometry(.14 * U, 5 * U, .14 * U), new THREE.MeshToonMaterial({ color: "#2a2724" })); pole.position.set(x * U, (gy + 2.5) * U, z * U); pole.castShadow = true;
   const ring = fxLayer(new THREE.Mesh(new THREE.RingGeometry(8.6 * U, 9 * U, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: lamp.material.color, transparent: true, opacity: .75, depthWrite: false, side: THREE.DoubleSide }))); ring.position.set(x * U, gy * U + 3, z * U);
