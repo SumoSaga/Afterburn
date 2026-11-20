@@ -5,7 +5,7 @@ import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, 
   flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat, PLAN, MAPKEY, MAPNAME, setMap as pickMap } from "./engine.js";
 import { VM } from "./hands.js";
 import { makeRig, TITAN } from "./titan.js";
-import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, OP, SECN, homeOf, setHomes, spend, opLine, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
+import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, LIST_MAX, PASSIVES, SUPCAP, supUsed, credit, nearAI, pingTo, GOAL, OP, SECN, homeOf, setHomes, spend, opLine, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
 import { NET, onMsg, send, host, join, leave, cut } from "./net.js";
 import { makeFigure } from "./figure.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -107,7 +107,7 @@ function stepPilot(dt) {
 }
 
 /* ---------- blasts and damage ---------- */
-function hurtPilot(n, from) { if (P.dead > 0 || P.titan || P.seq) return; if (domeAt(P.pos.x, P.pos.z, "you")) n *= .5; snd("pilot_hurt", { gain: clamp(.6 + n / 40, .6, 1.4) }); P.hp -= n; P.hurtT = 0; hurtFx = 1; if (P.hp <= 0) { P.hp = 0; P.dead = 6; mouseDown = false; if (B.mp) relay("pdown", 0); if (!MAP.on) { setMap(true, true); if (document.pointerLockElement) document.exitPointerLock(); } } }
+function hurtPilot(n, from) { if (P.dead > 0 || P.titan || P.seq) return; if (domeAt(P.pos.x, P.pos.z, "you")) n *= .5; if (B.mp !== "guest" && nearAI("you", P.pos.x, P.pos.z, 20)) n *= .8; /* the Field Commander Aura: a fifth less damage beside your own troops */ snd("pilot_hurt", { gain: clamp(.6 + n / 40, .6, 1.4) }); P.hp -= n; P.hurtT = 0; hurtFx = 1; if (P.hp <= 0) { P.hp = 0; P.dead = 6; mouseDown = false; if (B.mp) relay("pdown", 0); if (!MAP.on) { setMap(true, true); if (document.pointerLockElement) document.exitPointerLock(); } } }
 function blast(at, radius, o = {}) {   // at in metres
   const p = toU(at); snd("explosion", { pos: xyz(at), gain: clamp(radius / 2.2, .6, 2) }); flash(p.clone().setY(p.y + 12), "#ffb45a", 2500 + radius * 2200, .35);
   puff(p, { n: 26, color: "#fbe6a0", hot: 3, size: 5 + radius, life: .32, drag: 3, vel: () => V3((rnd() - .5) * 90 * radius, rnd() * 70 * radius, (rnd() - .5) * 90 * radius) });
@@ -128,7 +128,7 @@ const PW = { carbine: { name: "Carbine", mag: 24, cd: .095, dmg: 25, spread: .00
 const pw = () => PW[LOAD.weapon] || PW.carbine;
 const CHASSIS = { vanguard: { name: "Vanguard", hull: 350, speed: 6.2, dash: 2, desc: "The all-round frame: 350 hull, two dashes." }, bastion: { name: "Bastion", hull: 470, speed: 5.2, dash: 1, desc: "Heavier plate and a slower stride: 470 hull, one dash." }, lancer: { name: "Lancer", hull: 270, speed: 7.4, dash: 3, desc: "Stripped for speed: 270 hull, three dashes." } };
 B.hooks = { pilot: () => ({ ok: P.dead <= 0 && !P.titan && !P.seq, alive: P.dead <= 0, dead: P.dead, pos: V3(P.pos.x, P.pos.y + P.h * .6, P.pos.z), at: P.pos, speed: hs(), grounded: P.grounded, titan: !!P.titan }),
-  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (slot, n) => relay("phit", [slot, Math.round(n), 0]), rpilots: () => (B.mp ? [...RPS.values()] : []), attackers: () => (B.mp ? Math.max(1, Math.ceil((1 + RPS.size) / 2)) : 1),
+  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (slot, n) => relay("phit", [slot, Math.round(n), 0]), rpilots: () => (B.mp ? [...RPS.values()] : []), pilots: () => { const L = P.dead <= 0 ? [{ key: "you", side: "you", x: P.pos.x, z: P.pos.z }] : []; if (B.mp) for (const rp of RPS.values()) if (rp.ok || rp.inTitan) L.push({ key: keyOf(rp.slot), side: rp.side, x: rp.pos.x, z: rp.pos.z }); return L; }, attackers: () => (B.mp ? Math.max(1, Math.ceil((1 + RPS.size) / 2)) : 1),
   shotSnd: (q, atPilot, hit) => { snd("grunt_shot", { pos: [q.x / U, q.y / U + 1.4, q.z / U] }); if (atPilot && !hit && rnd() < .6) snd("flyby", { pos: [P.pos.x + (rnd() - .5) * 5, P.pos.y + 1.5, P.pos.z + (rnd() - .5) * 5], delay: .02 + rnd() * .05 }); }, say: (t, sec) => say(t, sec) };
 
 /* ---------- Titans ---------- */
@@ -323,6 +323,14 @@ function fireCannon(t) {
   if (th.who) { hurtTitan(th.who, 34); hitT = .12; } else if (gh.who && gh.who.veh) damage(gh.who, 80, toU(P.pos), "blast", true); if (gh.who || th.who) { hitT = .12; snd("hitmarker", { gain: .8 }); }
   blast(end, 2.2, { team: "you" });
 }
+/* A ping from the fight. Tap G or the middle mouse button: your squads within 35 metres go where you are looking.
+   Hold G a moment longer: every squad of yours that is not locked to a point goes. Squads you sent to a point from
+   the map are locked there and a ping never pulls them off. */
+let gDownT = 0;
+function ping(wide) { if (!started || P.dead > 0 || MAP.on) return; aimRay(0); const dist = Math.min(140, rayWorld(_o, _d, 140)), x = _o.x + _d.x * dist, z = _o.z + _d.z * dist, mine = SQUADS.filter((q) => q.owner === "you" && !q.dead && q.c && (wide || Math.hypot(q.c.x - P.pos.x, q.c.z - P.pos.z) < 35));
+  if (!mine.length) { say(wide ? "You have no squads on the field." : "None of your squads are within 35 metres. Hold G to call every squad that is not locked to a point.", 3); snd("dry"); return; }
+  pingTo(V3(x, 0, z), mine); snd("selector"); const pt = POINTS.find((p) => Math.hypot(p.x - x, p.z - z) < 8); say((mine.length === 1 ? "One squad" : mine.length + " squads") + (pt ? ": take point " + pt.name + "." : ": move there.") + " Locked squads stay where they are.", 2.5); }
+addEventListener("keyup", (e) => { if (e.code === "KeyG" && gDownT) { ping(performance.now() - gDownT > 350); gDownT = 0; } });
 const SWAP = .5, NADE = .8, KNIFE = .5, gunKind = () => P.weapon === 1 ? "charge" : PW[LOAD.weapon] ? LOAD.weapon : "carbine", handsBusy = () => P.swapT >= 0 || P.nadeT >= 0 || P.meleeT >= 0;
 const NADES = [];
 function startSwap(to) { if (P.titan || handsBusy() || to === P.weapon) return; P.swapFrom = gunKind(); P.swapTo = to; P.swapT = 0; P.reload = 0; P.charge = 0; snd("swap"); }
@@ -376,18 +384,18 @@ document.addEventListener("pointerlockerror", () => { noLock = true; });
 const active = () => started && !panelOpen && (locked || noLock || MAP.on);
 function toggleMap() { if (MAP.on) { setMap(false); wantLock(); } else { setMap(true); for (const k in K) K[k] = false; mouseDown = false; if (document.pointerLockElement) document.exitPointerLock(); } }
 function useKey() { if (P.seq) return; if (P.titan) { startExit(); return; } const m = P.mine; if (m && m.alive && m.doom <= 0 && Math.hypot(m.pos.x - P.pos.x, m.pos.z - P.pos.z) < 7 && Math.abs(m.pos.y - P.pos.y) < 6) startEnter(m); }
-addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.preventDefault(); if (e.repeat) return; if (started && ["Space", "Tab", "KeyC", "KeyR", "KeyE", "KeyV", "KeyQ", "KeyF", "KeyG"].includes(e.code)) e.preventDefault();
+addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.preventDefault(); if (e.repeat) return; if (started && ["Space", "Tab", "KeyC", "KeyR", "KeyE", "KeyV", "KeyQ", "KeyF", "KeyG", "KeyX"].includes(e.code)) e.preventDefault();
   if (e.code === "KeyP" && started && !MAP.on) { togglePanel(); return; }
   if (e.code === "Tab" && started && !panelOpen) { toggleMap(); return; }
   if (MAP.on) { MAP.keys[e.code] = true; if (e.code === "KeyT") again(); return; }
   if (!active()) return; const code = e.code === "ControlLeft" ? "KeyC" : e.code; K[code] = true;
   if (code === "Space") P.jumpBuf = .14; if (code === "KeyT") again(); if (code === "KeyE" && P.dead <= 0) useKey(); if (code === "KeyV" && P.dead <= 0 && !P.titan) tryCallTitan();
-  if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") { if (P.titan) K._punch = true; else startKnife(); } if (code === "KeyG") startNade();
+  if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") { if (P.titan) K._punch = true; else startKnife(); } if (code === "KeyX" && !P.titan) startNade(); if (code === "KeyG" && !e.repeat) gDownT = performance.now();
   if (!P.titan && (code === "KeyQ" || code === "Digit1" || code === "Digit2")) startSwap(code === "KeyQ" ? 1 - P.weapon : code === "Digit2" ? 1 : 0);
   if (!runOn && !runDone && ["KeyW", "KeyA", "KeyS", "KeyD"].includes(code)) runOn = true; });
 addEventListener("keyup", (e) => { K[e.code === "ControlLeft" ? "KeyC" : e.code] = false; MAP.keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in K) K[k] = false; mouseDown = false; });
-cv.addEventListener("mousedown", (e) => { if (!started || panelOpen) return; if (!locked && !noLock) { wantLock(); return; } if (e.button === 0) mouseDown = true; if (e.button === 2 && P.titan) K._rockets = true; });
+cv.addEventListener("mousedown", (e) => { if (!started || panelOpen) return; if (!locked && !noLock) { wantLock(); return; } if (e.button === 1) { e.preventDefault(); ping(false); } if (e.button === 0) mouseDown = true; if (e.button === 2 && P.titan) K._rockets = true; });
 addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; });
 addEventListener("mousemove", (e) => { if (!active() || MAP.on || P.dead > 0 || P.seq) return; const k = .0022 * CFG.sens * (P.titan ? .8 : 1); P.yaw -= e.movementX * k; P.pitch = clamp(P.pitch - e.movementY * k, -1.5, 1.5); });
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -401,12 +409,13 @@ function buildSetup() { const U2 = FACTIONS[LOAD.side].units, list = LOAD.list[L
   $("setup").innerHTML = `<h2>Your side</h2><div class="row">${Object.entries(FACTIONS).map(([k, f]) => btn("side", k, f.name, LOAD.side === k)).join("")}</div><p class="note">${FACTIONS[LOAD.side].blurb} The other side is run by the machine across the yard.</p>
     <h2>Your pilot</h2><div class="row">${Object.entries(PW).map(([k, w]) => btn("wpn", k, w.name, LOAD.weapon === k)).join("")}</div><p class="note">${pw().desc} Every pilot also carries the charge rifle for Titans and vehicles.</p>
     <h2>Your Titan</h2><div class="row">${Object.entries(CHASSIS).map(([k, c]) => btn("ch", k, c.name, LOAD.chassis === k)).join("")}</div><p class="note">${(CHASSIS[LOAD.chassis] || CHASSIS.vanguard).desc}</p><div class="row">${PAINTS.map((c) => `<button data-paint="${c}" class="sw ${LOAD.paint === c ? "on" : ""}" style="background:${c}" title="Paint"></button>`).join("")}</div>
-    <h2>Your army list <span class="pts">${used} of ${LIST_PTS} points</span></h2><p class="note">These are the squads and vehicles you can bring onto the field. Each one costs list points here and supply during the battle.</p>
-    <div class="cat">${Object.entries(U2).map(([k, d]) => { const inl = list.includes(k), can = inl || used + d.pts <= LIST_PTS; return `<div class="${inl ? "in" : ""}"><b>${d.icon}</b><span><strong>${d.name}</strong> <em>${d.pts} points · ${d.cost} supply</em><br>${d.desc}</span><button data-unit="${k}" ${can ? "" : "disabled"} class="${inl ? "on" : ""}">${inl ? "In the list" : can ? "Add" : "No points left"}</button></div>`; }).join("")}</div>
+    <h2>Your battlegroup <span class="pts">${used} of ${LIST_PTS} points · ${list.length} of ${LIST_MAX} cards</span></h2><p class="note">These are the cards you bring. Each has a price here, out of ${LIST_PTS}, and a price in Command Points during the fight. While a squad lives it holds some of your ${SUPCAP} supply. You start a fight with 150 CP and earn 6 each second, more for kills and for standing with your troops on a point.</p>
+    <div class="cat">${Object.entries(U2).map(([k, d]) => { const inl = list.includes(k), can = inl || (used + d.pts <= LIST_PTS && list.length < LIST_MAX); return `<div class="${inl ? "in" : ""}"><b>${d.icon}</b><span><strong>${d.name}</strong> <em>${d.pts} points · ${d.cost} CP · ${d.sup} supply</em><br>${d.desc}</span><button data-unit="${k}" ${can ? "" : "disabled"} class="${inl ? "on" : ""}">${inl ? "In the group" : can ? "Add" : "No room"}</button></div>`; }).join("")}</div>
+    <h2>Your doctrine</h2><div class="row">${Object.entries(PASSIVES).map(([k, d]) => btn("pas", k, d[0], LOAD.passive === k)).join("")}</div><p class="note">${PASSIVES[LOAD.passive][1]}</p>
     <h2>How your troops arrive</h2><div class="row">${Object.entries(DOCTRINES).map(([k, d]) => btn("doc", k, d[0], LOAD.doctrine === k)).join("")}</div><p class="note">${DOCTRINES[LOAD.doctrine][1]} You can change this on the battle map at any time.</p>`;
   $("go").disabled = !list.length; }
 $("setup").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const d = b.dataset;
-  if (d.side) LOAD.side = d.side; else if (d.wpn) LOAD.weapon = d.wpn; else if (d.ch) LOAD.chassis = d.ch; else if (d.paint) LOAD.paint = d.paint; else if (d.doc) LOAD.doctrine = d.doc; else if (d.unit) { const l = LOAD.list[LOAD.side], i = l.indexOf(d.unit); if (i >= 0) l.splice(i, 1); else l.push(d.unit); }
+  if (d.side) LOAD.side = d.side; else if (d.wpn) LOAD.weapon = d.wpn; else if (d.ch) LOAD.chassis = d.ch; else if (d.paint) LOAD.paint = d.paint; else if (d.doc) LOAD.doctrine = d.doc; else if (d.pas) LOAD.passive = d.pas; else if (d.unit) { const l = LOAD.list[LOAD.side], i = l.indexOf(d.unit); if (i >= 0) l.splice(i, 1); else l.push(d.unit); }
   saveLoad(); buildSetup(); });
 buildSetup();
 function togglePanel() { panelOpen = !panelOpen; $("panel").style.display = panelOpen ? "block" : "none"; if (panelOpen) { if (document.pointerLockElement) document.exitPointerLock(); } else wantLock(); }
@@ -464,7 +473,7 @@ function cockpit(dt) {
   const foe = TITANS.find((o) => o.team === "foe"), W = [];
   if (t.hitT < 1) W.push(["red", "INCOMING FIRE"]); if (t.hull < t.hullMax * .35) W.push(["red", "HULL CRITICAL"]); if (t.shield <= 0) W.push(["amber", "SHIELD DOWN"]); if (foe) W.push(["amber", "HOSTILE TITAN ON FIELD"]); if (DROPS.some((D) => D.team === "foe")) W.push(["amber", "TITANFALL DETECTED"]); if (t.reload > 0) W.push(["", "RELOADING"]);
   const key = W.map((w) => w[1]).join("|"); if (key !== warnKey) { warnKey = key; el["ck-warn"].innerHTML = W.map(([c, x]) => `<div class="${c}">${TRI}${x}</div>`).join(""); }
-  el["ck-sys"].innerHTML = `<u>VANGUARD FRAME 07</u>LINK &nbsp;&nbsp; PILOT ${segs(4, 4)}<br>REACTOR ${Math.round(60 + t.hull / t.hullMax * 38)}%<br>DASH &nbsp;&nbsp; ${segs(t.dash, t.dashMax, "■")}<br><br>SECTOR &nbsp;${Math.min(OP.sector + 1, SECN)} OF ${SECN}<br>TICKETS ${OP.tickets}<br>POINTS &nbsp;${POINTS.filter((p) => p.sector === OP.sector).map((p) => (p.owner === "you" ? p.name : p.owner === "foe" ? p.name.toLowerCase() : "·")).join(" ")}<br>SUPPLY &nbsp;${Math.floor(B.supply.you)}<br><br>TAB &nbsp;&nbsp;&nbsp;COMMAND`;
+  el["ck-sys"].innerHTML = `<u>VANGUARD FRAME 07</u>LINK &nbsp;&nbsp; PILOT ${segs(4, 4)}<br>REACTOR ${Math.round(60 + t.hull / t.hullMax * 38)}%<br>DASH &nbsp;&nbsp; ${segs(t.dash, t.dashMax, "■")}<br><br>SECTOR &nbsp;${Math.min(OP.sector + 1, SECN)} OF ${SECN}<br>TICKETS ${OP.tickets}<br>POINTS &nbsp;${POINTS.filter((p) => p.sector === OP.sector).map((p) => (p.owner === "you" ? p.name : p.owner === "foe" ? p.name.toLowerCase() : "·")).join(" ")}<br>CP &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${Math.floor(B.supply.you)}<br><br>TAB &nbsp;&nbsp;&nbsp;COMMAND`;
   el["ck-wpn"].innerHTML = `<u>40 MM CANNON</u><em>${t.reload > 0 ? "RELOAD" : t.ammo + " / 18"}</em><span class="pips">${segs(t.reload > 0 ? 0 : t.ammo, 18)}</span><u>ROCKET POD</u><em class="${t.rk <= 0 ? "" : "dim"}">${t.rk <= 0 ? "READY" : "LOADING"}</em><span class="pips">${segs(t.rk <= 0 ? 6 : Math.floor((1 - t.rk / 8) * 6), 6, "◆")}</span><u>FIST</u><em class="${t.punchCd <= 0 ? "" : "dim"}">${t.punchCd <= 0 ? "READY" : "..."}</em><small>LMB &nbsp;RMB &nbsp;F</small>`;
   el["ck-vit"].innerHTML = `<div><label>SHIELD</label><span class="sh">${segs(Math.ceil(t.shield / 10), 15)}</span><label>${Math.round(t.shield / 1.5)}%</label></div><div class="${t.hull < t.hullMax * .35 ? "crit" : ""}"><label>HULL</label><span class="hu">${segs(Math.ceil(t.hull / t.hullMax * 20), 20)}</span><label>${Math.round(t.hull / t.hullMax * 100)}%</label></div>`;
   // radar: what is around, turned so that ahead is up
@@ -474,8 +483,8 @@ function cockpit(dt) {
 }
 function hud(dt) { el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
   hudT -= dt; if (hudT > 0) return; hudT = .08; const m = P.mine;
-  el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp + "%"; el.speed.textContent = hs().toFixed(1); el.wname.textContent = (P.weapon ? "Charge rifle (Q)" : pw().name + " (Q)") + "  ·  Grenades " + P.nades + " (G)"; el.ammo.textContent = P.weapon ? (P.charge > 0 ? "charging" : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : P.ammo + " / " + pw().mag;
-  el.kills.innerHTML = opLine(); el.timer.textContent = "Supply " + Math.floor(B.supply.you) + " · Tab: command";
+  el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp + "%"; el.speed.textContent = hs().toFixed(1); el.wname.textContent = (P.weapon ? "Charge rifle (Q)" : pw().name + " (Q)") + "  ·  Grenades " + P.nades + " (X)"; el.ammo.textContent = P.weapon ? (P.charge > 0 ? "charging" : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : P.ammo + " / " + pw().mag;
+  el.kills.innerHTML = opLine(); el.timer.textContent = "CP " + Math.floor(B.supply.you) + " · supply " + supUsed("you") + "/" + SUPCAP + " · G: ping · Tab: command";
   el.meterfill.style.width = (m ? 100 : P.meter) + "%"; el.meterlab.textContent = m ? "Titan: standing by" : DROPS.some((D) => D.team === "you") ? "Titan: on its way" : P.meter >= 100 ? "Titan ready: press V" : "Titan " + Math.floor(P.meter) + "%";
   const foe = TITANS.find((o) => o.team === "foe"); el.foe.style.display = foe ? "block" : "none"; if (foe) el.foefill.style.width = (foe.hull + foe.shield) / 5 + "%"; 
   const near = !P.seq && m && m.alive && m.doom <= 0 && Math.hypot(m.pos.x - P.pos.x, m.pos.z - P.pos.z) < 7;
@@ -517,7 +526,7 @@ buildPass(); setHomes(); respawn();
 const MY = { slot: 0, team: 0, south: true, name: "", token: (() => { try { if (/[?&]local/.test(location.search)) throw 0; let t = localStorage.getItem("afterburn-token"); if (!t) { t = Math.random().toString(36).slice(2, 12); localStorage.setItem("afterburn-token", t); } return t; } catch (e) { return Math.random().toString(36).slice(2, 12); } })() };
 let ROSTER = [], mpOn = false;   // everyone in the match: { slot, name, team, kit, here } and, on the host, { id, token }
 const RPS = new Map(), keyOf = (slot) => (slot === 0 ? "you" : "p" + slot), slotOf = (id) => { const r = ROSTER.find((q) => q.id === id); return r ? r.slot : -1; };
-const myKit = () => ({ fac: LOAD.side, list: LOAD.list[LOAD.side].slice(), doctrine: LOAD.doctrine, chassis: LOAD.chassis, paint: LOAD.paint });
+const myKit = () => ({ fac: LOAD.side, list: LOAD.list[LOAD.side].slice(), doctrine: LOAD.doctrine, passive: LOAD.passive, chassis: LOAD.chassis, paint: LOAD.paint });
 const relSide = (hostSide) => ((hostSide === "you") === MY.south ? "you" : "foe");   // the host's side names, as this screen sees them
 const ONE = { phit: 1, thit: 1 };   // messages meant for one player; the rest are for everybody
 // send something to the player it is for, or to everyone, whichever this player is
@@ -551,7 +560,7 @@ function netTick(dt) { stepRemote(dt); netT += dt; snapT += dt; pingT += dt;
 const ACT = {
   sh: (slot, a) => { const from = V3(a[0] * U, a[1] * U, a[2] * U), to = V3(a[3] * U, a[4] * U, a[5] * U); tracer(from, to, a[6] ? "#8fe0f0" : "#ffb890", a[6] ? 30000 : 9000, a[6] ? 1.6 : .5); flash(from, a[6] ? "#8fe0f0" : "#ffc477", 900, .06); snd("grunt_shot", { pos: [a[0], a[1], a[2]] }); },
   back: (slot) => { const rp = RPS.get(slot); if (rp && B.mp === "host") spend(rp.side, 1); },
-  pdown: (slot) => { const rp = RPS.get(slot); if (!rp) return; if (rp.side === "foe") { snd("kill"); say("An enemy pilot is down.", 2.5); } else say((rp.name || "Your teammate") + " is down.", 2.5); },
+  pdown: (slot) => { const rp = RPS.get(slot); if (!rp) return; if (B.mp === "host") for (const w of B.cmds) if (B.side[w] !== rp.side) credit(w, 40 / Math.max(1, B.cmds.filter((k) => B.side[k] !== rp.side).length)); if (rp.side === "foe") { snd("kill"); say("An enemy pilot is down.", 2.5); } else say((rp.name || "Your teammate") + " is down.", 2.5); },
   tdrop: (slot, a) => { const rp = RPS.get(slot); if (!rp) return; callTitan(rp.side, a[0], a[1], a[2]); DROPS[DROPS.length - 1].ghost = true; say(rp.side === "foe" ? "An enemy Titan is dropping." : (rp.name || "Your teammate") + " has called a Titan.", 3); },
   tfx: (slot, a) => { const rp = RPS.get(slot), t = rp && rp.titan; if (!t) return;
     if (a[0] === 0) { const from = muzzleOf(t), end = V3(a[1], a[2], a[3]); tracer(from, toU(end), "#ffd890", 9000, 1.5); flash(from, "#ffc477", 3200, .1); t.recoil = 1; snd("cannon", { pos: [t.pos.x, t.pos.y + 4, t.pos.z] }); later(.03, () => blast(end, 2.2, {})); }
