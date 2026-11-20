@@ -9,12 +9,15 @@
    state: a run in time with its speed, a tucked jump, a second jump on the thrusters, a slide, a crouch, going down.
    Built in metres, facing +z, drawn at U. */
 import { THREE, U, charMat, fxLayer, clamp, scene } from "./engine.js";
+import { loadModel, puppet } from "./puppet.js";
 import { build, box as B, drum as C, loft as Lf, ball as Bl } from "./parts.js";
 
 const PAINT = {
   you: { suit: "#6f745c", wrap: "#8c917a", vest: "#a9a79c", shell: "#d6cfb8", dark: "#26282a", boot: "#3a3632", gun: "#2b2d2f", accent: "#c45a1e", glow: [.5, 1.9, 2.4] },
   foe: { suit: "#34373a", wrap: "#45484c", vest: "#585b5f", shell: "#2c2e31", dark: "#141516", boot: "#1b1c1e", gun: "#18191b", accent: "#b0312a", glow: [2.6, .6, .3] } };
 const HIP = .95, TH = .42, SH = .42, A1 = .29, A2 = .27, DOWN = new THREE.Vector3(0, -1, 0);
+// The pilot's body is a rigged model (models/pilot.glb) worn over this figure: see mf/puppet.js. The figure is the fallback.
+const MODEL = await loadModel("pilot.glb", "mfPilot", "#c08f84");
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeFigure(fac, enemy, paint) {
@@ -43,9 +46,9 @@ export function makeFigure(fac, enemy, paint) {
     Bl(.27, .29, .32, 0, .135, -.01, "accent", { face: 0, wide: 2.0, from: 1.12, to: 1.8 }), Bl(.278, .298, .328, 0, .135, -.01, "glow", { face: 0, wide: 1.72, from: 1.24, to: 1.68 }), B(.17, .035, .05, 0, .235, .1, "shell"),
     C(.03, .055, .075, .03, .1, "vest", "z", 8), C(.03, .055, -.075, .03, .1, "vest", "z", 8), C(.055, .05, .128, .1, -.01, "dark", "x", 10), C(.055, .05, -.128, .1, -.01, "dark", "x", 10), C(.005, .2, -.12, .3, -.06, "dark", "y", 4), Lf([[.2, .262, .312], [.222, .255, .3]], 0, 0, -.01, "dark", 12), C(.022, .045, .1, .225, .085, "dark", "z", 8), [.025, .025, .01, .1, .225, .11, "glow"], B(.03, .012, .2, 0, .272, -.02, "accent"), ...[0, 1, 2].map((i) => B(.008, .035, .004, -.1 + i * .014, .19, .1, "dark"))], S, glowMat);
   // arms: broad shoulder pads, an elbow pad, a bracer, a gloved hand
-  const arm = (sd) => { const up = joint(chest, sd * .19, .16, 0), fo = joint(up, 0, -A1, 0);
+  const arm = (sd) => { const up = joint(chest, sd * .19, .16, 0), fo = joint(up, 0, -A1, 0), hand = joint(fo, 0, -A2 - .03, 0);
     build(up, [Bl(.19, .17, .2, sd * .02, .01, 0, "shell"), Lf([[-A1, .09, .1], [-.15, .12, .13], [.02, .125, .135]], 0, 0, 0, "suit"), B(.03, .1, .12, sd * .07, -.1, 0, "accent"), Bl(.16, .11, .18, sd * .035, -.075, 0, "wrap"), Lf([[-.25, .135, .145], [-.225, .135, .145]], 0, 0, 0, "dark")], S, glowMat);
-    build(fo, [Bl(.11, .12, .12, 0, 0, -.01, "shell"), Lf([[-A2, .08, .085], [-.14, .105, .11], [.01, .1, .105]], 0, 0, 0, "suit"), Lf([[-.24, .095, .1], [-.15, .115, .12], [-.08, .11, .115]], 0, 0, 0, "wrap", 8), Bl(.09, .11, .08, 0, -A2 - .03, 0, "dark"), Lf([[-.23, .05, .1, sd * .045], [-.09, .06, .12, sd * .05]], 0, 0, 0, "shell", 8, .3), Lf([[-.265, .1, .105], [-.245, .1, .105]], 0, 0, 0, "dark")], S, glowMat); return { up, fo, sd }; };
+    build(fo, [Bl(.11, .12, .12, 0, 0, -.01, "shell"), Lf([[-A2, .08, .085], [-.14, .105, .11], [.01, .1, .105]], 0, 0, 0, "suit"), Lf([[-.24, .095, .1], [-.15, .115, .12], [-.08, .11, .115]], 0, 0, 0, "wrap", 8), Bl(.09, .11, .08, 0, -A2 - .03, 0, "dark"), Lf([[-.23, .05, .1, sd * .045], [-.09, .06, .12, sd * .05]], 0, 0, 0, "shell", 8, .3), Lf([[-.265, .1, .105], [-.245, .1, .105]], 0, 0, 0, "dark")], S, glowMat); return { up, fo, hand, sd }; };
   const armR = arm(-1), armL = arm(1);   // facing +z, the figure's right is -x
   // the rifle, built pointing along +z from the butt of its stock
   const gun = new THREE.Object3D(); chest.add(gun);
@@ -60,6 +63,8 @@ export function makeFigure(fac, enemy, paint) {
   const GRIP = new THREE.Vector3(0, -.09, .2), FORE = new THREE.Vector3(0, -.07, .52), tR = new THREE.Vector3(), tL = new THREE.Vector3(), out = new THREE.Vector3();
   // what is posed, each value easing toward where the pilot's state says it should be
   const keys = ["tl", "kl", "fl", "tr", "kr", "fr", "off", "lean", "twist", "nod", "roll", "fall", "thrust", "wall", "gunLow"], cur = {}; for (const k of keys) cur[k] = 0; let ph = 0, t = 0;
+  const W = MODEL ? puppet(MODEL, { root: body, height: 1.84, turn: 0, team: enemy ? "foe" : "you", hips, hipY: HIP, ankle: HIP - .06 - TH - SH, fwd: [0, 0, 1], full: [["Spine", waist], ["Spine2", chest], ["Head", head]], keep: [gun, ...flames],
+    legs: legs.map((L) => ({ foot: L.ft, sd: L.sd })), arms: [{ hand: armR.hand, sd: -1, pole: [-.7, -1, -.2], poleIn: chest }, { hand: armL.hand, sd: 1, pole: [.8, -1, .1], poleIn: chest }] }) : null;
   function pose(dt, st) { root.visible = !st.hidden; if (st.hidden) return; t += dt; const sp = st.speed, run = clamp(sp / 8, 0, 1.15), air = !st.grounded && !st.wall, g = {}; for (const k of keys) g[k] = 0;
     const cyc = (f, a) => { const s = Math.sin(f), c = Math.cos(f); g.tr = -.75 * s * a; g.tl = .75 * s * a; g.kr = (.15 + 1.1 * Math.max(0, c)) * a; g.kl = (.15 + 1.1 * Math.max(0, -c)) * a; g.fr = (-.25 * Math.max(0, c) + .25 * s) * a; g.fl = (-.25 * Math.max(0, -c) - .25 * s) * a; g.off = (.042 * Math.abs(c) - .054) * a; g.lean = .2 * a; g.twist = .12 * s * a; g.nod = -.12 * a; };
     if (st.dead) { g.off = -.75; g.tr = -1; g.tl = -.7; g.kr = 1.6; g.kl = 1.2; g.lean = -.4; g.nod = .5; g.fall = 1; g.gunLow = 1; }
@@ -78,6 +83,6 @@ export function makeFigure(fac, enemy, paint) {
     gun.position.set(-.09, .1 - cur.gunLow * .12, .1); gun.rotation.set(-up * .55 + cur.gunLow * .9 + Math.abs(cur.wall) * .25, .16, 0, "YXZ"); gun.updateMatrix(); tR.copy(GRIP).applyMatrix4(gun.matrix); tL.copy(FORE).applyMatrix4(gun.matrix);
     if (cur.wall > .02) { out.set(-.52, .1, .08); tR.lerp(out, Math.min(1, cur.wall)); } else if (cur.wall < -.02) { out.set(.52, .1, .08); tL.lerp(out, Math.min(1, -cur.wall)); }   // the hand on the wall
     reach(armR, tR, -.7, -1, -.2); reach(armL, tL, .8, -1, .1);
-    const fl = Math.max(.01, cur.thrust * (.8 + .35 * Math.sin(t * 47))); for (const f of flames) { f.scale.set(.7 + cur.thrust * .5, fl, .7 + cur.thrust * .5); f.visible = cur.thrust > .03; } }
+    const fl = Math.max(.01, cur.thrust * (.8 + .35 * Math.sin(t * 47))); for (const f of flames) { f.scale.set(.7 + cur.thrust * .5, fl, .7 + cur.thrust * .5); f.visible = cur.thrust > .03; } if (W) W.update(); }
   return { root, pose, dispose: () => root.removeFromParent() };
 }

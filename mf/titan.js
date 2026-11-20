@@ -7,8 +7,7 @@
    It is posed every frame from a few numbers: how fast it walks, how far it
    kneels, how far the hatch is open, where it aims, recoil, a punch. Built in metres, facing -z, drawn at U. */
 import { THREE, U, clamp, lerp, charMat, grad } from "./engine.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
+import { loadModel, puppet as wear } from "./puppet.js";
 import { build, box as B, hull as H, drum as C, loft as Lf, ball as Bl } from "./parts.js";
 
 const SCHEMES = {
@@ -16,15 +15,8 @@ const SCHEMES = {
   foe: { frame: "#1e2022", plate: "#4a4e52", plate2: "#36393c", accent: "#b0312a", dark: "#141516", glow: [3.4, .5, .3], steel: "#7c8084", canvas: "#4a4336", cream: "#b9b3a4" },
 };
 const L1 = 1.3, L2 = 1.35, ANK = .27, HIP_Y = 2.85, HIP_X = .66, KNEEL = 1.25, SH_X = 1.5, SH_Y = 1.74, A1 = 1.5, A2 = 1.45;
-/* The mech's body is a rigged model (models/mech.glb, a Mixamo skeleton with no animations of its own). The walker below
-   is still built and posed as before, but with a model loaded its own plates are hidden and it becomes the puppeteer:
-   each frame the model's hips, spine, legs and arms are bent to follow it, so every pose the game already knows
-   (walking, kneeling, aiming, recoil, the punch, the doomed limp) carries over. The rifle and blade stay as they were.
-   If the file cannot be loaded the old walker is drawn instead. */
-const MODEL_H = 5.8, MODEL = { scene: null, mats: {} };
-try { const g = await new GLTFLoader().loadAsync(new URL("../models/mech.glb?v=" + (globalThis.AB_BUILD || ""), import.meta.url).href); let map = null; g.scene.traverse((o) => { if (o.isMesh && o.material.map) map = o.material.map; });
-  const mk = (col, key) => { const m = new THREE.MeshToonMaterial({ map, color: col, gradientMap: grad }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a = 0.5;"); }; m.customProgramCacheKey = () => key; return m; };
-  MODEL.mats = { you: mk("#ffffff", "mfMechA"), foe: mk("#b98f86", "mfMechB"), husk: mk("#2a2624", "mfMechH") }; MODEL.scene = g.scene; } catch (e) { console.warn("mech model not loaded, using the built walker", e); }
+// The mech's body is a rigged model (models/mech.glb) worn over this walker: see mf/puppet.js. The walker is the fallback.
+const MODEL = await loadModel("mech.glb", "mfMech");
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeRig(team, o = {}) {
@@ -133,7 +125,7 @@ export function makeRig(team, o = {}) {
     // what is left when the reactor goes: a burnt shell down on one knee
     wreck() { root.traverse((o) => { if (!o.isMesh) return; if (o.material === charMat) { o.material = husk; } else o.visible = false; }); rig.pose(.5, { kneel: 1, limp: true, hatch: .7 }); },
   };
-  if (MODEL.scene) puppet(rig, { legs, armR, armL, bladeBack, bladeHand, gun, team });
+  if (MODEL) puppet(rig, { legs, armR, armL, bladeBack, bladeHand, gun, team });
   rig.pose(.016, {});
   return rig;
 }
@@ -141,33 +133,10 @@ export const TITAN = { HIP_Y, KNEEL, CHEST: HIP_Y + .35 + 1.45 };
 
 /* hang the model on a walker and make the walker drive it */
 function puppet(rig, P) {
-  const root = rig.root, box = new THREE.Group(), mdl = cloneSkinned(MODEL.scene); box.rotation.y = Math.PI; box.scale.setScalar(MODEL_H); box.add(mdl); root.add(box);
-  let skin = null; mdl.traverse((o) => { if (o.isSkinnedMesh) { skin = o; o.material = MODEL.mats[P.team] || MODEL.mats.you; o.frustumCulled = false; o.castShadow = true; } });
-  const keep = new Set(); for (const k of [P.gun, P.bladeBack, P.bladeHand]) k.traverse((o) => keep.add(o)); box.traverse((o) => keep.add(o));
-  root.traverse((o) => { if (o.isMesh && !keep.has(o)) { o.visible = false; o.userData.shell = true; } });
-  P.bladeBack.position.set(.3, 2.5, 1.22); P.gun.scale.setScalar(.82);
-  const bone = (n) => mdl.getObjectByName("mixamorig" + n), V = () => new THREE.Vector3(), Q = () => new THREE.Quaternion();
-  const a = V(), b = V(), c = V(), d = V(), qa = Q(), qb = Q(), qc = Q(), qBox = Q(), qRoot = Q(), UNIT = new THREE.Vector3(1, 1, 1);
-  root.updateMatrixWorld(true); box.getWorldQuaternion(qBox); const qBoxI0 = qBox.clone().invert();
-  // how a bone sits at rest, in the model's own frame, and which way it points to the next joint
-  const rest = (bn, child) => { const r = { b: bn, q: bn.getWorldQuaternion(Q()).premultiply(qBoxI0), d: null, len: 0 }; if (child) { bn.getWorldPosition(a); child.getWorldPosition(b); r.len = b.distanceTo(a) / root.scale.x; r.d = b.clone().sub(a).normalize().applyQuaternion(qBoxI0); } return r; };
-  const side = (n) => { const L = bone("Left" + n), R = bone("Right" + n); return root.worldToLocal(L.getWorldPosition(V())).x > 0 ? [R, L] : [L, R]; };   // [the one on -x, the one on +x]
-  const hipsB = bone("Hips"), R = { hips: rest(hipsB), spine: rest(bone("Spine")) };
-  const up = side("UpLeg"), lo = side("Leg"), ft = side("Foot"), ar = side("Arm"), fa = side("ForeArm"), ha = side("Hand");
-  const LEG = [0, 1].map((i) => ({ up: rest(up[i], lo[i]), lo: rest(lo[i], ft[i]), ft: rest(ft[i]) })), ARM = [0, 1].map((i) => ({ up: rest(ar[i], fa[i]), lo: rest(fa[i], ha[i]) }));
-  const hip0 = root.worldToLocal(hipsB.getWorldPosition(V())), hipLift = hip0.y - (HIP_Y - .06), ankLift = root.worldToLocal(ft[0].getWorldPosition(V())).y - ANK;
-  // turn a bone so it sits as the walker's joint does (full), or so it points along a line (aim)
-  const full = (r, j) => { j.getWorldQuaternion(qa).multiply(qc.copy(qRoot).invert()).multiply(qBox).multiply(r.q); r.b.parent.getWorldQuaternion(qb).invert(); r.b.quaternion.copy(qb.multiply(qa)); };
-  const aim = (r, dir) => { c.copy(dir).normalize().applyQuaternion(qc.copy(qBox).invert()); qa.setFromUnitVectors(r.d, c).multiply(r.q).premultiply(qBox); r.b.parent.getWorldQuaternion(qb).invert(); r.b.quaternion.copy(qb.multiply(qa)); };
-  // two bones from A to T, the middle joint pushed toward the pole. All in world units.
-  const limb = (r1, r2, T, pole) => { const s = root.scale.x, l1 = r1.len * s, l2 = r2.len * s; r1.b.getWorldPosition(a); b.copy(T).sub(a); let dist = b.length(); b.divideScalar(dist || 1); dist = clamp(dist, Math.abs(l1 - l2) + .01 * s, l1 + l2 - .01 * s);
-    const x = (l1 * l1 - l2 * l2 + dist * dist) / (2 * dist), h = Math.sqrt(Math.max(0, l1 * l1 - x * x)); d.copy(pole).addScaledVector(b, -pole.dot(b)); if (d.lengthSq() < 1e-8) d.set(0, -1, 0); d.normalize();
-    d.multiplyScalar(h).addScaledVector(b, x); aim(r1, d); b.multiplyScalar(dist).sub(d); aim(r2, b); };
-  const T = V(), pole = V(), pose0 = rig.pose;
-  rig.model = box;
-  rig.pose = (dt, s) => { pose0(dt, s); P.bladeBack.visible = P.bladeHand.visible = false; root.updateMatrixWorld(true); root.getWorldQuaternion(qRoot); box.getWorldQuaternion(qBox);
-    T.copy(rig.hips.position); T.y += hipLift; root.localToWorld(T); hipsB.position.copy(hipsB.parent.worldToLocal(T)); full(R.hips, rig.hips); full(R.spine, rig.torso);
-    P.legs.forEach((L, i) => { const k = L.sd > 0 ? 1 : 0, G = LEG[k]; L.foot.getWorldPosition(T); root.worldToLocal(T); T.y += ankLift; root.localToWorld(T); pole.set(0, 0, -1).applyQuaternion(qRoot); limb(G.up, G.lo, T, pole); full(G.ft, L.foot); });
-    for (const A of [P.armR, P.armL]) { const k = A.sd > 0 ? 1 : 0, G = ARM[k]; A.hand.getWorldPosition(T); rig.torso.getWorldQuaternion(qa); pole.set(A.sd * .9, -1, .6).applyQuaternion(qa); limb(G.up, G.lo, T, pole); } };
-  rig.wreck = () => { rig.pose(.5, { kneel: 1, limp: true, hatch: .7 }); skin.material = MODEL.mats.husk; P.gun.visible = false; P.bladeBack.visible = P.bladeHand.visible = false; root.traverse((o) => { if (o.isMesh && o.userData.shell) o.visible = false; }); };
+  P.gun.scale.setScalar(.82);
+  const W = wear(MODEL, { root: rig.root, height: 5.8, turn: Math.PI, team: P.team, hips: rig.hips, hipY: HIP_Y - .06, ankle: ANK, fwd: [0, 0, -1], full: [["Spine", rig.torso]], keep: [P.gun],
+    legs: P.legs.map((L) => ({ foot: L.foot, sd: L.sd })), arms: [P.armR, P.armL].map((A) => ({ hand: A.hand, sd: A.sd, pole: [A.sd * .9, -1, .6], poleIn: rig.torso })) });
+  const pose0 = rig.pose; rig.model = W.box;
+  rig.pose = (dt, s) => { pose0(dt, s); P.bladeBack.visible = P.bladeHand.visible = false; W.update(); };   // no blade with the model on: the melee is a swing of the left arm
+  rig.wreck = () => { rig.pose(.5, { kneel: 1, limp: true, hatch: .7 }); P.gun.visible = false; W.husk(); };
 }
