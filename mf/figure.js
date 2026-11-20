@@ -66,6 +66,7 @@ export function makeFigure(fac, enemy, paint) {
     else if (st.sliding) { g.off = -.5; g.lean = -.55; g.nod = .35; g.tr = -1.35; g.kr = .05; g.fr = .5; g.tl = .55; g.kl = 1.9; g.fl = -.2; }
     else if (st.wall) { ph += dt * (6 + sp * .9); cyc(ph, 1.1); g.roll = -.42 * st.wall; g.thrust = .45; g.wall = st.wall; }
     else if (air) { const tk = st.dj < .4 ? 1 : .55; g.tr = -.4 - 1.0 * tk; g.tl = .25 - .9 * tk; g.kr = .6 + 1.4 * tk; g.kl = .8 + 1.2 * tk; g.lean = .1 + .25 * tk; g.thrust = st.dj < .4 ? 1 : st.vy > 2 ? .22 : 0; }
+    else if (st.sit) { g.off = -.45; g.tr = -1.42; g.tl = -1.5; g.kr = 1.45; g.kl = 1.62; g.fr = -.05; g.fl = -.1; g.lean = .22 + .01 * Math.sin(t * 1.3); g.nod = -.12; g.twist = .05 * Math.sin(t * .5); }   // sitting on something half a metre high, elbows near the knees
     else if (st.crouch) { ph += dt * (3 + sp * 1.4); const a = Math.sin(ph) * clamp(sp / 3, 0, 1); g.off = -.32; g.tr = -1.0 - a * .3; g.tl = -1.0 + a * .3; g.kr = g.kl = 1.8; g.fr = g.fl = -.7; g.lean = .3; g.nod = -.2; }
     else if (run > .08) { ph += dt * (3.5 + sp * 1.25); cyc(ph, Math.min(1, run)); }
     else { g.off = -.012 + .007 * Math.sin(t * 2.1); g.tr = -.12; g.kr = .2; g.fr = -.08; g.tl = .1; g.kl = .08; g.fl = -.16; g.twist = .04 * Math.sin(t * .6); }   // standing: one foot a little forward, weight settled

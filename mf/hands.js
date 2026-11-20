@@ -20,21 +20,23 @@ const rig = new THREE.Group(); root.add(rig);
 const X = Math.PI / 2;
 
 /* ---------- the weapons, built along -z from the grip ---------- */
-function rifle(o) { const g = new THREE.Group(), bl = o.barrel, body = [B(.05, .078, .3, 0, .022, -.08, "gun"), B(.036, .014, .28, 0, .066, -.1, "dark"), Lf([[.1, .058, .064], [.1 + o.guard, .05, .056]], 0, .022, 0, "gun2", 8, .5, -X),
+function rifle(o, mat = gunMat) { const g = new THREE.Group(), bl = o.barrel, body = [B(.05, .078, .3, 0, .022, -.08, "gun"), B(.036, .014, .28, 0, .066, -.1, "dark"), Lf([[.1, .058, .064], [.1 + o.guard, .05, .056]], 0, .022, 0, "gun2", 8, .5, -X),
     C(.012, bl, 0, .028, -.1 - o.guard - bl / 2, "dark", "z", 8), C(.019, .05, 0, .028, -.1 - o.guard - bl, "gun", "z", 8), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.012, .012, .07, 0, -.022, -.01, "dark"),
     B(.042, .07, .2, 0, .004, .2, "gun2"), B(.046, .09, .03, 0, 0, .31, "dark"), B(.03, .02, .06, 0, .083, -.06, "dark"), B(.012, .03, .012, 0, .08, -.1 - o.guard + .02, "dark"), B(.04, .012, .3, 0, -.012, -.2, "accent")];
   if (o.scope) body.push(C(.021, .19, 0, .118, -.04, "dark", "z", 10), C(.027, .04, 0, .118, -.15, "gun", "z", 10), C(.024, .03, 0, .118, .06, "gun", "z", 10), B(.02, .03, .03, 0, .092, -.08, "dark"), B(.02, .03, .03, 0, .092, .01, "dark"));
   if (o.pistol) body.splice(7, 2);
   if (!o.scope) body.push(B(.042, .008, .052, 0, .088, -.06, "dark"), B(.005, .04, .03, -.02, .108, -.06, "dark"), B(.005, .04, .03, .02, .108, -.06, "dark"), B(.044, .005, .03, 0, .129, -.06, "dark"), B(.004, .004, .002, 0, .108, -.06, "glow"));   // an open frame with a dot in it, so there is something to look through
-  build(g, body, S, glow, gunMat);
-  const mag = new THREE.Group(); mag.position.set(0, -.018, -.075); mag.rotation.x = -.12; g.add(mag); build(mag, [B(.03, o.mag, .052, 0, -o.mag / 2, 0, "mag"), B(.034, .014, .056, 0, -o.mag + .004, 0, "dark"), B(.032, .01, .054, 0, -.03, 0, "steel")], S, glow, gunMat);
-  const bolt = new THREE.Group(); bolt.position.set(.03, .05, .04); g.add(bolt); build(bolt, [B(.03, .014, .03, 0, 0, 0, "steel")], S, glow, gunMat);
+  build(g, body, S, glow, mat);
+  const mag = new THREE.Group(); mag.position.set(0, -.018, -.075); mag.rotation.x = -.12; g.add(mag); build(mag, [B(.03, o.mag, .052, 0, -o.mag / 2, 0, "mag"), B(.034, .014, .056, 0, -o.mag + .004, 0, "dark"), B(.032, .01, .054, 0, -.03, 0, "steel")], S, glow, mat);
+  const bolt = new THREE.Group(); bolt.position.set(.03, .05, .04); g.add(bolt); build(bolt, [B(.03, .014, .03, 0, 0, 0, "steel")], S, glow, mat);
   g.userData = { sightY: o.scope ? .152 : .108, mag, bolt, fore: new THREE.Vector3(0, -.008, -.12 - o.guard * .55), well: new THREE.Vector3(0, -.09, -.07), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .028, -.13 - o.guard - bl), magLen: o.mag }; return g; }
-function charger() { const g = new THREE.Group(); build(g, [B(.06, .09, .34, 0, .022, -.1, "gun"), Lf([[.1, .075, .085], [.4, .06, .07]], 0, .025, 0, "gun2", 8, .5, -X), C(.016, .3, 0, .03, -.55, "dark", "z", 8), ...[0, 1, 2, 3].map((i) => B(.085, .085, .012, 0, .03, -.3 - i * .045, "dark")),
-    C(.03, .08, 0, .03, -.7, "gun", "z", 10), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.044, .075, .2, 0, .004, .2, "gun2"), B(.048, .095, .03, 0, 0, .31, "dark"), B(.05, .05, .09, 0, .1, -.04, "dark"), B(.045, .1, .07, 0, -.05, -.1, "accent")], S, glow, gunMat);
+function charger(mat = gunMat) { const g = new THREE.Group(); build(g, [B(.06, .09, .34, 0, .022, -.1, "gun"), Lf([[.1, .075, .085], [.4, .06, .07]], 0, .025, 0, "gun2", 8, .5, -X), C(.016, .3, 0, .03, -.55, "dark", "z", 8), ...[0, 1, 2, 3].map((i) => B(.085, .085, .012, 0, .03, -.3 - i * .045, "dark")),
+    C(.03, .08, 0, .03, -.7, "gun", "z", 10), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.044, .075, .2, 0, .004, .2, "gun2"), B(.048, .095, .03, 0, 0, .31, "dark"), B(.05, .05, .09, 0, .1, -.04, "dark"), B(.045, .1, .07, 0, -.05, -.1, "accent")], S, glow, mat);
   const coil = new THREE.Mesh(new THREE.BoxGeometry(.045, .045, .11), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.4, 3) })); coil.position.set(0, .03, -.62); g.add(coil);
   g.userData = { coil, fore: new THREE.Vector3(0, -.01, -.3), well: new THREE.Vector3(0, -.09, -.1), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .03, -.75) }; return g; }
-const GUNS = { shotgun: rifle({ barrel: .14, guard: .34, mag: .035 }), pistol: rifle({ barrel: .03, guard: .09, mag: .1, pistol: true }), carbine: rifle({ barrel: .2, guard: .26, mag: .12 }), longrifle: rifle({ barrel: .36, guard: .3, mag: .09, scope: true }), smg: rifle({ barrel: .08, guard: .16, mag: .17 }), charge: charger() };
+const SPEC = { shotgun: { barrel: .14, guard: .34, mag: .035 }, pistol: { barrel: .03, guard: .09, mag: .1, pistol: true }, carbine: { barrel: .2, guard: .26, mag: .12 }, longrifle: { barrel: .36, guard: .3, mag: .09, scope: true }, smg: { barrel: .08, guard: .16, mag: .17 } };
+export const gunProp = (kind, mat) => (kind === "charge" ? charger(mat) : rifle(SPEC[kind] || SPEC.carbine, mat));   // the same guns as the ones in your hands, for standing about in the garage
+const GUNS = { charge: charger() }; for (const k in SPEC) GUNS[k] = rifle(SPEC[k]);
 for (const k in GUNS) { GUNS[k].visible = false; rig.add(GUNS[k]); }
 
 /* ---------- arms: the hand is at the arm's origin and the forearm runs back along +z toward the elbow ---------- */

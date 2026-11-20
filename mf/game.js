@@ -4,6 +4,7 @@
 import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, cam, gunScene, gunMat, makeRTs, render, BOXES, hitsBox, free, freeG, boxesNear, groundH, WORLD, rayBox, rayWorld,
   flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat, PLAN, MAPKEY, MAPNAME, SALT, retryField, setMap as pickMap } from "./engine.js";
 import { VM } from "./hands.js";
+import { GARAGE, GARAGE_FOV } from "./garage.js";
 import { makeRig, TITAN } from "./titan.js";
 import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, LIST_MAX, PASSIVES, SUPCAP, supUsed, credit, nearAI, pingTo, fieldTest, GOAL, OP, SECN, homeOf, setHomes, spend, opLine, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
 import { NET, onMsg, send, host, join, leave, cut } from "./net.js";
@@ -433,7 +434,7 @@ cv.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* ---------- screen furniture ---------- */
 const msg = $("msg"); function say(t, secs = 0) { msg.textContent = t; msg.style.display = t ? "block" : "none"; sayT = secs; }
-function begin(lock = true) { if (SND) SND.start(); saveLoad(); started = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); if (lock) wantLock(); }
+function begin(lock = true) { if (SND) SND.start(); saveLoad(); GARAGE.leave(); started = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); if (lock) wantLock(); }
 $("go").onclick = () => { if (NET.open) return; begin(); };
 const PAINTS = ["#c45a1e", "#3f6f9a", "#5c7f36", "#b0312a", "#c9a03a", "#e2d0ae"];
 function buildSetup() { const U2 = FACTIONS[LOAD.side].units, list = LOAD.list[LOAD.side] = LOAD.list[LOAD.side].filter((id) => U2[id]), used = list.reduce((a, id) => a + U2[id].pts, 0), btn = (attr, k, label, on, extra = "") => `<button data-${attr}="${k}" class="${on ? "on" : ""}" ${extra}>${label}</button>`;
@@ -445,12 +446,12 @@ function buildSetup() { const U2 = FACTIONS[LOAD.side].units, list = LOAD.list[L
     <div class="cat">${Object.entries(U2).map(([k, d]) => { const cnt = list.filter((x) => x === k).length, ok = can(d), tg = tags[k]; return `<div class="${cnt ? "in" : ""}"><b>${d.icon}</b><span><strong>${d.name}${cnt > 1 ? " ×" + cnt : ""}</strong> <em>${d.pts} points · ${d.cost} CP · ${d.sup} supply</em><br>${d.desc}</span><span class="cbtns"><button data-unit="${k}" ${ok ? "" : "disabled"} class="${cnt ? "on" : ""}">${cnt ? (ok ? "Add another" : "In the group") : ok ? "Add" : "No room"}</button>${cnt ? `<button data-drop="${k}">Remove</button><button data-tag="${k}" class="${tg ? "on" : ""}">${tg === "a" ? "Fireteam Alpha" : tg === "b" ? "Fireteam Beta" : "No fireteam"}</button>` : ""}</span></div>`; }).join("")}</div>
     <h2>Doctrine</h2><div class="row">${Object.entries(PASSIVES).map(([k, d]) => btn("pas", k, d[0], LOAD.passive === k)).join("")}</div><p class="note">${PASSIVES[LOAD.passive][1]}</p>
     <h2>How your troops arrive</h2><div class="row">${Object.entries(DOCTRINES).map(([k, d]) => btn("doc", k, d[0], LOAD.doctrine === k)).join("")}</div><p class="note">${DOCTRINES[LOAD.doctrine][1]} You can change this on the battle map at any time.</p></section>`;
-  $("go").disabled = !list.length; }
+  $("go").disabled = !list.length; GARAGE.refresh(); }
 $("setup").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const d = b.dataset;
   if (d.side) LOAD.side = d.side; else if (d.wpn) LOAD.weapon = d.wpn; else if (d.kit) LOAD.kit = d.kit; else if (d.ch) LOAD.chassis = d.ch; else if (d.paint) LOAD.paint = d.paint; else if (d.doc) LOAD.doctrine = d.doc; else if (d.pas) LOAD.passive = d.pas; else if (d.unit) { const l = LOAD.list[LOAD.side], U3 = FACTIONS[LOAD.side].units, used = l.reduce((a, id) => a + (U3[id] ? U3[id].pts : 0), 0); if (U3[d.unit] && used + U3[d.unit].pts <= LIST_PTS && l.length < LIST_MAX) l.push(d.unit); } else if (d.drop) { const l = LOAD.list[LOAD.side], i = l.lastIndexOf(d.drop); if (i >= 0) l.splice(i, 1); } else if (d.tag) { const t = LOAD.tags[LOAD.side] || (LOAD.tags[LOAD.side] = {}); t[d.tag] = t[d.tag] === "a" ? "b" : t[d.tag] === "b" ? "" : "a"; }
   saveLoad(); buildSetup(); });
 buildSetup();
-$("m-nav").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return; $("m-main").className = "tab-" + b.dataset.tab; for (const q of $("m-nav").querySelectorAll("button")) q.classList.toggle("on", q === b); snd("selector"); });
+$("m-nav").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return; { const bay = b.dataset.tab === "pilot" || b.dataset.tab === "titan"; if (bay !== GARAGE.on) { const f = $("m-fade"); f.style.transition = "none"; f.style.opacity = 1; requestAnimationFrame(() => requestAnimationFrame(() => { f.style.transition = "opacity .5s"; f.style.opacity = 0; })); } GARAGE.setTab(b.dataset.tab); } $("m-main").className = "tab-" + b.dataset.tab; for (const q of $("m-nav").querySelectorAll("button")) q.classList.toggle("on", q === b); snd("selector"); });
 for (const b of document.querySelectorAll("#m-modes button[data-role]")) { b.classList.toggle("on", (MAPKEY.split("-")[2] || "sa")[1] === b.dataset.role); b.onclick = () => { if ((MAPKEY.split("-")[2] || "sa")[1] === b.dataset.role) return; $("map-role").value = b.dataset.role; $("map-go").click(); }; }
 function togglePanel() { panelOpen = !panelOpen; $("panel").style.display = panelOpen ? "block" : "none"; if (panelOpen) { if (document.pointerLockElement) document.exitPointerLock(); } else wantLock(); }
 const SLIDERS = [["px", "Pixel size", 1, 6, 1], ["fov", "Field of view", 70, 115, 1], ["sens", "Mouse speed", .3, 2.5, .05], ["sprint", "Sprint speed", 6, 14, .5], ["jump", "Jump power", 5, 11, .2],
@@ -535,7 +536,7 @@ function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now; clock += dt;
   if (!window.__hold) advance(dt);
   hurtFx = Math.max(0, hurtFx - dt * 1.6); coolFx = Math.max(0, coolFx - dt * 2.5); P.shake = Math.max(0, P.shake - dt * 1.5);
-  if (!started) { menuSpin += dt * .06; cam.position.set(Math.sin(menuSpin) * 30 * U, 12 * U, (Math.cos(menuSpin) * 30 + 4) * U); cam.rotation.set(-.28, menuSpin, 0); gun.visible = cannon.visible = false; VS.visible = false; VM.step(dt, VS); }
+  if (!started) { menuSpin += dt * .06; if (!GARAGE.step(dt)) { cam.position.set(Math.sin(menuSpin) * 30 * U, 12 * U, (Math.cos(menuSpin) * 30 + 4) * U); cam.rotation.set(-.28, menuSpin, 0); } gun.visible = cannon.visible = false; VS.visible = false; VM.step(dt, VS); }
   else if (MAP.on) { mapCamera(dt); mapFrame(dt); gun.visible = cannon.visible = fist.visible = flashM.visible = false; VS.visible = false; VM.step(dt, VS); }
   else if (seqCam()) { const [p, yaw, pitch] = seqCam(); cam.position.set(p.x * U, p.y * U, p.z * U); cam.rotation.set(pitch, yaw, 0); if (Math.abs(cam.fov - 84) > .05) { cam.fov = lerp(cam.fov, 84, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
   else { const t = P.titan, sh = P.shake * .06;
@@ -544,7 +545,7 @@ function frame(now) {
     P.eye = t ? t.eye - TITAN.KNEEL * Math.max(t.kneel, ease(t.land) * .7) : lerp(Math.min(P.eye, 1.8), P.h - .12 - (P.dead > 0 ? .9 : 0), 1 - Math.exp(-dt * 14));
     const moving = P.grounded && !P.sliding && !t ? Math.min(1, hs() / 9) : 0, bob = t ? Math.abs(Math.sin(t.walk * 1.1)) * .09 : Math.abs(Math.sin(P.bob)) * .035 * moving;
     cam.position.set(P.pos.x * U, (P.pos.y + P.eye - P.dip + bob) * U, P.pos.z * U); cam.rotation.set(P.pitch + VM.cam.pitch + (rnd() - .5) * sh, P.yaw + (rnd() - .5) * sh, P.roll + VM.cam.roll + (P.dead > 0 ? .5 : 0) + (rnd() - .5) * sh);
-    const fov = (t ? 88 : CFG.fov * (1 - (P.ads || 0) * (P.weapon === 1 ? .3 : pw().zoom))) + clamp((hs() - 9) / 8, 0, 1) * 9 * (1 - (P.ads || 0)) + (P.stimT > 0 ? 6 : 0); if (Math.abs(cam.fov - fov) > .05) { cam.fov = lerp(cam.fov, fov, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
+    const fov = !started && GARAGE.on ? GARAGE_FOV : (t ? 88 : CFG.fov * (1 - (P.ads || 0) * (P.weapon === 1 ? .3 : pw().zoom))) + clamp((hs() - 9) / 8, 0, 1) * 9 * (1 - (P.ads || 0)) + (P.stimT > 0 ? 6 : 0); if (Math.abs(cam.fov - fov) > .05) { cam.fov = lerp(cam.fov, fov, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
   const t = P.titan;
   render(clock, dt, Math.max(MAP.on ? 0 : hurtFx, P.dead > 0 && !MAP.on ? .8 : 0, t ? (1 - t.hull / t.hullMax) * .4 : (1 - P.hp / HP) * .5), Math.max(coolFx, P.charge * .6), MAP.on);
   if (SND) { cam.getWorldDirection(_f); SND.listener(cam.position.x / U, cam.position.y / U, cam.position.z / U, _f.x, _f.y, _f.z); }
