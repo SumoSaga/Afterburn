@@ -31,7 +31,7 @@ const hash2 = (x, y) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
 function noise2(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); return lerp(lerp(hash2(xi, yi), hash2(xi + 1, yi), u), lerp(hash2(xi, yi + 1), hash2(xi + 1, yi + 1), u), v); }
 
 /* ---------- settings ---------- */
-export const DEF = { px: 3, fov: 95, sens: 1, walk: 4.5, sprint: 6.5, jump: 7.4, gravity: 22, air: 2, wallTime: 3, wallSpeed: 9.5, wallKick: 2, slideBoost: 3, outlines: 1, palette: 0, blocks: 1, weather: "clear" };
+export const DEF = { px: 3, fov: 95, sens: 1, walk: 4.5, sprint: 6.5, jump: 7.4, gravity: 22, air: 2, wallTime: 3, wallSpeed: 9.5, wallKick: 2, slideBoost: 3, outlines: 1, palette: 0, blocks: 1, weather: "clear", shadows: 1, fps: 0 };
 export const CFG = { ...DEF };
 try { Object.assign(CFG, JSON.parse(localStorage.getItem("mf-fps-cfg3") || "{}")); } catch (e) {}
 export const saveCfg = () => { try { localStorage.setItem("mf-fps-cfg3", JSON.stringify(CFG)); } catch (e) {} };
@@ -143,7 +143,7 @@ export const post = new THREE.ShaderMaterial({
       if (useBlock > 0.5) {
         ivec2 p3 = cl((p / 3) * 3 + 1), p2 = cl((p / 2) * 2); float a3 = mask(p3), a2 = mask(p2);
         // (the close tier of 3 by 3 blocks made troops hard to read at arm's length, so figures now only ever go to 2 by 2, and only within 6 m)
-        if (a2 > 0.3 && a2 < 0.7 && (a2 > 0.55 || dep(p2) < 6.0 * unit)) { p = p2; st = 2; }
+        if (a2 > 0.3 && a2 < 0.55 && dep(p2) < 6.0 * unit) { p = p2; st = 2; }   // what you hold is no longer blocked up: the model rifle and hands have detail worth seeing
       }
       vec3 lin = texelFetch(tColor, p, 0).rgb;
       if (st > 1) { ivec2 o0 = st == 3 ? p - 1 : p; vec3 sum = vec3(0.0); float n = 0.0;   // the block shows the average of the figure's pixels inside it
@@ -484,7 +484,10 @@ else if (GEN) { placeGen("gen:humvee:c1", "damaged", -12, 26, 0); placeGen("gen:
 export const NAT = window.CBNature ? window.CBNature(THREE, { leafMat, flatToon }) : null;
 if (NAT) { const R2 = seeded(9173), clear = (x, z, r) => free(x, groundH(x, z) + .05, z, 1.5, r) && (PLAN || Math.hypot(x, z - 38) > 6);
   const YARDS = PLAN ? PLAN.yards : [[0, 0, 45]], YA = YARDS.reduce((t, y) => t + y[2] * y[2], 0), inYard = () => { let k = R2() * YA, y = YARDS[0]; for (const q of YARDS) { k -= q[2] * q[2]; if (k <= 0) { y = q; break; } } return [y[0] + (R2() - .5) * 2 * y[2], y[1] + (R2() - .5) * 2 * y[2]]; }, BIG = PLAN ? 4 : 1;
-  const put = (geo, mat, x, z, rot = 0, cast = true, dy = 0) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.position.set(x * U, (groundH(x, z) + dy) * U, z * U); m.rotation.y = rot; m.castShadow = cast; m.receiveShadow = true; if (cast && mat !== flatToon) m.customDepthMaterial = NAT.depth(); scene.add(m); return m; };
+  // Scattered growth is gathered and drawn as one mesh per material (a few hundred small meshes each cost a draw in every pass otherwise).
+  const HEAP = new Map(), M4h = new THREE.Matrix4(), Qh = new THREE.Quaternion(), UPh = V3(0, 1, 0), ONE = V3(1, 1, 1);
+  const put = (geo, mat, x, z, rot = 0, cast = true, dy = 0) => { if (!geo) return; const g = geo.clone(); g.applyMatrix4(M4h.compose(V3(x * U, (groundH(x, z) + dy) * U, z * U), Qh.setFromAxisAngle(UPh, rot), ONE)); const k = mat.uuid + (cast ? "c" : "n"); if (!HEAP.has(k)) HEAP.set(k, { mat, cast, geos: [] }); HEAP.get(k).geos.push(g); };
+  const heapOut = () => { for (const h of HEAP.values()) { let merged = null; try { merged = mergeGeometries(h.geos); } catch (e) {} for (const g of merged ? [merged] : h.geos) { const m = new THREE.Mesh(g, h.mat); m.castShadow = h.cast; m.receiveShadow = true; m.frustumCulled = false; if (h.cast && h.mat !== flatToon) m.customDepthMaterial = NAT.depth(); if (h.mat === NAT.leafSway) m.layers.set(3); scene.add(m); } if (merged) for (const g of h.geos) g.dispose(); } HEAP.clear(); };
   for (const [sp, x, z, sc] of PLAN ? PLAN.trees : [["dead", -41, 40, 1], ["pine", 41, 41, 1], ["pine", 43, 34, .8], ["oak", -42, -6, .9], ["dead", 14, 43, .9], ["birch", -43, 22, 1], ["pine", -43, -42, 1], ["dead", 43, -6, 1], ["oak", 20, 31, .75], ["birch", -9, -12, .8], ["dead", -38, -15, .8], ["pine", 44, 4, .9]]) {
     if (!clear(x, z, .6)) continue; const t = NAT.tree(sp, PLAN ? sp + Math.floor(R2() * 5) : sp + x + "|" + z, sc), gh = groundH(x, z); put(t.bark, NAT.barkSway, x, z); put(t.leaves, NAT.leafSway, x, z);
     const r = Math.max(.22, t.trunkR / U); BOXES.push({ min: [x - r, gh - .5, z - r], max: [x + r, gh + 4.5, z + r] }); SOL.addSolid({ x: x * U, z: z * U, yaw: 0, w: r * U, d: r * U, h: 80 }); }
@@ -492,12 +495,13 @@ if (NAT) { const R2 = seeded(9173), clear = (x, z, r) => free(x, groundH(x, z) +
   if (PLAN) PLAN.rocks.forEach(([x, z, size], i) => { const o = NAT.rock("pr" + (i % 7), size, .25); put(o.geo, flatToon, x, z, R2() * 6.28); });
   let n = 0, guard = 0; while (n < 26 * BIG && guard++ < 20000) { const [x, z] = inYard(); if (!isDirt(x, z) || !clear(x, z, .9)) continue; n++; const b = NAT.bush(["dry", "dry", "leafy", "nettle", "round", "fern"][Math.floor(R2() * 6)], "b" + (PLAN ? n % 12 : n), .8 + R2() * .5); put(b.leaves, NAT.leafSway, x, z); put(b.bark, NAT.barkSway, x, z); }
   n = 0; guard = 0; while (n < 22 * BIG && guard++ < 20000) { const [x, z] = inYard(); if (!isDirt(x, z) || !clear(x, z, .7)) continue; n++; const k = R2(), o = k < .7 ? NAT.rock("r" + n, 4 + R2() * 9, .25) : k < .85 ? NAT.log("l" + n, .8) : NAT.stump("s" + n, .9); put(o.geo, flatToon, x, z, R2() * 6.28); }
+  heapOut();
   // the forest on the hills: a few kinds of tree, each drawn many times over
   { const kinds = [["pine", 1], ["pine", 1.25], ["fir", 1], ["fir", 1.3], ["birch", .9], ["dead", 1], ["pine", .8]], vars = kinds.map(([sp, sc], i) => NAT.tree(sp, "forest" + i, sc)), lists = vars.map(() => []), M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), UP = V3(0, 1, 0); let got = 0, tries = 0;
     while (got < 340 && tries++ < 40000) { const x = -205 + R2() * 410, z = -235 + R2() * 430; if (wild(x, z) < .62 || slopeAt(x, z) > .85 || noise2(x * .028 + 50, z * .028) < .36 + R2() * .2 || groundH(x, z) > 30) continue; const k = Math.floor(R2() * vars.length), gh = groundH(x, z); lists[k].push([x, gh, z, R2() * 6.28, .8 + R2() * .5]); got++;
       if (x > WORLD.x0 && x < WORLD.x1 && z > WORLD.z0 && z < WORLD.z1) { const r = .3; BOXES.push({ min: [x - r, gh - 1, z - r], max: [x + r, gh + 5, z + r] }); SOL.addSolid({ x: x * U, z: z * U, yaw: 0, w: r * U, d: r * U, h: 80 }); } }
     vars.forEach((t, k) => { for (const [geo, mat] of [[t.bark, NAT.barkSway], [t.leaves, NAT.leafSway]]) { if (!geo || !lists[k].length) continue; const im = new THREE.InstancedMesh(geo, mat, lists[k].length);
-      lists[k].forEach(([x, y, z, rot, sc], i) => { M4.compose(V3(x * U, y * U, z * U), Q.setFromAxisAngle(UP, rot), V3(sc, sc, sc)); im.setMatrixAt(i, M4); }); im.castShadow = im.receiveShadow = true; im.customDepthMaterial = NAT.depth(); im.frustumCulled = false; scene.add(im); } });
+      lists[k].forEach(([x, y, z, rot, sc], i) => { M4.compose(V3(x * U, y * U, z * U), Q.setFromAxisAngle(UP, rot), V3(sc, sc, sc)); im.setMatrixAt(i, M4); }); im.castShadow = im.receiveShadow = true; im.customDepthMaterial = NAT.depth(); im.frustumCulled = false; if (mat === NAT.leafSway) im.layers.set(3); scene.add(im); } });
     const rocks = [0, 1, 2, 3].map((i) => NAT.rock("fr" + i, 7 + i * 4, .35)), rl = rocks.map(() => []); for (let i = 0; i < 150; i++) { const x = -200 + R2() * 400, z = -230 + R2() * 420; if (wild(x, z) < .5) continue; rl[i % 4].push([x, groundH(x, z) - .1, z, R2() * 6.28, .7 + R2() * 1.2]); }
     rocks.forEach((o, k) => { if (!rl[k].length) return; const im = new THREE.InstancedMesh(o.geo, flatToon, rl[k].length); rl[k].forEach(([x, y, z, rot, sc], i) => { M4.compose(V3(x * U, y * U, z * U), Q.setFromAxisAngle(UP, rot), V3(sc, sc, sc)); im.setMatrixAt(i, M4); }); im.castShadow = im.receiveShadow = true; im.frustumCulled = false; scene.add(im); }); }
   // grass grows where the ground is dirt, thicker in patches and along the foot of things
@@ -506,7 +510,7 @@ if (NAT) { const R2 = seeded(9173), clear = (x, z, r) => free(x, groundH(x, z) +
     const k = noise2(x * .21 + 90, z * .21), kind = k > .82 ? "tall" : k < .25 ? "meadow" : R2() < .05 ? "flowers" : "dry"; spots[kind].push([x * U, groundH(x, z) * U, z * U, .7 + R2() * .8, got]); got++; }
   for (let i = 0, n = 0; i < 30000 && n < 2600; i++) { const x = WORLD.x0 + R2() * 320, z = WORLD.z0 + R2() * 340; if (wild(x, z) < .35 || noise2(x * .07 + 7, z * .07 + 3) < .4 + R2() * .2 || slopeAt(x, z) > .8 || groundH(x, z) > 28) continue; const k = noise2(x * .2 + 90, z * .2); spots[k > .8 ? "tall" : k < .3 ? "meadow" : R2() < .06 ? "flowers" : "dry"].push([x * U, groundH(x, z) * U, z * U, .8 + R2() * .9, 5000 + n]); n++; }
   for (let i = 0; i < 420 * BIG; i++) { const [x, z] = inYard(); if (free(x, groundH(x, z) + .02, z, .4, .1)) spots.litter.push([x * U, groundH(x, z) * U + .5, z * U, 1, i]); }
-  for (const kind in spots) { const g = NAT.cover(spots[kind], kind); if (!g) continue; const m = new THREE.Mesh(g, NAT.leafSway); m.scale.y = kind === "litter" ? 1 : .5; m.receiveShadow = true; m.frustumCulled = false; scene.add(m); }
+  for (const kind in spots) { const g = NAT.cover(spots[kind], kind); if (!g) continue; const m = new THREE.Mesh(g, NAT.leafSway); m.scale.y = kind === "litter" ? 1 : .5; m.receiveShadow = true; m.frustumCulled = false; m.layers.set(3); scene.add(m); }
 }
 
 // dust in the low light: a loose cloud that stays round the pilot
@@ -524,18 +528,26 @@ const wxGroup = new THREE.Group(); scene.add(wxGroup);   // rain and snow are ke
 if (window.CBWEATHER) window.CBWEATHER.start({ THREE, scene: wxGroup, game: WEATHER, size: () => [100 * U, 100 * U], target: () => cam.position, sun, hemi, post, tod: () => TOD, fxLayer, flash });
 
 /* ---------- drawing a frame ---------- */
-const _pv = new THREE.Matrix4();
+const _pv = new THREE.Matrix4(); let frameN = -1;
 export function render(t, dt, hurt, cool, fromAbove) { if (ROOFS) ROOFS.visible = !fromAbove;
   tickFx(dt); tickAir(dt, t); if (NAT) NAT.WIND.uTime.value = t;
   sky.position.copy(cam.position); wxGroup.position.set(cam.position.x, Math.max(0, cam.position.y - 120 * U), cam.position.z); cam.updateMatrixWorld();
   const u = post.uniforms; u.time.value = t; u.shaftK.value = fromAbove ? .12 : 1; u.fogMix.value = fromAbove ? .25 : 1; u.hurt.value = hurt; u.cool.value = cool || 0; u.useLine.value = CFG.outlines; u.usePal.value = CFG.palette; u.useBlock.value = CFG.blocks;
   _pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); u.invPV.value.copy(_pv).invert(); u.camPos.value.copy(cam.position);
-  if (sun.shadow.map) { u.tShadow.value = sun.shadow.map.texture; u.shadowM.value.copy(sun.shadow.matrix); u.hasShadow.value = 1; }
-  cam.layers.set(0); cam.layers.enable(1);
+  /* What a frame costs, and what is done about it:
+     - the sun's shadow map covers the whole field and nearly all of it is still, so it is redrawn on one frame in three;
+       with shadows turned off in Settings it is not drawn at all;
+     - leaves and grass (layer 3) are drawn in colour only. They take no outlines, so the second pass, which exists to find
+       outlines, leaves them out;
+     - with outlines turned off that second pass is skipped altogether. */
+  frameN++; const shOn = CFG.shadows !== 0; if (sun.castShadow !== shOn) sun.castShadow = shOn; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = shOn && frameN % 3 === 0;
+  if (shOn && sun.shadow.map) { u.tShadow.value = sun.shadow.map.texture; u.shadowM.value.copy(sun.shadow.matrix); u.hasShadow.value = 1; } else u.hasShadow.value = 0;
+  cam.layers.set(0); cam.layers.enable(1); cam.layers.enable(3);
   renderer.setRenderTarget(colorRT); renderer.clear(); renderer.render(scene, cam); GL.depthRange(0, .02); renderer.render(gunScene, gunCam); GL.depthRange(0, 1);   // what the pilot holds is drawn into the nearest sliver of depth, so it never pokes into a wall
-  cam.layers.set(0); scene.overrideMaterial = gunScene.overrideMaterial = normMat; const sm = renderer.shadowMap.autoUpdate; renderer.shadowMap.autoUpdate = false;
-  renderer.setRenderTarget(normRT); renderer.clear(); renderer.render(scene, cam); GL.depthRange(0, .02); renderer.render(gunScene, gunCam); GL.depthRange(0, 1);
-  scene.overrideMaterial = gunScene.overrideMaterial = null; renderer.shadowMap.autoUpdate = sm;
+  renderer.shadowMap.needsUpdate = false;
+  if (CFG.outlines) { cam.layers.set(0); scene.overrideMaterial = gunScene.overrideMaterial = normMat;
+    renderer.setRenderTarget(normRT); renderer.clear(); renderer.render(scene, cam); GL.depthRange(0, .02); renderer.render(gunScene, gunCam); GL.depthRange(0, 1);
+    scene.overrideMaterial = gunScene.overrideMaterial = null; cam.layers.enable(1); cam.layers.enable(3); }
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 makeRTs();

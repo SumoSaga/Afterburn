@@ -159,7 +159,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "22";
+  window.AB_BUILD = "23";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "engine", "figure", "game", "garage", "hands", "mapgen", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -217,7 +217,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 22 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 23 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -281,6 +281,7 @@
  </div>
 </div>
 
+<div id="fps" style="display:none;position:fixed;right:10px;bottom:10px;z-index:30;font:12px monospace;color:#f2c46a;background:rgba(20,16,12,.7);padding:2px 6px"></div>
 <div id="settings" class="box">
   <h1 style="font-size:16px">SETTINGS</h1>
   <h2>Sound</h2>
@@ -289,6 +290,9 @@
   <div id="s-mix"></div>
   <h2>Mouse and view</h2>
   <div id="s-view"></div>
+  <h2>Smoother play</h2>
+  <p><i>If the game drags, try these from the top. A bigger pixel size above helps the most, then shadows, then outlines.</i></p>
+  <div class="row"><button id="s-shadow">Shadows</button><button id="s-line">Outlines</button><button id="s-fps">Frame counter</button></div>
   <div class="row" style="margin-top:14px"><button id="s-close" class="on">Back</button><button id="s-tune">Tuning</button><button id="s-lab">Sound lab</button></div>
   <p class="lab">Escape opens and closes this page. These save on this browser.</p>
 </div>
@@ -306,15 +310,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=22"></script>
-<script src="punch/punch-lab.js?v=22"></script>
-<script src="cb/genbuild.js?v=22"></script>
-<script src="cb/machines.js?v=22"></script>
-<script src="cb/soldiers.js?v=22"></script>
-<script src="cb/cbmechdata.js?v=22"></script>
-<script src="cb/cbmech.js?v=22"></script>
-<script src="cb/cbnature.js?v=22"></script>
-<script src="cb/cbweather.js?v=22"></script>
+<script src="punch/punch.js?v=23"></script>
+<script src="punch/punch-lab.js?v=23"></script>
+<script src="cb/genbuild.js?v=23"></script>
+<script src="cb/machines.js?v=23"></script>
+<script src="cb/soldiers.js?v=23"></script>
+<script src="cb/cbmechdata.js?v=23"></script>
+<script src="cb/cbmech.js?v=23"></script>
+<script src="cb/cbnature.js?v=23"></script>
+<script src="cb/cbweather.js?v=23"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>

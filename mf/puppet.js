@@ -9,7 +9,9 @@ import { THREE, grad, clamp } from "./engine.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 
-export async function loadModel(file, key, foeTint = "#b98f86") {
+const LOADED = new Map();   // one load per file, however many places ask for it
+export function loadModel(file, key, foeTint = "#b98f86") { if (!LOADED.has(file)) LOADED.set(file, loadOnce(file, key, foeTint)); return LOADED.get(file); }
+async function loadOnce(file, key, foeTint) {
   try { const g = await new GLTFLoader().loadAsync(new URL("../models/" + file + "?v=" + (globalThis.AB_BUILD || ""), import.meta.url).href); let map = null; g.scene.traverse((o) => { if (o.isMesh && o.material.map) map = o.material.map; });
     const mk = (col, k, alpha = "0.5") => { const m = new THREE.MeshToonMaterial({ map, color: col, gradientMap: grad, side: THREE.DoubleSide }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a = " + alpha + ";"); }; m.customProgramCacheKey = () => key + k; return m; };   // the alpha marks what it is for the pixel pass: .5 a figure, .6 what the pilot holds
     return { scene: g.scene, mk, mats: { you: mk("#ffffff", "A"), foe: mk(foeTint, "B"), husk: mk("#2a2624", "H") } };
@@ -19,6 +21,7 @@ export async function loadModel(file, key, foeTint = "#b98f86") {
 /* o: { root (the skeleton's space, scaled so its units are metres), height, turn (radians to face the skeleton's way), team,
         hips, hipY (the hips joint's height at rest), ankle (the foot joint's height at rest), fwd [x,y,z] (which way knees point),
         full: [[bone, joint], ...] parents first, legs: [{ foot, sd }], arms: [{ hand, sd, pole: [x,y,z], poleIn }], keep: [objects left visible] } */
+export { cloneSkinned };
 export function puppet(M, o) {
   const root = o.root, box = new THREE.Group(), mdl = cloneSkinned(M.scene); box.rotation.y = o.turn; box.scale.setScalar(o.height); box.add(mdl); root.add(box);
   let skin = null; mdl.traverse((x) => { if (x.isSkinnedMesh) { skin = x; x.material = M.mats[o.team] || M.mats.you; x.frustumCulled = false; x.castShadow = true; } });
