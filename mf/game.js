@@ -3,6 +3,7 @@
    Everything here is in metres; the engine draws at U units to the metre. */
 import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, cam, gunScene, gunMat, makeRTs, render, BOXES, hitsBox, free, freeG, boxesNear, groundH, WORLD, rayBox, rayWorld,
   flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat } from "./engine.js";
+import { VM } from "./hands.js";
 import { makeRig, TITAN } from "./titan.js";
 import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
 import { NET, onMsg, send, host, join, leave, cut } from "./net.js";
@@ -36,7 +37,7 @@ function friction(B, f, dt) { const s = Math.hypot(B.vel.x, B.vel.z); if (s < .0
 /* ---------- the pilot ---------- */
 const SPAWN = [0, .1, 126];
 const P = { pos: V3(), vel: V3(), h: 1.8, r: .35, eye: 1.68, yaw: 0, pitch: 0, roll: 0, grounded: false, canDouble: true, jumpBuf: 0, coyote: 0, sliding: false, slideCd: 0, crouchLatch: false,
-  wall: null, lastWall: null, wallCd: 0, mantle: null, hp: 100, hurtT: 9, dead: 0, dip: 0, bob: 0, shake: 0, weapon: 0, ammo: 24, reload: 0, fireCd: 0, kick: 0, spread: 0, charge: 0,
+  wall: null, lastWall: null, wallCd: 0, mantle: null, hp: 100, hurtT: 9, dead: 0, dip: 0, bob: 0, shake: 0, weapon: 0, ammo: 24, reload: 0, swapT: -1, swapFrom: "carbine", swapTo: 0, nadeT: -1, meleeT: -1, nades: 2, fireCd: 0, kick: 0, spread: 0, charge: 0,
   meter: 0, titan: null, mine: null, onLand(v) { P.dip = clamp(v * .012, 0, .25); } };
 const CK = { mode: "off", t: 0, glitch: 0 };   // the cockpit screens: off, dark, boot, on, shut
 const K = {}; let mouseDown = false, started = false, panelOpen = false, locked = false, noLock = false;
@@ -47,7 +48,7 @@ function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .3 : 0), z
 const _down = V3(0, -1, 0);
 function groundBelow() { const t = rayWorld(P.pos.clone().setY(P.pos.y + .1), _down, 50); return P.pos.y + .1 - t; }
 function endWall(cd) { const w = P.wall; P.lastWall = { ax: w.ax, n: w.n, c: P.pos.getComponent(w.ax) }; P.wall = null; P.wallCd = cd; }
-function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; if (B.mp && !MY.south) P.pos.set(ox, groundH(ox, -146) + .1, -146); else P.pos.set(SPAWN[0] + ox, groundH(SPAWN[0] + ox, SPAWN[2]) + .1, SPAWN[2]); P.vel.set(0, 0, 0); P.yaw = B.mp && !MY.south ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
+function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; if (B.mp && !MY.south) P.pos.set(ox, groundH(ox, -146) + .1, -146); else P.pos.set(SPAWN[0] + ox, groundH(SPAWN[0] + ox, SPAWN[2]) + .1, SPAWN[2]); P.vel.set(0, 0, 0); P.yaw = B.mp && !MY.south ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
 
 function stepPilot(dt) {
   P.jumpBuf -= dt; P.coyote -= dt; P.slideCd -= dt; P.wallCd -= dt; P.hurtT += dt;
@@ -282,13 +283,8 @@ function stepRide(dt) { const t = P.titan; if (!t.alive || t.doom > 0) { throwCl
 }
 
 /* ---------- what the pilot holds ---------- */
-const gun = new THREE.Group(); gun.scale.setScalar(.62); gunScene.add(gun);
+const gun = new THREE.Group(); gun.scale.setScalar(.62); gunScene.add(gun);   // the Titan cannon you see from the cockpit; the pilot's own hands are in hands.js
 function partGeo(list) { const g = []; const c = new THREE.Color(); for (const [w, h, d, x, y, z, col] of list) { const b = new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z).toNonIndexed(); b.deleteAttribute("uv"); c.set(col); const a = []; for (let i = 0; i < b.attributes.position.count; i++) a.push(c.r, c.g, c.b); b.setAttribute("color", new THREE.Float32BufferAttribute(a, 3)); g.push(b); } return mergeGeometries(g); }
-const carbine = new THREE.Mesh(partGeo([[.07, .09, .5, 0, 0, -.1, "#454c52"], [.045, .045, .3, 0, .03, -.5, "#231d17"], [.08, .1, .22, 0, -.01, .26, "#5f676d"], [.06, .16, .08, 0, -.15, .02, "#231d17"], [.05, .14, .07, 0, -.13, -.16, "#c9733a"],
-  [.03, .05, .1, 0, .09, -.06, "#231d17"], [.09, .03, .2, 0, .085, -.22, "#7d858a"], [.075, .02, .3, 0, -.012, -.2, "#c9733a"], [.1, .1, .12, 0, -.1, .12, "#4f5a3c"], [.09, .09, .3, .02, -.2, .3, "#4f5a3c"], [.02, .03, .34, .045, .03, -.2, "#231d17"], [.02, .03, .34, -.045, .03, -.2, "#231d17"]]), gunMat); gun.add(carbine);
-const chargeR = new THREE.Mesh(partGeo([[.08, .1, .62, 0, 0, -.16, "#3b4430"], [.05, .05, .5, 0, .025, -.62, "#231d17"], [.1, .12, .2, 0, -.01, .26, "#5f676d"], [.06, .16, .08, 0, -.15, .02, "#231d17"], [.11, .05, .3, 0, .1, -.2, "#7d858a"],
-  [.12, .12, .1, 0, -.01, -.42, "#454c52"], [.12, .12, .06, 0, -.01, -.6, "#454c52"], [.1, .1, .12, 0, -.1, .12, "#4f5a3c"], [.09, .09, .3, .02, -.2, .3, "#4f5a3c"]]), gunMat); gun.add(chargeR);
-const coil = new THREE.Mesh(new THREE.BoxGeometry(.06, .06, .14), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.4, 3) })); coil.position.set(0, .05, -.51); chargeR.add(coil);
 const cannon = new THREE.Mesh(partGeo([[.24, .22, 1.2, 0, 0, -.4, "#454c52"], [.07, .07, 1.0, -.055, .12, -1.5, "#231d17"], [.07, .07, 1.0, .055, .12, -1.5, "#231d17"], [.07, .07, 1.0, 0, .03, -1.5, "#231d17"], [.2, .2, .1, 0, .01, -1.52, "#5f676d"], [.2, .2, .08, 0, .01, -1.98, "#5f676d"],
   [.28, .05, .8, 0, .22, -.5, "#7d858a"], [.26, .04, .5, 0, -.03, -.55, "#c9733a"], [.3, .3, .36, 0, -.04, .3, "#5f676d"], [.22, .26, .26, -.2, -.06, -.2, "#4f5a3c"], [.23, .05, .27, -.2, .06, -.2, "#c9733a"], [.04, .1, .3, .13, .08, -.3, "#231d17"]]), gunMat); cannon.scale.setScalar(.72); gunScene.add(cannon);
 const fist = new THREE.Mesh(partGeo([[.5, .44, .5, 0, 0, 0, "#34373a"], [.56, .2, .56, 0, .2, 0, "#b9b3a4"], [.44, .44, .9, 0, 0, .7, "#8f8a80"], [.16, .16, .52, -.16, .1, -.3, "#34373a"], [.16, .16, .52, .16, .1, -.3, "#34373a"]]), gunMat); fist.visible = false; gunScene.add(fist);
@@ -299,7 +295,7 @@ function aimRay(spread) { cam.getWorldDirection(_f); _r.set(1, 0, 0).applyQuater
 function titanHit(o, d, best, team) { let who = null; for (const t of TITANS) { if (!t.alive || t.team === team) continue; const tt = rayBox(o, d, [t.pos.x - t.r, t.pos.y, t.pos.z - t.r], [t.pos.x + t.r, t.pos.y + t.h, t.pos.z + t.r], best); if (tt < best) { best = tt; who = t; } } return { best, who }; }
 function muzzleAt(side, down, fwd) { return _o.clone().addScaledVector(_r, side).addScaledVector(_u, -down).addScaledVector(_f, fwd).multiplyScalar(U); }
 function fireCarbine() {
-  P.ammo--; snd("carbine", { layerGain: { mech: P.ammo < 6 ? 1 + (6 - P.ammo) * .5 : 1 }, pitch: LOAD.weapon === "longrifle" ? .82 : LOAD.weapon === "smg" ? 1.18 : 1 }); P.fireCd = pw().cd; P.kick = Math.min(1, P.kick + .35); flashT = .045; if (!runOn && !runDone) runOn = true;
+  P.ammo--; snd("carbine", { layerGain: { mech: P.ammo < 6 ? 1 + (6 - P.ammo) * .5 : 1 }, pitch: LOAD.weapon === "longrifle" ? .82 : LOAD.weapon === "smg" ? 1.18 : 1 }); P.fireCd = pw().cd; P.kick = Math.min(1, P.kick + .35); VM.kick(LOAD.weapon === "longrifle" ? 2.4 : LOAD.weapon === "smg" ? .7 : 1); flashT = .045; if (!runOn && !runDone) runOn = true;
   aimRay(pw().spread + P.spread * .02 + (P.grounded ? 0 : .006)); P.spread = Math.min(1, P.spread + .12); P.pitch += .004;
   let best = rayWorld(_o, _d, 220); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
   const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .7); tracer(from, eu, "#ffd890", 9000, .5); flash(from, "#ffc477", 900, .06);
@@ -311,7 +307,7 @@ function fireCarbine() {
 }
 let chargeSnd = null;
 function fireCharge() {
-  if (chargeSnd) { chargeSnd.stop(.03); chargeSnd = null; } snd("charge_fire"); snd("charge_cool"); P.charge = 0; P.fireCd = .9; P.kick = 1; flashT = .08; if (!runOn && !runDone) runOn = true; aimRay(0); P.pitch += .02; coolFx = .5;
+  if (chargeSnd) { chargeSnd.stop(.03); chargeSnd = null; } snd("charge_fire"); snd("charge_cool"); P.charge = 0; P.fireCd = .9; P.kick = 1; VM.kick(3.2); flashT = .08; if (!runOn && !runDone) runOn = true; aimRay(0); P.pitch += .02; coolFx = .5;
   let best = rayWorld(_o, _d, 260); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
   const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .8); tracer(from, eu, "#8fe0f0", 30000, 1.6); flash(from, "#8fe0f0", 2600, .14); flash(eu, "#8fe0f0", 2200, .2);
   puff(eu, { n: 18, color: "#d8f8ff", hot: 3, size: 4, life: .35, vel: () => V3((rnd() - .5) * 110, rnd() * 90, (rnd() - .5) * 110) }); ringFx(eu, "#8fe0f0", 30, .3);
@@ -327,21 +323,44 @@ function fireCannon(t) {
   if (th.who) { hurtTitan(th.who, 34); hitT = .12; } else if (gh.who && gh.who.veh) damage(gh.who, 80, toU(P.pos), "blast", true); if (gh.who || th.who) { hitT = .12; snd("hitmarker", { gain: .8 }); }
   blast(end, 2.2, { team: "you" });
 }
+const SWAP = .5, NADE = .8, KNIFE = .5, gunKind = () => P.weapon === 1 ? "charge" : PW[LOAD.weapon] ? LOAD.weapon : "carbine", handsBusy = () => P.swapT >= 0 || P.nadeT >= 0 || P.meleeT >= 0;
+const NADES = [];
+function startSwap(to) { if (P.titan || handsBusy() || to === P.weapon) return; P.swapFrom = gunKind(); P.swapTo = to; P.swapT = 0; P.reload = 0; P.charge = 0; snd("swap"); }
+function startNade() { if (P.titan || P.seq || P.dead > 0 || handsBusy() || P.nades <= 0) return; P.nadeT = 0; P.nadeOut = false; P.reload = 0; P.charge = 0; snd("frag_pin"); }
+function startKnife() { if (P.titan || P.seq || P.dead > 0 || handsBusy()) return; P.meleeT = 0; P.meleeHit = false; P.reload = 0; P.charge = 0; snd("melee_knife"); }
+function throwNade() { P.nades--; aimRay(0); const pos = _o.clone().addScaledVector(_r, -.25).addScaledVector(_f, .5), vel = _f.clone().multiplyScalar(21).add(V3(0, 4.5, 0)).addScaledVector(P.vel, .6); snd("swap", { pitch: 1.3, gain: .8 }); mkNade(pos, vel, "you"); if (B.mp) relay("nade", [r2(pos.x), r2(pos.y), r2(pos.z), r2(vel.x), r2(vel.y), r2(vel.z)]); }
+function mkNade(pos, vel, team) { const m = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.6, 2.2), new THREE.MeshBasicMaterial({ color: "#2f3528" })); scene.add(m); NADES.push({ pos, vel, team, t: 1.7, mesh: m, spin: rnd() * 6 }); }
+// a grenade in the air: it falls, bounces off whatever it meets and goes off when its fuse runs out
+function stepNades(dt) { for (let i = NADES.length - 1; i >= 0; i--) { const n = NADES[i], p = n.pos, v = n.vel; n.t -= dt; v.y -= 24 * dt; let hit = false;
+    const nx = p.x + v.x * dt, nz = p.z + v.z * dt; if (free(nx, p.y, p.z, .15, .12)) p.x = nx; else { v.x *= -.45; hit = true; } if (free(p.x, p.y, nz, .15, .12)) p.z = nz; else { v.z *= -.45; hit = true; }
+    const ny = p.y + v.y * dt, g = groundH(p.x, p.z) + .08; if (ny <= g) { p.y = g; if (v.y < -3) hit = true; v.y *= -.35; v.x *= .7; v.z *= .7; } else if (!free(p.x, ny, p.z, .15, .12)) { if (v.y < -3) hit = true; v.y *= -.35; v.x *= .7; v.z *= .7; } else p.y = ny;
+    if (hit && v.length() > 2.5) snd("frag_bounce", { pos: xyz(p) }); n.spin += dt * 9; n.mesh.position.set(p.x * U, p.y * U, p.z * U); n.mesh.rotation.set(n.spin, n.spin * .7, 0);
+    if (n.t <= 0) { scene.remove(n.mesh); NADES.splice(i, 1); snd("frag_blast", { pos: xyz(p) }); blast(p.clone(), 4.2, n.team ? { team: n.team } : {}); } } }
+function knifeHit() { aimRay(0); let best = Math.min(2.7, rayWorld(_o, _d, 2.7)); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best), end = _o.clone().addScaledVector(_d, rh.best);
+  if (rh.hit) { relay("phit", [rh.rp.slot, 100, 0]); snd("melee_hit", { pos: xyz(end) }); snd("hitmarker"); hitT = .15; P.shake = Math.max(P.shake, .12); }
+  else if (th.who) { hurtTitan(th.who, 2); snd("impact_metal", { pos: xyz(end) }); P.shake = Math.max(P.shake, .08); }
+  else if (gh.who) { snd(gh.who.veh ? "impact_metal" : "melee_hit", { pos: xyz(end) }); snd("hitmarker"); hitT = .15; P.shake = Math.max(P.shake, .12); damage(gh.who, gh.who.veh ? 10 : 9999, toU(P.pos), "chest", true); } }
+const VS = { visible: false };
 function stepGun(dt) {
-  P.fireCd -= dt; P.kick = Math.max(0, P.kick - dt * 5); P.spread = Math.max(0, P.spread - dt * 1.6); flashT -= dt; hitT -= dt;
-  const t = P.titan, canFire = mouseDown && P.dead <= 0 && !P.mantle && !P.seq;
-  if (chargeSnd && (t || P.weapon !== 1 || P.dead > 0)) { chargeSnd.stop(.05); chargeSnd = null; }
-  if (t) { if ((K.KeyR && t.ammo < 18 && t.reload <= 0) || (t.ammo <= 0 && t.reload <= 0)) { t.reload = 2.2; snd("reload", { pitch: .6, gain: 1.2 }); } else if (canFire && t.fireCd <= 0 && t.reload <= 0) fireCannon(t); }
+  P.fireCd -= dt; P.kick = Math.max(0, P.kick - dt * 5); P.spread = Math.max(0, P.spread - dt * 1.6); flashT -= dt; hitT -= dt; stepNades(dt);
+  const t = P.titan, out = t || P.dead > 0 || P.seq; if (out) { P.swapT = P.nadeT = P.meleeT = -1; }
+  // the moves the hands make: each has its own clock, and the thing it does happens part way through
+  if (P.swapT >= 0) { const was = P.swapT; P.swapT += dt; if (was < SWAP * .42 && P.swapT >= SWAP * .42) { P.weapon = P.swapTo; snd("raise"); } if (P.swapT >= SWAP) { P.swapT = -1; VM.bump(-1.2); } }
+  if (P.nadeT >= 0) { P.nadeT += dt; if (!P.nadeOut && P.nadeT >= NADE * .5) { P.nadeOut = true; throwNade(); VM.bump(1.6); } if (P.nadeT >= NADE) P.nadeT = -1; }
+  if (P.meleeT >= 0) { P.meleeT += dt; if (!P.meleeHit && P.meleeT >= KNIFE * .36) { P.meleeHit = true; knifeHit(); VM.bump(1); } if (P.meleeT >= KNIFE) P.meleeT = -1; }
+  const busy = handsBusy(), canFire = mouseDown && P.dead <= 0 && !P.mantle && !P.seq && !busy;
+  if (chargeSnd && (t || P.weapon !== 1 || P.dead > 0 || busy)) { chargeSnd.stop(.05); chargeSnd = null; }
+  if (t) { if ((K.KeyR && t.ammo < 18 && t.reload <= 0) || (t.ammo <= 0 && t.reload <= 0)) { t.reload = 2.2; snd("reload", { pitch: .6, gain: 1.2 }); } else if (mouseDown && P.dead <= 0 && !P.seq && t.fireCd <= 0 && t.reload <= 0) fireCannon(t); }
+  else if (busy) { }
   else if (P.weapon === 1) { if (canFire && P.fireCd <= 0) { if (!chargeSnd) chargeSnd = snd("charge_up"); P.charge += dt / .8; if (P.charge >= 1) fireCharge(); } else { if (chargeSnd) { chargeSnd.stop(.05); chargeSnd = null; } P.charge = Math.max(0, P.charge - dt * 2); } }
-  else { if (P.reload > 0) { P.reload -= dt; if (P.reload <= 0) P.ammo = pw().mag; } else if ((K.KeyR && P.ammo < pw().mag) || P.ammo <= 0) { P.reload = pw().reload; snd("reload"); } else if (canFire && P.fireCd <= 0) fireCarbine(); }
+  else { if (P.reload > 0) { const R = pw().reload, u0 = 1 - P.reload / R; P.reload -= dt; const u1 = 1 - P.reload / R; if (u0 < .27 && u1 >= .27) VM.bump(-.8); if (u0 < .655 && u1 >= .655) { VM.bump(2.2); snd("selector", { gain: .8, pitch: .8 }); } if (u0 < .87 && u1 >= .87) VM.bump(-1.6); if (P.reload <= 0) P.ammo = pw().mag; }
+    else if ((K.KeyR && P.ammo < pw().mag) || P.ammo <= 0) { P.reload = pw().reload; snd("reload"); } else if (canFire && P.fireCd <= 0) fireCarbine(); }
   const s = hs(), moving = P.grounded && !P.sliding && !t ? Math.min(1, s / 9) : 0; P.bob += dt * (5 + s * .9) * (moving > 0 ? 1 : 0);
-  const rl = !t && P.weapon === 0 && P.reload > 0 ? Math.sin(clamp(1 - P.reload / pw().reload, 0, 1) * Math.PI) : 0;
-  gun.visible = !t && P.dead <= 0 && !P.seq; carbine.visible = P.weapon === 0; chargeR.visible = P.weapon === 1; cannon.visible = !!t && CK.mode === "on"; fist.visible = cannon.visible && t.punch > 0; if (fist.visible) { const u = Math.sin(clamp(1 - t.punch / .45, 0, 1) * Math.PI); fist.position.set(-.5 + u * .3, -.75 + u * .35, -.6 - u * .9); }
-  gun.position.set(.17 + Math.cos(P.bob) * .012 * moving + P.roll * .25, -.17 + Math.abs(Math.sin(P.bob)) * .014 * moving - rl * .22 - P.dip * .3 - (P.sliding ? .03 : 0), -.5 + P.kick * .05);
-  gun.rotation.set(P.kick * .05 + rl * .7 + (P.mantle ? .6 : 0), .03, P.roll * .6 + (P.sliding ? -.18 : 0));
-  if (P.weapon === 1) { coil.scale.setScalar(.6 + P.charge * 1.6); coil.material.color.setRGB(.5 + P.charge * 2, 2.4 + P.charge * 3, 3 + P.charge * 4); if (P.charge > 0) gun.position.x += (rnd() - .5) * .004 * P.charge; }
+  VS.visible = !t && P.dead <= 0 && !P.seq && !MAP.on && started; VS.kind = gunKind(); VS.charge = P.weapon === 1 ? P.charge : 0; VS.reload = P.weapon === 0 && P.reload > 0 ? clamp(1 - P.reload / pw().reload, 0, 1) : -1; VS.swap = P.swapT >= 0 ? P.swapT / SWAP : -1; VS.swapFrom = P.swapFrom; VS.nade = P.nadeT >= 0 ? P.nadeT / NADE : -1; VS.melee = P.meleeT >= 0 ? P.meleeT / KNIFE : -1;
+  VS.speed = s; VS.grounded = P.grounded; VS.vy = P.vel.y; VS.vy0 = P.vyWas || 0; P.vyWas = P.vel.y; VS.sliding = P.sliding; VS.mantle = !!P.mantle; VS.roll = P.roll; VS.dip = P.dip; VS.yaw = P.yaw; VS.pitch = P.pitch; VS.firing = mouseDown || P.fireCd > -.25; VM.step(dt, VS);
+  gun.visible = !!t; cannon.visible = !!t && CK.mode === "on"; fist.visible = cannon.visible && t.punch > 0; if (fist.visible) { const u = Math.sin(clamp(1 - t.punch / .45, 0, 1) * Math.PI); fist.position.set(-.5 + u * .3, -.75 + u * .35, -.6 - u * .9); }
   if (t) { const tr = t.reload > 0 ? Math.sin(Math.min(1, (2.2 - t.reload) / 2.2) * Math.PI) : 0, wb = Math.sin(t.walk * 1.1); cannon.position.set(.66, -.6 - tr * .4 + Math.abs(wb) * .02, -.5 + P.kick * .1); cannon.rotation.set(P.kick * .03 + tr * .5, .04, 0); }
-  flashM.visible = flashT > 0; if (flashM.visible) { if (t) { flashM.position.set(.66, -.52, -2.0); flashM.scale.setScalar(2.6); } else { flashM.position.set(gun.position.x, gun.position.y + .035, gun.position.z - .47); flashM.scale.setScalar(P.weapon === 1 ? 1.6 : 1); } flashM.rotation.z = rnd() * 3; }
+  flashM.visible = flashT > 0 && (!!t || VS.visible); if (flashM.visible) { if (t) { flashM.position.set(.66, -.52, -2.0); flashM.scale.setScalar(2.6); } else { flashM.position.copy(VM.muzzle); flashM.position.z -= .05; flashM.scale.setScalar(P.weapon === 1 ? 1.5 : .9); } flashM.rotation.z = rnd() * 3; }
 }
 
 /* ---------- the run ---------- */
@@ -357,14 +376,14 @@ document.addEventListener("pointerlockerror", () => { noLock = true; });
 const active = () => started && !panelOpen && (locked || noLock || MAP.on);
 function toggleMap() { if (MAP.on) { setMap(false); wantLock(); } else { setMap(true); for (const k in K) K[k] = false; mouseDown = false; if (document.pointerLockElement) document.exitPointerLock(); } }
 function useKey() { if (P.seq) return; if (P.titan) { startExit(); return; } const m = P.mine; if (m && m.alive && m.doom <= 0 && Math.hypot(m.pos.x - P.pos.x, m.pos.z - P.pos.z) < 7 && Math.abs(m.pos.y - P.pos.y) < 6) startEnter(m); }
-addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.preventDefault(); if (e.repeat) return; if (started && ["Space", "Tab", "KeyC", "KeyR", "KeyE", "KeyV", "KeyQ", "KeyF"].includes(e.code)) e.preventDefault();
+addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.preventDefault(); if (e.repeat) return; if (started && ["Space", "Tab", "KeyC", "KeyR", "KeyE", "KeyV", "KeyQ", "KeyF", "KeyG"].includes(e.code)) e.preventDefault();
   if (e.code === "KeyP" && started && !MAP.on) { togglePanel(); return; }
   if (e.code === "Tab" && started && !panelOpen) { toggleMap(); return; }
   if (MAP.on) { MAP.keys[e.code] = true; if (e.code === "KeyT") again(); return; }
   if (!active()) return; const code = e.code === "ControlLeft" ? "KeyC" : e.code; K[code] = true;
   if (code === "Space") P.jumpBuf = .14; if (code === "KeyT") again(); if (code === "KeyE" && P.dead <= 0) useKey(); if (code === "KeyV" && P.dead <= 0 && !P.titan) tryCallTitan();
-  if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") K._punch = !!P.titan;
-  if (!P.titan && (code === "KeyQ" || code === "Digit1" || code === "Digit2")) { P.weapon = code === "KeyQ" ? 1 - P.weapon : code === "Digit2" ? 1 : 0; P.charge = 0; P.fireCd = Math.max(P.fireCd, .25); snd("swap"); }
+  if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") { if (P.titan) K._punch = true; else startKnife(); } if (code === "KeyG") startNade();
+  if (!P.titan && (code === "KeyQ" || code === "Digit1" || code === "Digit2")) startSwap(code === "KeyQ" ? 1 - P.weapon : code === "Digit2" ? 1 : 0);
   if (!runOn && !runDone && ["KeyW", "KeyA", "KeyS", "KeyD"].includes(code)) runOn = true; });
 addEventListener("keyup", (e) => { K[e.code === "ControlLeft" ? "KeyC" : e.code] = false; MAP.keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in K) K[k] = false; mouseDown = false; });
@@ -455,7 +474,7 @@ function cockpit(dt) {
 }
 function hud(dt) { el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
   hudT -= dt; if (hudT > 0) return; hudT = .08; const m = P.mine;
-  el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp + "%"; el.speed.textContent = hs().toFixed(1); el.wname.textContent = P.weapon ? "Charge rifle (Q)" : pw().name + " (Q)"; el.ammo.textContent = P.weapon ? (P.charge > 0 ? "charging" : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : P.ammo + " / " + pw().mag;
+  el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp + "%"; el.speed.textContent = hs().toFixed(1); el.wname.textContent = (P.weapon ? "Charge rifle (Q)" : pw().name + " (Q)") + "  ·  Grenades " + P.nades + " (G)"; el.ammo.textContent = P.weapon ? (P.charge > 0 ? "charging" : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : P.ammo + " / " + pw().mag;
   el.kills.innerHTML = `<span class="you">${Math.floor(B.score.you)}</span> ${POINTS.map((p) => `<i class="${p.owner || "none"}">${p.name}</i>`).join("")} <span class="foe">${Math.floor(B.score.foe)}</span>`; el.timer.textContent = "Supply " + Math.floor(B.supply.you) + " · Tab: command";
   el.meterfill.style.width = (m ? 100 : P.meter) + "%"; el.meterlab.textContent = m ? "Titan: standing by" : DROPS.some((D) => D.team === "you") ? "Titan: on its way" : P.meter >= 100 ? "Titan ready: press V" : "Titan " + Math.floor(P.meter) + "%";
   const foe = TITANS.find((o) => o.team === "foe"); el.foe.style.display = foe ? "block" : "none"; if (foe) el.foefill.style.width = (foe.hull + foe.shield) / 5 + "%"; 
@@ -471,17 +490,17 @@ function advance(dt) {
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(.05, (now - last) / 1000); last = now; clock += dt;
-  advance(dt);
+  if (!window.__hold) advance(dt);
   hurtFx = Math.max(0, hurtFx - dt * 1.6); coolFx = Math.max(0, coolFx - dt * 2.5); P.shake = Math.max(0, P.shake - dt * 1.5);
-  if (!started) { menuSpin += dt * .06; cam.position.set(Math.sin(menuSpin) * 30 * U, 12 * U, (Math.cos(menuSpin) * 30 + 4) * U); cam.rotation.set(-.28, menuSpin, 0); gun.visible = cannon.visible = false; }
-  else if (MAP.on) { mapCamera(dt); mapFrame(dt); gun.visible = cannon.visible = fist.visible = flashM.visible = false; }
+  if (!started) { menuSpin += dt * .06; cam.position.set(Math.sin(menuSpin) * 30 * U, 12 * U, (Math.cos(menuSpin) * 30 + 4) * U); cam.rotation.set(-.28, menuSpin, 0); gun.visible = cannon.visible = false; VS.visible = false; VM.step(dt, VS); }
+  else if (MAP.on) { mapCamera(dt); mapFrame(dt); gun.visible = cannon.visible = fist.visible = flashM.visible = false; VS.visible = false; VM.step(dt, VS); }
   else if (seqCam()) { const [p, yaw, pitch] = seqCam(); cam.position.set(p.x * U, p.y * U, p.z * U); cam.rotation.set(pitch, yaw, 0); if (Math.abs(cam.fov - 84) > .05) { cam.fov = lerp(cam.fov, 84, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
   else { const t = P.titan, sh = P.shake * .06;
     const wallRoll = P.wall ? -(P.wall.ax === 0 ? P.wall.n * Math.cos(P.yaw) : -P.wall.n * Math.sin(P.yaw)) * .2 : 0;
     P.roll = lerp(P.roll, wallRoll + (P.sliding ? .04 : 0), 1 - Math.exp(-dt * 10)); P.dip = Math.max(0, P.dip - dt * .9);
     P.eye = t ? t.eye - TITAN.KNEEL * Math.max(t.kneel, ease(t.land) * .7) : lerp(Math.min(P.eye, 1.8), P.h - .12 - (P.dead > 0 ? .9 : 0), 1 - Math.exp(-dt * 14));
     const moving = P.grounded && !P.sliding && !t ? Math.min(1, hs() / 9) : 0, bob = t ? Math.abs(Math.sin(t.walk * 1.1)) * .09 : Math.abs(Math.sin(P.bob)) * .035 * moving;
-    cam.position.set(P.pos.x * U, (P.pos.y + P.eye - P.dip + bob) * U, P.pos.z * U); cam.rotation.set(P.pitch + (rnd() - .5) * sh, P.yaw + (rnd() - .5) * sh, P.roll + (P.dead > 0 ? .5 : 0) + (rnd() - .5) * sh);
+    cam.position.set(P.pos.x * U, (P.pos.y + P.eye - P.dip + bob) * U, P.pos.z * U); cam.rotation.set(P.pitch + VM.cam.pitch + (rnd() - .5) * sh, P.yaw + (rnd() - .5) * sh, P.roll + VM.cam.roll + (P.dead > 0 ? .5 : 0) + (rnd() - .5) * sh);
     const fov = (t ? 88 : CFG.fov) + clamp((hs() - 9) / 8, 0, 1) * 9; if (Math.abs(cam.fov - fov) > .05) { cam.fov = lerp(cam.fov, fov, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
   const t = P.titan;
   render(clock, dt, Math.max(MAP.on ? 0 : hurtFx, P.dead > 0 && !MAP.on ? .8 : 0, t ? (1 - t.hull / t.hullMax) * .4 : (1 - P.hp / 100) * .5), Math.max(coolFx, P.charge * .6), MAP.on);
@@ -536,7 +555,8 @@ const ACT = {
   tfx: (slot, a) => { const rp = RPS.get(slot), t = rp && rp.titan; if (!t) return;
     if (a[0] === 0) { const from = muzzleOf(t), end = V3(a[1], a[2], a[3]); tracer(from, toU(end), "#ffd890", 9000, 1.5); flash(from, "#ffc477", 3200, .1); t.recoil = 1; snd("cannon", { pos: [t.pos.x, t.pos.y + 4, t.pos.z] }); later(.03, () => blast(end, 2.2, {})); }
     else if (a[0] === 1) { const from = V3(a[1], a[2], a[3]), tgt = V3(a[4], a[5], a[6]), m = fxLayer(new THREE.Mesh(new THREE.BoxGeometry(3, 3, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, 2, .8) }))); scene.add(m); ROCKETS.push({ pos: from, vel: tgt.clone().sub(from).normalize().multiplyScalar(14).add(V3(0, 10, 0)), tgt, team: null, ghost: true, t: 0, mesh: m }); snd("rocket", { pos: xyz(from) }); }
-    else if (a[0] === 2) { t.punch = .45; } } };
+    else if (a[0] === 2) { t.punch = .45; } },
+  nade: (slot, a) => { mkNade(V3(a[0], a[1], a[2]), V3(a[3], a[4], a[5]), null); } };
 for (const k in ACT) onMsg(k, (m, from) => { if (B.mp === "host") { const slot = slotOf(from); if (slot < 0) return; ACT[k](slot, m); send(k, [slot, m], k !== "sh", null, from); } else if (B.mp === "guest" && m[0] !== MY.slot) ACT[k](m[0], m[1]); });
 for (const k in ONE) onMsg(k, (a, from) => { if (B.mp === "host" && a[0] !== 0) { const r = ROSTER.find((q) => q.slot === a[0]); if (r && r.id) send(k, a, true, r.id); return; } if (!B.mp) return; if (k === "phit") hurtPilot(a[1] * (a[2] ? 1.25 : 1)); else if (P.mine) hurtTitan(P.mine, a[1]); });
 onMsg("p", (a, from) => { const rp = RPS.get(slotOf(from)); if (rp && B.mp === "host") applyPk(rp, a); });
@@ -582,6 +602,6 @@ $("mp-host").onclick = async () => { if (NET.role) return; nameOf(); mpNote("Ask
 $("mp-join").onclick = async () => { if (NET.role) return; nameOf(); const code = $("mp-code").value.trim(); if (code.length < 3 && !/[?&]local/.test(location.search)) { mpNote("Type the host's code first."); return; } mpNote("Linking..."); try { await join(code); try { sessionStorage.setItem("afterburn-code", NET.code); } catch (e) {} mpOn = true; mpNote("Linked."); hello(); } catch (e) { mpNote(e.message); } };
 $("mp-team").onclick = () => { if (NET.role === "guest") send("team", 0); else if (NET.role === "host") { const r = ROSTER[0]; if (ROSTER.filter((q) => q.team !== r.team).length < 2) { r.team = r.team ? 0 : 1; lobbyOut(); } } };
 $("mp-start").onclick = () => hostStart(false);
-window.__mf = { NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+window.__mf = { VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);

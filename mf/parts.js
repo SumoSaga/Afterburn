@@ -36,7 +36,7 @@ function noise(x, y, z) { const i = Math.floor(x), j = Math.floor(y), k = Math.f
   return L(L(L(hsh(i, j, k), hsh(i + 1, j, k), a), L(hsh(i, j + 1, k), hsh(i + 1, j + 1, k), a), b), L(L(hsh(i, j, k + 1), hsh(i + 1, j, k + 1), a), L(hsh(i, j + 1, k + 1), hsh(i + 1, j + 1, k + 1), a), b), c); }
 const PAINTED = { plate: 1, plate2: 1, shell: 1, accent: 1, cream: 1, vest: 1 }, _chip = new THREE.Color(), _mud = new THREE.Color();
 const _c = new THREE.Color();
-export function build(parent, list, S, glowMat) {
+export function build(parent, list, S, glowMat, mat = charMat) {
   const solid = [], glow = [];
   for (let p of list) {
     if (Array.isArray(p)) p = box(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7] || 0, p[8] || 0);
@@ -59,6 +59,6 @@ export function build(parent, list, S, glowMat) {
       a[i * 3] = r * k; a[i * 3 + 1] = gg * k; a[i * 3 + 2] = b * k; }
     g.setAttribute("color", new THREE.BufferAttribute(a, 3)); solid.push(g);
   }
-  if (solid.length) { const m = new THREE.Mesh(mergeGeometries(solid), charMat); m.castShadow = m.receiveShadow = true; parent.add(m); }
+  if (solid.length) { const m = new THREE.Mesh(mergeGeometries(solid), mat); m.castShadow = m.receiveShadow = true; parent.add(m); }
   if (glow.length) { const m = new THREE.Mesh(mergeGeometries(glow), glowMat); parent.add(m); }
 }
