@@ -32,7 +32,7 @@ try { const s = JSON.parse(localStorage.getItem("mf-fps-load") || "null"); if (s
 export const saveLoad = () => { try { localStorage.setItem("mf-fps-load", JSON.stringify(LOAD)); } catch (e) {} };
 
 export const GRUNTS = [], ALLIES = [], VEH = [], SQUADS = [], POINTS = [];
-export const B = { fac: { you: "militia", foe: "machine" }, list: { you: [], foe: [] }, doctrine: { you: "mixed", foe: "mixed" }, score: { you: 0, foe: 0 }, supply: { you: 0, foe: 0 }, time: 0, over: null, hooks: {}, mp: null, peer: null, n: 0, ai: { you: 0, foe: 0 }, turn: { you: 0, foe: 0 } };
+export const B = { fac: { you: "militia", foe: "machine" }, list: { you: [], foe: [] }, doctrine: { you: "mixed", foe: "mixed" }, score: { you: 0, foe: 0 }, supply: { you: 0, foe: 0 }, time: 0, over: null, hooks: {}, away: {}, mp: null, roster: null, duo: false, cmds: ["you", "foe"], side: { you: "you", foe: "foe" }, cap: { inf: 18, veh: 3 }, share: 1, cd: {}, n: 0, ai: { you: 0, foe: 0 }, turn: { you: 0, foe: 0 } };
 const arr = (side) => (side === "you" ? ALLIES : GRUNTS), other = (side) => (side === "you" ? "foe" : "you");
 const BASE = { you: [0, 128], foe: [0, -166] }, RALLY = { you: [0, 108], foe: [0, -148] };
 const COL = { you: [.5, 2.4, 3], foe: [3.2, .5, .3], none: [1.5, 1.4, 1.2] };
@@ -85,25 +85,26 @@ for (const [name, x, z, label] of [["A", 100, 14, "Town square"], ["B", -6, -4, 
 
 /* ---------- squads, soldiers and vehicles ---------- */
 function spotFree(x, z, r) { for (let i = 0; i < 12; i++) { const px = x + (rnd() - .5) * (2 + i), pz = z + (rnd() - .5) * (2 + i * .6); if (freeG(px, pz, 1.8, r)) return [px, pz]; } return [x, z]; }
-const mkSquad = (side, id, def, sqId, home, at) => { const manual = B.doctrine[side] === "manual"; return { id: sqId, side, def, defId: id, name: def.name, members: [], veh: null, auto: !manual, order: manual ? { type: "move", pos: V3(RALLY[side][0] + (rnd() - .5) * 10, 0, RALLY[side][1]) } : null, path: [], fresh: false, state: "Deploying", think: rnd(), eng: false, n: def.veh ? 1 : def.guns.length, arrived: false, c: V3(home[0], 0, home[1]), dest: at ? V3(at[0], 0, at[1]) : V3(RALLY[side][0], 0, RALLY[side][1]) }; };
+const sideOf = (who) => B.side[who] || who;
+const mkSquad = (side, id, def, sqId, home, at, owner = side, fac = B.fac[owner]) => { const manual = B.doctrine[owner] === "manual"; return { id: sqId, side, owner, fac, def, defId: id, name: def.name, members: [], veh: null, auto: !manual, order: manual ? { type: "move", pos: V3(RALLY[side][0] + (rnd() - .5) * 10, 0, RALLY[side][1]) } : null, path: [], fresh: false, state: "Deploying", think: rnd(), eng: false, n: def.veh ? 1 : def.guns.length, arrived: false, c: V3(home[0], 0, home[1]), dest: at ? V3(at[0], 0, at[1]) : V3(RALLY[side][0], 0, RALLY[side][1]) }; };
 function mkVeh(sq, x, z) { const side = sq.side, def = sq.def, v = { veh: true, side, sq, def, pos: V3(x, 0, z), yaw: side === "you" ? 0 : Math.PI, hp: def.veh.hp, r: def.veh.r, alive: true, tgt: null, think: rnd(), cd: 1 + rnd(), flow: null, flowT: 0, dest: null };
   if (def.veh.mach && MACH) { v.mid = "veh" + sq.id; v.group = placeMachine(v.mid, def.veh.model, x * U, z * U, v.yaw + Math.PI).group; } else { v.group = genModel(def.veh.model); scene.add(v.group); }
   const tag = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL[side]) })); tag.position.y = 62; v.group.add(tag); sq.veh = v; VEH.push(v); return v; }
-function mkSoldier(sq, i, x, z, id) { const side = sq.side, def = sq.def, gun = def.guns[i], mil = B.fac[side] === "militia";
+function mkSoldier(sq, i, x, z, id) { const side = sq.side, def = sq.def, gun = def.guns[i], mil = sq.fac === "militia";
   const s = SOL.make({ x: x * U, z: z * U, y: groundH(x, z) * U, yaw: side === "you" ? Math.PI : 0, weapon: gun, role: gun === "lmg" ? "gunner" : gun === "dmr" ? "marksman" : "rifleman", camo: mil ? (i % 2 ? "multicam" : "ranger") : "urban", seed: 100 + sq.id * 7 + i });
   if (def.mech && window.CBMech) { try { window.CBMech.dress(s, def.mech, THREE, charMat, { scheme: side === "you" ? "worn" : "steel" }); } catch (e) { console.warn("[mech]", e); } }
   if (side === "you") { const tag = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL.you) })); tag.position.y = 36; s.root.add(tag); }
   const g = { id: id || ++B.n, s, side, sq, hp: def.hp, W: WPN[gun], tgt: null, think: rnd() * .4, cd: 1 + rnd(), moveT: rnd(), err: V3(), c: .3, slot: i, deadT: 0, gone: false, shots: 0 }; s.onShot = () => shot(g); sq.members.push(g); arr(side).push(g); return g; }
-export function deploy(side, id, paid = true, at = null) { const home = at || BASE[side];
+export function deploy(who, id, paid = true, at = null) { const side = sideOf(who), home = at || BASE[side];
   if (B.mp === "guest") { B.hooks.net("dep", id); return null; }   // the guest asks; the host's battle decides
-  const def = FACTIONS[B.fac[side]].units[id]; if (!def || B.over) return null; if (paid) { if (B.supply[side] < def.cost || !room(side, def)) return null; B.supply[side] -= def.cost; }
-  const sq = mkSquad(side, id, def, ++B.n, home, at); if (at) { sq.auto = false; sq.order = { type: "move", pos: V3(at[0], 0, at[1]) }; }
+  const def = FACTIONS[B.fac[who]].units[id]; if (!def || B.over) return null; if (paid) { if (B.supply[who] < def.cost || !room(who, def)) return null; B.supply[who] -= def.cost; }
+  const sq = mkSquad(side, id, def, ++B.n, home, at, who); if (at) { sq.auto = false; sq.order = { type: "move", pos: V3(at[0], 0, at[1]) }; }
   if (def.veh) { const [x, z] = spotFree(home[0] + (at ? 0 : 10), home[1], def.veh.r + .3); mkVeh(sq, x, z); }
   else def.guns.forEach((gun, i) => { const [x, z] = spotFree(home[0] + (i - def.guns.length / 2) * 1.5, home[1], .5); mkSoldier(sq, i, x, z); });
   SQUADS.push(sq); return sq;
 }
-const aliveInf = (side) => arr(side).filter((g) => g.s.dead < 0).length, aliveVeh = (side) => VEH.filter((v) => v.side === side && v.alive).length;
-export const room = (side, def) => (def.veh ? aliveVeh(side) < 3 : aliveInf(side) + def.guns.length <= 18);
+const aliveInf = (who) => arr(sideOf(who)).filter((g) => g.s.dead < 0 && !g.gone && g.sq.owner === who).length, aliveVeh = (who) => VEH.filter((v) => v.sq.owner === who && v.alive).length;
+export const room = (who, def) => (def.veh ? aliveVeh(who) < B.cap.veh : aliveInf(who) + def.guns.length <= B.cap.inf);
 const posOf = (u) => (u.veh ? V3(u.pos.x, groundH(u.pos.x, u.pos.z) + 1.2, u.pos.z) : V3(u.s.root.position.x / U, u.s.root.position.y / U + 1, u.s.root.position.z / U));
 
 const wreckVeh = (u) => { u.alive = false; const p = V3(u.pos.x, groundH(u.pos.x, u.pos.z) + 1, u.pos.z); if (B.hooks.blast) B.hooks.blast(p, 3.2, {}); if (u.mid) { mfx({ id: u.mid, act: "wreck" }); const id = u.mid; setTimeout(() => removeMachine(id), 1500); } else scene.remove(u.group); };
@@ -122,13 +123,13 @@ export function blastUnits(at, radius, side, dInf, dVeh, byPlayer = false) { if 
 // what a unit at `from` on `side` would shoot at: the nearest enemy it can see
 export function nearestEnemy(side, from, maxD, wantTitan = false) { const foes = []; const add = (kind, ref, pos) => { const d = pos.distanceTo(from); if (d < maxD) foes.push({ kind, ref, pos, d }); };
   for (const g of arr(other(side))) if (g.s.dead < 0) add("inf", g, posOf(g)); for (const v of VEH) if (v.alive && v.side !== side) add("veh", v, posOf(v));
-  const pl = B.hooks.pilot ? B.hooks.pilot() : null; if (side === "foe" && pl && pl.ok) add("pilot", null, pl.pos); const rp = B.hooks.rpilot ? B.hooks.rpilot() : null; if (side === "you" && rp && rp.ok) add("rpilot", null, rp.pos);
+  const pl = B.hooks.pilot ? B.hooks.pilot() : null; if (side === "foe" && pl && pl.ok) add("pilot", null, pl.pos); for (const rp of B.hooks.rpilots ? B.hooks.rpilots() : []) if (rp.side !== side && rp.ok) add("rpilot", rp, rp.chest);
   for (const t of B.hooks.titans ? B.hooks.titans() : []) if (t.alive && t.doom <= 0 && t.team !== side) add("titan", t, V3(t.pos.x, t.pos.y + t.h * .55, t.pos.z));
   foes.sort((a, b) => (a.d - (wantTitan && (a.kind === "titan" || a.kind === "veh") ? 30 : a.kind === "titan" ? -25 : 0)) - (b.d - (wantTitan && (b.kind === "titan" || b.kind === "veh") ? 30 : b.kind === "titan" ? -25 : 0)));
   const dir = V3(); for (let i = 0; i < Math.min(5, foes.length); i++) { const f = foes[i]; dir.copy(f.pos).sub(from).divideScalar(f.d || 1); if (rayWorld(from, dir, f.d) >= f.d - .05) return f; } return null; }
-const tgtAlive = (t) => t && (t.kind === "inf" ? t.ref.s.dead < 0 : t.kind === "veh" ? t.ref.alive : t.kind === "titan" ? t.ref.alive && t.ref.doom <= 0 : t.kind === "rpilot" ? !!(B.hooks.rpilot() || {}).ok : B.hooks.pilot().ok);
-const tgtPos = (t) => (t.kind === "inf" || t.kind === "veh" ? posOf(t.ref) : t.kind === "titan" ? V3(t.ref.pos.x, t.ref.pos.y + t.ref.h * .55, t.ref.pos.z) : t.kind === "rpilot" ? B.hooks.rpilot().pos : B.hooks.pilot().pos);
-const isP = (t) => t.kind === "pilot" || t.kind === "rpilot", pilotOf = (t) => (t.kind === "rpilot" ? B.hooks.rpilot() : B.hooks.pilot()), hurtP = (t, n) => (t.kind === "rpilot" ? B.hooks.hurtRemote(n) : B.hooks.hurtPilot(n));
+const tgtAlive = (t) => t && (t.kind === "inf" ? t.ref.s.dead < 0 : t.kind === "veh" ? t.ref.alive : t.kind === "titan" ? t.ref.alive && t.ref.doom <= 0 : t.kind === "rpilot" ? t.ref.ok : B.hooks.pilot().ok);
+const tgtPos = (t) => (t.kind === "inf" || t.kind === "veh" ? posOf(t.ref) : t.kind === "titan" ? V3(t.ref.pos.x, t.ref.pos.y + t.ref.h * .55, t.ref.pos.z) : t.kind === "rpilot" ? t.ref.chest : B.hooks.pilot().pos);
+const isP = (t) => t.kind === "pilot" || t.kind === "rpilot", pilotOf = (t) => (t.kind === "rpilot" ? t.ref : B.hooks.pilot()), hurtP = (t, n) => (t.kind === "rpilot" ? B.hooks.hurtRemote(t.ref.slot, n) : B.hooks.hurtPilot(n));
 function shot(g) { if (B.mp === "guest") { if (B.hooks.shotSnd) B.hooks.shotSnd(g.s.root.position, false, true); return; } g.shots++; const t = g.tgt; if (!tgtAlive(t)) return; const from = g.s.root.position, hitP = isP(t) && rnd() < g.c; if (B.hooks.shotSnd) B.hooks.shotSnd(from, t.kind === "pilot", hitP);   // sound hook: every soldier's shot
   if (isP(t)) { if (hitP) hurtP(t, 7 * g.W.dmg / 22); } else if (t.kind === "titan") { if (rnd() < .7) B.hooks.hurtTitan(t.ref, 1.5); } else if (rnd() < g.c) damage(t.ref, t.kind === "veh" ? g.W.dmg * .18 : g.W.dmg, from, "chest"); }
 function stepSoldier(g, dt) { const s = g.s, rp = s.root.position;
@@ -193,14 +194,14 @@ function stepSquad(sq, dt) {
 function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null;
   for (const p of POINTS) { const n = { you: 0, foe: 0 }, near = (x, z) => Math.hypot(x - p.x, z - p.z) < 9;
     for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && near(g.s.root.position.x / U, g.s.root.position.z / U)) n[side]++; for (const v of VEH) if (v.alive && v.side === side && near(v.pos.x, v.pos.z)) n[side] += 2; }
-    if (pl && pl.alive && near(pl.at.x, pl.at.z)) n.you += pl.titan ? 3 : 2; const rp = B.hooks.rpilot ? B.hooks.rpilot() : null; if (rp && rp.alive && near(rp.at.x, rp.at.z)) n.foe += 2; for (const t of B.hooks.titans ? B.hooks.titans() : []) if (t.alive && !t.piloted && near(t.pos.x, t.pos.z)) n[t.team] += 3;
+    if (pl && pl.alive && near(pl.at.x, pl.at.z)) n.you += pl.titan ? 3 : 2; for (const rp of B.hooks.rpilots ? B.hooks.rpilots() : []) if (rp.ok && near(rp.pos.x, rp.pos.z)) n[rp.side] += 2; for (const t of B.hooks.titans ? B.hooks.titans() : []) if (t.alive && !t.piloted && near(t.pos.x, t.pos.z)) n[t.team] += 3;
     p.n = n; const diff = clamp(n.you - n.foe, -3, 3); if (diff) p.prog = clamp(p.prog + diff * .055 * dt, -1, 1); else if (!n.you && !n.foe && p.owner) p.prog = clamp(p.prog + (p.owner === "you" ? 1 : -1) * .03 * dt, -1, 1);
     const was = p.owner; if (p.prog >= 1) p.owner = "you"; else if (p.prog <= -1) p.owner = "foe"; else if ((p.owner === "you" && p.prog <= 0) || (p.owner === "foe" && p.prog >= 0)) p.owner = null;
     if (was !== p.owner) ownerChanged(p); } }
 function ownerChanged(p) { const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
 
 // a commander that plays by a doctrine: what to bring in next, as supply allows
-function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[side] = 1.5; const doc = B.doctrine[side]; if (doc === "manual") return;
+function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[side] = 1.5; const doc = B.doctrine[side]; if (doc === "manual" || B.away[side]) return;
   const U2 = FACTIONS[B.fac[side]].units, ids = B.list[side].filter((id) => U2[id]), inf = ids.filter((id) => !U2[id].veh), veh = ids.filter((id) => U2[id].veh); if (!ids.length) return;
   const k = B.turn[side], wantVeh = veh.length && aliveVeh(side) < 2 && (aliveInf(side) >= 3 || !inf.length) && (doc === "armor" ? k % 2 === 0 : doc === "mixed" ? k % 3 === 2 : false);
   const pool = wantVeh ? veh : inf.length ? inf : veh, id = pool[k % pool.length], def = U2[id];
@@ -212,20 +213,22 @@ export function stepBattle(dt) { if (B.mp === "guest") return stepGuest(dt); if 
   for (const L of [GRUNTS, ALLIES]) for (let i = L.length - 1; i >= 0; i--) if (L[i].gone) L.splice(i, 1);
   for (let i = VEH.length - 1; i >= 0; i--) if (!VEH[i].alive) VEH.splice(i, 1);
   for (let i = SQUADS.length - 1; i >= 0; i--) { stepSquad(SQUADS[i], dt); if (SQUADS[i].dead) { const k = MAP.sels.indexOf(SQUADS[i]); if (k >= 0) MAP.sels.splice(k, 1); SQUADS.splice(i, 1); } }
-  stepPoints(dt); stepUtils(dt); command("you", dt); command("foe", dt);
-  for (const side of ["you", "foe"]) B.supply[side] = Math.min(300, B.supply[side] + income(side) * dt);   // supply comes in steadily; the side that is behind is sent more
+  stepPoints(dt); stepUtils(dt); for (const w of B.cmds) command(w, dt);
+  for (const w of B.cmds) B.supply[w] = Math.min(300, B.supply[w] + income(w) * dt);   // supply comes in steadily; the side that is behind is sent more
   tick += dt; if (tick >= 1) { tick -= 1; for (const side of ["you", "foe"]) { const own = POINTS.filter((p) => p.owner === side).length; B.score[side] += own * .5; }
     if (B.score.you >= GOAL || B.score.foe >= GOAL) { B.over = B.score.you >= B.score.foe ? "you" : "foe"; if (B.hooks.say) B.hooks.say(B.over === "you" ? "The field is yours. Press T to fight it again." : "The enemy holds the field. Press T to fight it again.", 0); } }
 }
 export function resetBattle() { for (const L of [GRUNTS, ALLIES]) { for (const g of L) if (!g.gone) { try { g.s.remove(); } catch (e) {} } L.length = 0; }
   for (const v of VEH) { if (v.mid) removeMachine(v.mid); else scene.remove(v.group); } VEH.length = 0; SQUADS.length = 0; MAP.sels = [];
   for (const p of POINTS) { p.prog = 0; p.owner = null; p.lamp.material.color.setRGB(...COL.none); p.light.color.setRGB(.5, .47, .4); }
-  B.fac.you = LOAD.side; B.list.you = LOAD.list[B.fac.you].slice(); B.doctrine.you = LOAD.doctrine; GH.sq.clear(); GH.g.clear();
-  if (B.mp && B.peer) { B.fac.foe = FACTIONS[B.peer.fac] ? B.peer.fac : "machine"; B.list.foe = (B.peer.list || []).filter((id) => FACTIONS[B.fac.foe].units[id]); B.doctrine.foe = DOCTRINES[B.peer.doctrine] ? B.peer.doctrine : "mixed"; }   // the other side is the other player's
-  else { B.fac.foe = LOAD.side === "militia" ? "machine" : "militia"; B.list.foe = Object.keys(FACTIONS[B.fac.foe].units).filter((id) => !["technical", "jumps"].includes(id)); B.doctrine.foe = "mixed"; }
-  B.score.you = B.score.foe = 0; B.supply.you = B.supply.foe = 70; B.time = 0; B.over = null; B.turn.you = B.turn.foe = 0; B.ai.you = B.ai.foe = 2;
-  if (B.mp !== "guest") for (const side of ["you", "foe"]) { const inf = B.list[side].filter((id) => !FACTIONS[B.fac[side]].units[id].veh); for (let i = 0; i < 3 && inf.length; i++) deploy(side, inf[i % inf.length], false); }
-  for (const f of FALLS) scene.remove(f.mesh); FALLS.length = 0; for (const d of DOMES) { scene.remove(d.mesh); scene.remove(d.box); } DOMES.length = 0; for (const m of MEDS) scene.remove(m.box); MEDS.length = 0; for (const sd of ["you", "foe"]) for (const k in B.cd[sd]) B.cd[sd][k] = 0; MAP.arm = null;
+  GH.sq.clear(); GH.g.clear(); B.cmds = []; B.side = {}; B.away = {};
+  const add = (key, side, fac, list, doc) => { fac = FACTIONS[fac] ? fac : "militia"; B.cmds.push(key); B.side[key] = side; B.fac[key] = fac; B.list[key] = (list || []).filter((id) => FACTIONS[fac].units[id]); B.doctrine[key] = DOCTRINES[doc] ? doc : "mixed"; B.supply[key] = 70; B.turn[key] = 0; B.ai[key] = 2; B.cd[key] = { strike: 0, shield: 0, med: 0 }; };
+  add("you", "you", LOAD.side, LOAD.list[LOAD.side].slice(), LOAD.doctrine);
+  if (B.mp === "host") { for (const r of B.roster || []) if (r.key !== "you") add(r.key, r.side, r.fac, r.list, r.doctrine); }   // every other player is a commander too, on one side or the other
+  else if (!B.mp) { const f = LOAD.side === "militia" ? "machine" : "militia"; add("foe", "foe", f, Object.keys(FACTIONS[f].units).filter((id) => !["technical", "jumps"].includes(id)), "mixed"); }
+  B.cap = B.duo ? { inf: 10, veh: 2 } : { inf: 18, veh: 3 }; B.share = B.duo ? .6 : 1; B.score.you = B.score.foe = 0; B.time = 0; B.over = null;
+  if (B.mp !== "guest") for (const w of B.cmds) { const inf = B.list[w].filter((id) => !FACTIONS[B.fac[w]].units[id].veh); for (let i = 0; i < (B.duo ? 2 : 3) && inf.length; i++) deploy(w, inf[i % inf.length], false); }
+  for (const f of FALLS) scene.remove(f.mesh); FALLS.length = 0; for (const d of DOMES) { scene.remove(d.mesh); scene.remove(d.box); } DOMES.length = 0; for (const m of MEDS) scene.remove(m.box); MEDS.length = 0; MAP.arm = null;
 }
 
 /* ---------- the commander's cards that are not troops ----------
@@ -236,20 +239,20 @@ export const UTILS = {
   shield: { name: "Shield dome", icon: "◠", cost: 40, cd: 35, ask: "Click where the shield should fall.", desc: "A dome 16 metres across that stands for 25 seconds. Fire from outside does much less to your troops inside it." },
   med: { name: "Medical drop", icon: "✚", cost: 30, cd: 30, ask: "Click where the medical crate should fall.", desc: "A crate that mends you and your troops within 9 metres for 20 seconds." } };
 export const POD_EXTRA = 30;
-B.cd = { you: { strike: 0, shield: 0, med: 0 }, foe: { strike: 0, shield: 0, med: 0 } };
+B.cd = { you: { strike: 0, shield: 0, med: 0 } };
 const FALLS = [], DOMES = [], MEDS = [];
 export const domeAt = (x, z, side) => DOMES.some((d) => d.side === side && Math.hypot(x - d.x, z - d.z) < d.r);
-const baseOf = (side) => BASE[B.mp === "guest" ? other(side) : side];   // on the guest's screen "you" are the far base
+const baseOf = (side) => BASE[B.flip ? other(side) : side];   // on the guest's screen "you" are the far base
 const slab = (w, h, d, color, glow) => { const g = new THREE.Group(), m = new THREE.Mesh(new THREE.BoxGeometry(w * U, h * U, d * U), new THREE.MeshToonMaterial({ color })); m.position.y = h * U / 2; m.castShadow = true; g.add(m);
   if (glow) { const l = new THREE.Mesh(new THREE.BoxGeometry(w * U * 1.04, h * U * .16, d * U * 1.04), new THREE.MeshBasicMaterial({ color: new THREE.Color(glow).multiplyScalar(2.6) })); l.position.y = h * U * .62; g.add(l); } scene.add(g); return g; };
 // side is whose card it is. ghost is the guest's copy of something the host has already decided: it is shown, and it
 // does what only this screen can know (shield or mend its own pilot), but it spends nothing and hurts nobody.
-export function useUtil(kind, g, unit, side = "you", ghost = false) { if (B.over) return false;
+export function useUtil(kind, g, unit, who = "you", ghost = false) { if (B.over) return false; const side = ghost ? who : sideOf(who);   // a ghost is told the side, as this screen sees it
   if (B.mp === "guest" && !ghost) { B.hooks.net("util", [kind, g.x, g.z, unit || ""]); return true; }
-  let x = clamp(g.x, WORLD.x0 + 4, WORLD.x1 - 4), z = clamp(g.z, WORLD.z0 + 4, WORLD.z1 - 4); const mine = side === "you", col = mine ? "#8fe0f0" : "#ff7a5a", tell = () => { if (!ghost && B.mp === "host") B.hooks.net("util", [kind, x, z, unit || "", side]); };
-  if (kind === "pod") { const def = FACTIONS[B.fac[side]].units[unit]; if (!def || def.veh) return false; if (!ghost) { if (B.supply[side] < def.cost + POD_EXTRA || !room(side, def)) return false; [x, z] = nearestWalk(x, z); B.supply[side] -= def.cost + POD_EXTRA; }
-    FALLS.push({ kind, side, ghost, x, z, t: 2.6, v: 90, unit, mesh: slab(2.1, 3.6, 2.1, "#3b4248", col) }); ringFx(toU(V3(x, groundH(x, z) + .3, z)), col, 4 * U, 2.6); if (B.hooks.say) B.hooks.say(mine ? def.name + " are coming down in a drop pod." : "An enemy drop pod is coming down.", 2.5); tell(); return true; }
-  const u = UTILS[kind]; if (!u) return false; if (!ghost) { if (B.cd[side][kind] > 0 || B.supply[side] < u.cost) return false; B.supply[side] -= u.cost; B.cd[side][kind] = u.cd; if (kind !== "strike") [x, z] = nearestWalk(x, z); }
+  let x = clamp(g.x, WORLD.x0 + 4, WORLD.x1 - 4), z = clamp(g.z, WORLD.z0 + 4, WORLD.z1 - 4); const mine = side === "you", col = mine ? "#8fe0f0" : "#ff7a5a", tell = () => { if (!ghost && B.mp === "host") B.hooks.net("util", [kind, x, z, unit || "", side]); }, def0 = ghost ? null : FACTIONS[B.fac[who]].units[unit];
+  if (kind === "pod") { const def = def0; if (!ghost) { if (!def || def.veh || B.supply[who] < def.cost + POD_EXTRA || !room(who, def)) return false; [x, z] = nearestWalk(x, z); B.supply[who] -= def.cost + POD_EXTRA; }
+    FALLS.push({ kind, side, who, ghost, x, z, t: 2.6, v: 90, unit, mesh: slab(2.1, 3.6, 2.1, "#3b4248", col) }); ringFx(toU(V3(x, groundH(x, z) + .3, z)), col, 4 * U, 2.6); if (B.hooks.say) B.hooks.say(mine ? (def && who === "you" ? def.name + " are coming down in a drop pod." : "A drop pod is coming down for your side.") : "An enemy drop pod is coming down.", 2.5); tell(); return true; }
+  const u = UTILS[kind]; if (!u) return false; if (!ghost) { if (B.cd[who][kind] > 0 || B.supply[who] < u.cost) return false; B.supply[who] -= u.cost; B.cd[who][kind] = u.cd; if (kind !== "strike") [x, z] = nearestWalk(x, z); }
   if (kind === "strike") { const bs = baseOf(side), bx = x - bs[0], bz = z - bs[1], l = Math.hypot(bx, bz) || 1, px = -bz / l, pz = bx / l;   // the run crosses the line from that side's base to the spot
     ringFx(toU(V3(x, groundH(x, z) + .3, z)), mine ? "#ff7a3a" : "#ff3a2a", 12 * U, 2.4);
     for (let i = -2; i <= 2; i++) { const fx = x + px * i * 5.5, fz = z + pz * i * 5.5; FALLS.push({ kind: "bomb", side, ghost, x: fx, z: fz, t: 2.3 + (i + 2) * .17, v: 55, mesh: slab(.5, 1.3, .5, "#1c1b1a") }); }
@@ -259,11 +262,11 @@ export function useUtil(kind, g, unit, side = "you", ghost = false) { if (B.over
   if (mine && B.hooks.say) B.hooks.say(kind === "shield" ? "Shield on the way." : "Medical crate on the way.", 2); tell(); return true; }
 function landed(f) { const gy = groundH(f.x, f.z), at = V3(f.x, gy, f.z), mine = f.side === "you";
   if (f.kind === "bomb") { scene.remove(f.mesh); if (B.hooks.blast) B.hooks.blast(at, 6, f.ghost ? {} : { team: f.side, titan: 110, pilot: 70 }); return false; }
-  if (f.kind === "pod") { if (B.hooks.blast) B.hooks.blast(at, 3, f.ghost ? {} : { team: f.side, titan: 60, pilot: 40 }); if (!f.ghost) { const sq = deploy(f.side, f.unit, false, [f.x, f.z]); if (sq && mine && MAP.on) MAP.sels = [sq]; } f.husk = 10; return true; }
+  if (f.kind === "pod") { if (B.hooks.blast) B.hooks.blast(at, 3, f.ghost ? {} : { team: f.side, titan: 60, pilot: 40 }); if (!f.ghost) { const sq = deploy(f.who, f.unit, false, [f.x, f.z]); if (sq && f.who === "you" && MAP.on) MAP.sels = [sq]; } f.husk = 10; return true; }
   if (f.kind === "shield") { const col = mine ? "#6fd8ff" : "#ff8a6a", dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(8 * U, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
     dome.position.set(f.x * U, (gy - 1) * U, f.z * U); scene.add(dome); DOMES.push({ x: f.x, z: f.z, r: 8, side: f.side, t: 25, mesh: dome, box: f.mesh }); ringFx(toU(at).setY((gy + .3) * U), col, 8 * U, .7); flash(toU(at).setY((gy + 3) * U), col, 2600, .4); return false; }
   MEDS.push({ x: f.x, z: f.z, r: 9, t: 20, tick: 0, box: f.mesh, side: f.side, ghost: f.ghost }); ringFx(toU(at).setY((gy + .3) * U), mine ? "#7dffa0" : "#ffb070", 9 * U, .7); return false; }
-function stepUtils(dt) { for (const sd of ["you", "foe"]) for (const k in B.cd[sd]) B.cd[sd][k] = Math.max(0, B.cd[sd][k] - dt);
+function stepUtils(dt) { for (const w in B.cd) for (const k in B.cd[w]) B.cd[w][k] = Math.max(0, B.cd[w][k] - dt);
   for (let i = FALLS.length - 1; i >= 0; i--) { const f = FALLS[i];
     if (f.husk) { f.husk -= dt; if (f.husk <= 0) { scene.remove(f.mesh); FALLS.splice(i, 1); } continue; }
     f.t -= dt; if (f.kind === "plane") { const s = (2.3 - f.t - 2.2) * 95; f.mesh.position.set((f.x + f.px * s) * U, (groundH(f.x, f.z) + 46) * U, (f.z + f.pz * s) * U); if (f.t < -2.4) { scene.remove(f.mesh); FALLS.splice(i, 1); } continue; }
@@ -281,21 +284,22 @@ function stepUtils(dt) { for (const sd of ["you", "foe"]) for (const k in B.cd[s
    to where the host says they are. On the guest's screen the sides are swapped, so "you" is always your own side.
    What the guest does as a commander (deploy, orders, support cards) and what its pilot hits are sent to the host, which
    applies them to the real battle. */
-const r1 = (v) => Math.round(v * 10) / 10, GH = { sq: new Map(), g: new Map() };
-export function snapshot() { const S = (sd) => (sd === "you" ? 0 : 1), cd = B.cd.foe;
-  return { t: r1(B.time), sc: [r1(B.score.you), r1(B.score.foe)], sup: Math.floor(B.supply.foe), cd: [Math.ceil(cd.strike), Math.ceil(cd.shield), Math.ceil(cd.med)], ov: B.over || 0,
-    p: POINTS.map((p) => [Math.round(p.prog * 100), p.owner ? S(p.owner) + 1 : 0, p.n.you, p.n.foe]),
-    q: SQUADS.map((q) => { const f = q.side === "foe", o = q.order, v = q.veh; return [q.id, S(q.side), q.defId, q.auto ? 1 : 0, q.state, f ? q.path.map((n) => [r1(n.x), r1(n.z), n.stop ? 1 : 0]) : 0, f && o ? [o.type === "point" ? o.i : -1, o.pos ? r1(o.pos.x) : 0, o.pos ? r1(o.pos.z) : 0, o.pos ? 1 : 0] : 0, v ? [r1(v.pos.x), r1(v.pos.z), r1(v.yaw), v.alive ? Math.ceil(v.hp) : 0] : 0]; }),
+const r1 = (v) => Math.round(v * 10) / 10, GH = { sq: new Map(), g: new Map() }, FACS = Object.keys(FACTIONS);
+// who is one commander's key on the host ("p1", "p2"...). Sides are sent as that player sees them: 1 is their own side.
+export function snapshot(who) { const my = B.side[who], rel = (sd) => (sd === my ? 1 : 0), cd = B.cd[who], sg = my === "you" ? 1 : -1;
+  return { t: r1(B.time), sc: [r1(B.score[my]), r1(B.score[other(my)])], sup: Math.floor(B.supply[who]), cd: [Math.ceil(cd.strike), Math.ceil(cd.shield), Math.ceil(cd.med)], ov: B.over ? (B.over === my ? 1 : 2) : 0,
+    p: POINTS.map((p) => [Math.round(p.prog * 100 * sg), p.owner ? (p.owner === my ? 1 : 2) : 0, p.n[my], p.n[other(my)]]),
+    q: SQUADS.map((q) => { const f = q.owner === who, o = q.order, v = q.veh; return [q.id, rel(q.side) | (f ? 2 : 0), FACS.indexOf(q.fac), q.defId, q.auto ? 1 : 0, q.state, f ? q.path.map((n) => [r1(n.x), r1(n.z), n.stop ? 1 : 0]) : 0, f && o ? [o.type === "point" ? o.i : -1, o.pos ? r1(o.pos.x) : 0, o.pos ? r1(o.pos.z) : 0, o.pos ? 1 : 0] : 0, v ? [r1(v.pos.x), r1(v.pos.z), r1(v.yaw), v.alive ? Math.ceil(v.hp) : 0] : 0]; }),
     s: [...ALLIES, ...GRUNTS].filter((g) => !g.gone).map((g) => { const p = g.s.root.position, t = g.s.dead < 0 && g.tgt && tgtAlive(g.tgt) ? tgtPos(g.tgt) : null; return [g.id, g.sq.id, g.slot, r1(p.x / U), r1(p.z / U), (g.s.dead >= 0 ? 1 : 0) | (g.s.crouch ? 2 : 0), g.shots, t ? [r1(t.x), r1(t.y), r1(t.z)] : 0]; }) }; }
-export function applySnap(o) { const sd = (k) => (k ? "you" : "foe"), now = performance.now();
-  B.time = o.t; B.score.you = o.sc[1]; B.score.foe = o.sc[0]; B.supply.you = o.sup; B.cd.you.strike = o.cd[0]; B.cd.you.shield = o.cd[1]; B.cd.you.med = o.cd[2];
-  if (o.ov && !B.over) { B.over = o.ov === "you" ? "foe" : "you"; if (B.hooks.say) B.hooks.say(B.over === "you" ? "The field is yours. The host can press T to fight it again." : "The enemy holds the field. The host can press T to fight it again.", 0); }
-  o.p.forEach((a, i) => { const p = POINTS[i], ow = a[1] ? (a[1] === 1 ? "foe" : "you") : null; p.prog = -a[0] / 100; p.n = { you: a[3], foe: a[2] }; if (ow !== p.owner) { p.owner = ow; ownerChanged(p); } });
+export function applySnap(o) { const now = performance.now();
+  B.time = o.t; B.score.you = o.sc[0]; B.score.foe = o.sc[1]; B.supply.you = o.sup; B.cd.you.strike = o.cd[0]; B.cd.you.shield = o.cd[1]; B.cd.you.med = o.cd[2];
+  if (o.ov && !B.over) { B.over = o.ov === 1 ? "you" : "foe"; if (B.hooks.say) B.hooks.say(B.over === "you" ? "The field is yours. The host can press T to fight it again." : "The enemy holds the field. The host can press T to fight it again.", 0); }
+  o.p.forEach((a, i) => { const p = POINTS[i], ow = a[1] ? (a[1] === 1 ? "you" : "foe") : null; p.prog = a[0] / 100; p.n = { you: a[2], foe: a[3] }; if (ow !== p.owner) { p.owner = ow; ownerChanged(p); } });
   const seenQ = new Set(), seenG = new Set();
-  for (const a of o.q) { let q = GH.sq.get(a[0]); const side = sd(a[1]);
-    if (!q) { const def = FACTIONS[B.fac[side]].units[a[2]]; if (!def) continue; q = mkSquad(side, a[2], def, a[0], [0, 0], null); q.order = null; GH.sq.set(a[0], q); SQUADS.push(q); if (a[7]) { mkVeh(q, a[7][0], a[7][1]); q.c.set(a[7][0], 0, a[7][1]); } }
-    seenQ.add(a[0]); q.state = a[4]; if (side === "you" && !(q.holdT > now)) { q.auto = !!a[3]; q.path = a[5] ? a[5].map((n) => { const v = V3(n[0], 0, n[1]); if (n[2]) v.stop = true; return v; }) : []; q.order = a[6] ? { type: a[6][0] >= 0 ? "point" : "move", i: a[6][0], pos: a[6][3] ? V3(a[6][1], 0, a[6][2]) : null } : null; }
-    if (q.veh && a[7]) { q.veh.net = a[7]; q.veh.hp = a[7][3]; if (!a[7][3] && q.veh.alive) wreckVeh(q.veh); } }
+  for (const a of o.q) { let q = GH.sq.get(a[0]); const side = a[1] & 1 ? "you" : "foe", mine = !!(a[1] & 2);
+    if (!q) { const fac = FACS[a[2]], def = FACTIONS[fac] && FACTIONS[fac].units[a[3]]; if (!def) continue; q = mkSquad(side, a[3], def, a[0], [0, 0], null, mine ? "you" : side === "you" ? "ally" : "foe", fac); q.order = null; GH.sq.set(a[0], q); SQUADS.push(q); if (a[8]) { mkVeh(q, a[8][0], a[8][1]); q.c.set(a[8][0], 0, a[8][1]); } }
+    seenQ.add(a[0]); q.state = a[5]; if (mine && !(q.holdT > now)) { q.auto = !!a[4]; q.path = a[6] ? a[6].map((n) => { const v = V3(n[0], 0, n[1]); if (n[2]) v.stop = true; return v; }) : []; q.order = a[7] ? { type: a[7][0] >= 0 ? "point" : "move", i: a[7][0], pos: a[7][3] ? V3(a[7][1], 0, a[7][2]) : null } : null; }
+    if (q.veh && a[8]) { q.veh.net = a[8]; q.veh.hp = a[8][3]; if (!a[8][3] && q.veh.alive) wreckVeh(q.veh); } }
   for (const a of o.s) { let g = GH.g.get(a[0]); const q = GH.sq.get(a[1]); if (!q) continue; if (!g) { if (a[5] & 1) continue; g = mkSoldier(q, a[2], a[3], a[4], a[0]); GH.g.set(a[0], g); g.shots = a[6]; } seenG.add(a[0]); g.net = a; }
   for (const [id, g] of GH.g) if (!seenG.has(id)) { g.gone = true; try { g.s.remove(); } catch (e) {} GH.g.delete(id); }
   for (const [id, q] of GH.sq) if (!seenQ.has(id)) { if (q.veh && q.veh.alive) wreckVeh(q.veh); q.dead = true; GH.sq.delete(id); } }
@@ -313,15 +317,15 @@ function stepGuest(dt) { B.time += dt;
   for (let i = SQUADS.length - 1; i >= 0; i--) { const sq = SQUADS[i]; if (sq.dead) { const k = MAP.sels.indexOf(sq); if (k >= 0) MAP.sels.splice(k, 1); SQUADS.splice(i, 1); continue; }
     const mem = sq.members.filter((g) => g.s.dead < 0 && !g.gone); if (sq.veh) sq.c.copy(sq.veh.pos); else if (mem.length) { sq.c.set(0, 0, 0); for (const g of mem) { sq.c.x += g.s.root.position.x / U; sq.c.z += g.s.root.position.z / U; } sq.c.divideScalar(mem.length); } sq.n = mem.length; }
   stepUtils(dt); }
-// what the guest asked for, applied to the real battle on the host. The guest's troops are the host's "foe" side.
-const theirs = (ids) => SQUADS.filter((q) => q.side === "foe" && ids.includes(q.id));
+// what another player asked for, applied to the real battle on the host. who is that player's commander key.
+const theirs = (ids, who) => SQUADS.filter((q) => q.owner === who && ids.includes(q.id));
 export const netIn = {
-  dep: (id) => { deploy("foe", id); },
-  doc: (k) => { if (DOCTRINES[k]) B.doctrine.foe = k; },
-  order: (a) => orderTo(V3(a[1], 0, a[2]), !!a[3], theirs(a[0]), true),
-  act: (a) => squadAct(a[0], theirs(a[1]), true),
-  util: (a) => { useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, "foe"); },
-  hit: (a, fromU) => { const u = a[0] < 0 ? (VEH.find((v) => v.sq.id === -a[0] && v.side === "you")) : ALLIES.find((g) => g.id === a[0]); if (u) damage(u, Math.min(a[1], 9999), fromU, a[2] || "chest"); } };
+  dep: (id, who) => { deploy(who, id); },
+  doc: (k, who) => { if (DOCTRINES[k]) B.doctrine[who] = k; },
+  order: (a, who) => orderTo(V3(a[1], 0, a[2]), !!a[3], theirs(a[0], who), true),
+  act: (a, who) => squadAct(a[0], theirs(a[1], who), true),
+  util: (a, who) => { useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, who); },
+  hit: (a, who, fromU) => { const sd = B.side[who], u = a[0] < 0 ? VEH.find((v) => v.sq.id === -a[0] && v.side !== sd) : [...ALLIES, ...GRUNTS].find((g) => g.id === a[0] && g.side !== sd); if (u) damage(u, Math.min(a[1], 9999), fromU, a[2] || "chest"); } };
 
 /* ---------- small pictures of each kind of unit, for the cards ---------- */
 const THUMB = {}, tScene = new THREE.Scene(), tCam = new THREE.PerspectiveCamera(28, .8, 1, 4000), tRT = new THREE.WebGLRenderTarget(96, 120);
@@ -363,8 +367,8 @@ function mark(key, x, y, z, cls, html) { const [sx, sy, ok] = scr(x, y, z); let 
 export function mapFrame(dt) { cam.updateMatrixWorld(); live = new Set(); const way = !!(MAP.keys.ShiftLeft || MAP.keys.ShiftRight) && MAP.sels.length > 0;
   const arm = MAP.arm; $("map-mode").style.display = way || arm ? "block" : "none"; $("map-mode").textContent = arm ? (arm.kind === "pod" ? "Click where the drop pod should land." : UTILS[arm.kind].ask) + " Esc to call it off." : "Stops: each click adds a stop on the way. Let go of Shift and click where they should end up."; mapEl.style.cursor = arm ? "copy" : way ? "cell" : "crosshair";
   for (const p of POINTS) mark("p" + p.name, p.x, 6, p.z, "pt " + (p.owner || "none"), `<b>${p.name}</b><span class="pl">${p.label}</span><i><u style="width:${Math.round(Math.abs(p.prog) * 100)}%;background:${p.prog > 0 ? "#8fe0f0" : "#e05a3a"}"></u></i>`);
-  for (const sq of SQUADS) { if (!spotted(sq)) continue; const sel = MAP.sels.includes(sq), mine = sq.side === "you", th = thumbOf(B.fac[sq.side], Object.keys(FACTIONS[B.fac[sq.side]].units).find((k) => FACTIONS[B.fac[sq.side]].units[k] === sq.def), sq.side);
-    const at = mark("s" + sq.id, sq.c.x, sq.veh ? 3.2 : 2.7, sq.c.z, "card " + sq.side + (sel ? " sel" : ""), `${th ? `<img src="${th}">` : `<b>${sq.def.icon}</b>`}<span><strong>${sq.name}</strong>${sq.veh ? "" : ` <q>${"▮".repeat(sq.n)}</q>`}${mine ? `<em>${sq.state}</em>` : ""}</span>`); sq.scr = at; }
+  for (const sq of SQUADS) { if (!spotted(sq)) continue; const sel = MAP.sels.includes(sq), mine = sq.owner === "you", th = thumbOf(sq.fac, sq.defId, sq.side);
+    const at = mark("s" + sq.id, sq.c.x, sq.veh ? 3.2 : 2.7, sq.c.z, "card " + sq.side + (sel ? " sel" : "") + (sq.side === "you" && !mine ? " ally" : ""), `${th ? `<img src="${th}">` : `<b>${sq.def.icon}</b>`}<span><strong>${sq.name}</strong>${sq.veh ? "" : ` <q>${"▮".repeat(sq.n)}</q>`}${mine ? `<em>${sq.state}</em>` : ""}</span>`); sq.scr = at; }
   const pl = B.hooks.pilot(); if (pl.alive) mark("hero", pl.at.x, 2.4, pl.at.z, "hero", `<b>◆</b><span>You${pl.titan ? ", in your Titan" : ""}</span>`);
   for (const t of B.hooks.titans()) if (t.alive && !t.piloted && (t.team === "you" || spotted({ side: "foe", c: t.pos }))) mark("t" + t.team, t.pos.x, 6.5, t.pos.z, t.team + " veh", `<b>▲</b><span>${t.team === "you" ? "Your Titan, standing guard" : "Enemy Titan"}</span>`);
   for (const [k, el] of marks) if (!live.has(k)) { el.remove(); marks.delete(k); }
@@ -377,7 +381,7 @@ export function mapFrame(dt) { cam.updateMatrixWorld(); live = new Set(); const 
   markT -= dt; if (markT <= 0) { markT = .2; drawDeck(); }
   const sup = B.supply.you; $("sup-fill").style.width = sup / 3 + "%"; $("sup-n").textContent = Math.floor(sup);
 }
-export const income = (side) => (B.over ? 0 : 2.4 + POINTS.filter((p) => p.owner === side).length * .3 + POINTS.filter((p) => p.owner === other(side)).length * .8);
+export const income = (who) => { const side = sideOf(who); return B.over ? 0 : (2.4 + POINTS.filter((p) => p.owner === side).length * .3 + POINTS.filter((p) => p.owner === other(side)).length * .8) * B.share; };
 let deckKey = "";
 function drawDeck() { const side = B.fac.you, Un = FACTIONS[side].units, S = MAP.sels, pl = B.hooks.pilot();
   $("map-top").innerHTML = `<b class="you">YOU ${Math.floor(B.score.you)}</b> ${POINTS.map((p) => `<i class="${p.owner || "none"}">${p.name}</i>`).join("")} <b class="foe">${Math.floor(B.score.foe)} THEM</b> <span>first to ${GOAL}</span>${pl.dead > 0 ? ` <span class="warn">You are down. Back in ${pl.dead.toFixed(1)} s</span>` : ""}`;
@@ -411,9 +415,9 @@ addEventListener("mousemove", (e) => { const d = MAP.drag; if (!MAP.on || !d) re
   else if (d.b === 1) { MAP.ang -= dx * .006; MAP.tilt = clamp(MAP.tilt + dy * .003, .35, .97); }
   else if (d.b === 0 && d.moved) { boxEl.style.display = "block"; boxEl.style.left = Math.min(d.x, e.clientX) + "px"; boxEl.style.top = Math.min(d.y, e.clientY) + "px"; boxEl.style.width = Math.abs(e.clientX - d.x) + "px"; boxEl.style.height = Math.abs(e.clientY - d.y) + "px"; } });
 addEventListener("mouseup", (e) => { const d = MAP.drag; if (!MAP.on || !d) return; MAP.drag = null; boxEl.style.display = "none"; if (d.b !== 0) return;
-  if (d.moved) { const x0 = Math.min(d.x, e.clientX), x1 = Math.max(d.x, e.clientX), y0 = Math.min(d.y, e.clientY), y1 = Math.max(d.y, e.clientY); MAP.sels = SQUADS.filter((s) => s.side === "you" && s.scr && s.scr[0] > x0 && s.scr[0] < x1 && s.scr[1] - 20 > y0 - 30 && s.scr[1] - 20 < y1 + 30); drawDeck(); return; }
+  if (d.moved) { const x0 = Math.min(d.x, e.clientX), x1 = Math.max(d.x, e.clientX), y0 = Math.min(d.y, e.clientY), y1 = Math.max(d.y, e.clientY); MAP.sels = SQUADS.filter((s) => s.owner === "you" && s.scr && s.scr[0] > x0 && s.scr[0] < x1 && s.scr[1] - 20 > y0 - 30 && s.scr[1] - 20 < y1 + 30); drawDeck(); return; }
   // a click: on a card it picks that squad; anywhere else it sends the picked squads there
-  let pick = null, best = 1e9; for (const s of SQUADS) { if (s.side !== "you" || !s.scr) continue; const ox = e.clientX - s.scr[0], oy = e.clientY - s.scr[1]; if (Math.abs(ox) < 78 && oy > -58 && oy < 6) { const dd = Math.abs(ox) + Math.abs(oy + 26); if (dd < best) { best = dd; pick = s; } } }
+  let pick = null, best = 1e9; for (const s of SQUADS) { if (s.owner !== "you" || !s.scr) continue; const ox = e.clientX - s.scr[0], oy = e.clientY - s.scr[1]; if (Math.abs(ox) < 78 && oy > -58 && oy < 6) { const dd = Math.abs(ox) + Math.abs(oy + 26); if (dd < best) { best = dd; pick = s; } } }
   if (MAP.arm) { const g = groundAt(e.clientX, e.clientY); if (g && useUtil(MAP.arm.kind, g, MAP.arm.unit)) { MAP.arm = null; deckKey = ""; drawDeck(); } return; }
   if (pick) { MAP.sels = [pick]; drawDeck(); return; }
   if (MAP.sels.length) { const g = groundAt(e.clientX, e.clientY); if (g) orderTo(g, e.shiftKey); } });

@@ -5,7 +5,8 @@ import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, 
   flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat } from "./engine.js";
 import { makeRig, TITAN } from "./titan.js";
 import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
-import { NET, onMsg, send, host, join, leave } from "./net.js";
+import { NET, onMsg, send, host, join, leave, cut } from "./net.js";
+import { makeFigure } from "./figure.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
@@ -46,7 +47,7 @@ function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .3 : 0), z
 const _down = V3(0, -1, 0);
 function groundBelow() { const t = rayWorld(P.pos.clone().setY(P.pos.y + .1), _down, 50); return P.pos.y + .1 - t; }
 function endWall(cd) { const w = P.wall; P.lastWall = { ax: w.ax, n: w.n, c: P.pos.getComponent(w.ax) }; P.wall = null; P.wallCd = cd; }
-function respawn() { if (B.mp === "guest") P.pos.set(0, groundH(0, -146) + .1, -146); else P.pos.set(...SPAWN); P.vel.set(0, 0, 0); P.yaw = B.mp === "guest" ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
+function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; if (B.mp && !MY.south) P.pos.set(ox, groundH(ox, -146) + .1, -146); else P.pos.set(SPAWN[0] + ox, groundH(SPAWN[0] + ox, SPAWN[2]) + .1, SPAWN[2]); P.vel.set(0, 0, 0); P.yaw = B.mp && !MY.south ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
 
 function stepPilot(dt) {
   P.jumpBuf -= dt; P.coyote -= dt; P.slideCd -= dt; P.wallCd -= dt; P.hurtT += dt;
@@ -105,7 +106,7 @@ function stepPilot(dt) {
 }
 
 /* ---------- blasts and damage ---------- */
-function hurtPilot(n, from) { if (P.dead > 0 || P.titan || P.seq) return; if (domeAt(P.pos.x, P.pos.z, "you")) n *= .5; snd("pilot_hurt", { gain: clamp(.6 + n / 40, .6, 1.4) }); P.hp -= n; P.hurtT = 0; hurtFx = 1; if (P.hp <= 0) { P.hp = 0; P.dead = 6; mouseDown = false; if (B.mp) send("pdown", 0); if (!MAP.on) { setMap(true, true); if (document.pointerLockElement) document.exitPointerLock(); } } }
+function hurtPilot(n, from) { if (P.dead > 0 || P.titan || P.seq) return; if (domeAt(P.pos.x, P.pos.z, "you")) n *= .5; snd("pilot_hurt", { gain: clamp(.6 + n / 40, .6, 1.4) }); P.hp -= n; P.hurtT = 0; hurtFx = 1; if (P.hp <= 0) { P.hp = 0; P.dead = 6; mouseDown = false; if (B.mp) relay("pdown", 0); if (!MAP.on) { setMap(true, true); if (document.pointerLockElement) document.exitPointerLock(); } } }
 function blast(at, radius, o = {}) {   // at in metres
   const p = toU(at); snd("explosion", { pos: xyz(at), gain: clamp(radius / 2.2, .6, 2) }); flash(p.clone().setY(p.y + 12), "#ffb45a", 2500 + radius * 2200, .35);
   puff(p, { n: 26, color: "#fbe6a0", hot: 3, size: 5 + radius, life: .32, drag: 3, vel: () => V3((rnd() - .5) * 90 * radius, rnd() * 70 * radius, (rnd() - .5) * 90 * radius) });
@@ -114,7 +115,7 @@ function blast(at, radius, o = {}) {   // at in metres
   const d = Math.hypot(at.x - P.pos.x, at.z - P.pos.z); if (d < 30) P.shake = Math.max(P.shake, clamp(radius / (d + 2), 0, .6));
   blastUnits(at, radius, victims(o.team), 9999, 70, o.team === "you");
   if (o.team !== "you" && o.pilot && d < radius && Math.abs(at.y - P.pos.y) < radius + 1) hurtPilot(o.pilot * (1 - d / radius * .6));
-  if (B.mp === "host" && o.team === "you" && o.pilot && RP.on && !RP.dead) { const d2 = Math.hypot(at.x - RP.pos.x, at.z - RP.pos.z); if (d2 < radius && Math.abs(at.y - RP.pos.y) < radius + 1) send("phit", [o.pilot * (1 - d2 / radius * .6), 0]); }
+  if (B.mp && o.team && o.pilot && (o.team === "you" || B.mp === "host")) for (const rp of RPS.values()) { if (!rp.ok || rp.side === o.team) continue; const d2 = Math.hypot(at.x - rp.pos.x, at.z - rp.pos.z); if (d2 < radius && Math.abs(at.y - rp.pos.y) < radius + 1) relay("phit", [rp.slot, Math.round(o.pilot * (1 - d2 / radius * .6)), 0]); }
   for (const t of TITANS) if (t.alive && t.team !== o.team && o.titan && Math.hypot(t.pos.x - at.x, t.pos.z - at.z) < radius + t.r) hurtTitan(t, o.titan);
 }
 
@@ -126,8 +127,7 @@ const PW = { carbine: { name: "Carbine", mag: 24, cd: .095, dmg: 25, spread: .00
 const pw = () => PW[LOAD.weapon] || PW.carbine;
 const CHASSIS = { vanguard: { name: "Vanguard", hull: 350, speed: 6.2, dash: 2, desc: "The all-round frame: 350 hull, two dashes." }, bastion: { name: "Bastion", hull: 470, speed: 5.2, dash: 1, desc: "Heavier plate and a slower stride: 470 hull, one dash." }, lancer: { name: "Lancer", hull: 270, speed: 7.4, dash: 3, desc: "Stripped for speed: 270 hull, three dashes." } };
 B.hooks = { pilot: () => ({ ok: P.dead <= 0 && !P.titan && !P.seq, alive: P.dead <= 0, dead: P.dead, pos: V3(P.pos.x, P.pos.y + P.h * .6, P.pos.z), at: P.pos, speed: hs(), grounded: P.grounded, titan: !!P.titan }),
-  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (n) => send("phit", [n, 0]),
-  rpilot: () => (RP.on ? { ok: !RP.dead, alive: !RP.dead, pos: V3(RP.pos.x, RP.pos.y + RP.h * .6, RP.pos.z), at: RP.pos, speed: RP.speed, grounded: RP.grounded } : null), healPilot: (n) => { if (P.dead > 0 || P.hp >= 100) return false; P.hp = Math.min(100, P.hp + n); return true; }, hurtTitan: (t, n) => hurtTitan(t, n), blast: (at, r, o) => blast(at, r, o), onKill: (n) => { snd("kill"); P.meter = Math.min(100, P.meter + n); },
+  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (slot, n) => relay("phit", [slot, Math.round(n), 0]), rpilots: () => (B.mp ? [...RPS.values()] : []),
   shotSnd: (q, atPilot, hit) => { snd("grunt_shot", { pos: [q.x / U, q.y / U + 1.4, q.z / U] }); if (atPilot && !hit && rnd() < .6) snd("flyby", { pos: [P.pos.x + (rnd() - .5) * 5, P.pos.y + 1.5, P.pos.z + (rnd() - .5) * 5], delay: .02 + rnd() * .05 }); }, say: (t, sec) => say(t, sec) };
 
 /* ---------- Titans ---------- */
@@ -135,8 +135,8 @@ const TITANS = [], DROPS = [], LATER = [], ROCKETS = [], HUSKS = []; let foeCall
 const later = (t, fn) => LATER.push({ t, fn });
 const approach = (v, to, r) => (Math.abs(to - v) <= r ? to : v + Math.sign(to - v) * r);
 const ease = (u) => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
-function makeTitan(team, x, z, yaw) {
-  const ch = CHASSIS[team === "you" ? LOAD.chassis : "vanguard"] || CHASSIS.vanguard, rig = makeRig(team, team === "you" ? { accent: LOAD.paint } : {}); scene.add(rig.root);
+function makeTitan(team, x, z, yaw, kit = null) {
+  const ch = CHASSIS[kit ? kit.chassis : team === "you" ? LOAD.chassis : "vanguard"] || CHASSIS.vanguard, rig = makeRig(team, team === "you" ? { accent: kit ? kit.paint : LOAD.paint } : {}); scene.add(rig.root);
   const t = { team, rig, pos: V3(x, .05, z), vel: V3(), yaw, r: 1.5, h: 5.8, eye: 5.3, shield: 150, hull: ch.hull, hullMax: ch.hull, speed: ch.speed, dashMax: ch.dash, shieldT: 9, hitT: 9, alive: true, doom: 0, ammo: 18, reload: 0, fireCd: 0, dash: ch.dash, dashT: 0, dashing: 0, grounded: true,
     cd: 2 + rnd(), rk: 4 + rnd() * 4, think: 0, flow: null, strafe: 1, strafeT: 0, walk: 0, kneel: 0, kneelTo: 0, hatch: 0, hatchTo: 0, aimYaw: 0, aimPitch: 0, recoil: 0, punch: 0, punchCd: 0, busy: false, land: 1 };
   TITANS.push(t); return t;
@@ -152,13 +152,13 @@ function placeTitan(t, dt) {
   t.rig.pose(dt, { speed: sp * (fwd < -.5 ? -1 : 1), kneel: Math.max(t.kneel, ease(t.land) * .7), hatch: t.hatch, aimYaw: t.aimYaw, aimPitch: t.aimPitch, recoil: t.recoil, punch: t.punch > 0 ? Math.sin(clamp(1 - t.punch / .45, 0, 1) * Math.PI) : 0, limp: t.doom > 0 });
 }
 const muzzleOf = (t) => t.rig.muzzle.getWorldPosition(V3());
-function hurtTitan(t, n) { if (!t.alive || t.doom > 0) return; t.shieldT = 0; t.hitT = 0; const s = Math.min(t.shield, n); snd(s > 0 ? "shield_hit" : "titan_hit", { pos: [t.pos.x, t.pos.y + t.h * .6, t.pos.z], gain: clamp(.45 + n / 60, .45, 1.3) }); t.shield -= s; t.hull -= n - s; if (t === P.titan) { hurtFx = Math.max(hurtFx, s > 0 ? 0 : .6); if (s > 0) coolFx = 1; P.shake = Math.max(P.shake, .12 + n * .004); CK.glitch = .18; }
+function hurtTitan(t, n) { if (!t.alive || t.doom > 0) return; if (t.remote != null) { relay("thit", [t.remote, Math.round(n)]); snd(t.shield > 0 ? "shield_hit" : "titan_hit", { pos: [t.pos.x, t.pos.y + t.h * .6, t.pos.z], gain: clamp(.45 + n / 60, .45, 1.3) }); return; } t.shieldT = 0; t.hitT = 0; const s = Math.min(t.shield, n); snd(s > 0 ? "shield_hit" : "titan_hit", { pos: [t.pos.x, t.pos.y + t.h * .6, t.pos.z], gain: clamp(.45 + n / 60, .45, 1.3) }); t.shield -= s; t.hull -= n - s; if (t === P.titan) { hurtFx = Math.max(hurtFx, s > 0 ? 0 : .6); if (s > 0) coolFx = 1; P.shake = Math.max(P.shake, .12 + n * .004); CK.glitch = .18; }
   if (t.hull <= 0) { t.hull = 0; t.doom = 2.6; t.hatchTo = 1; if (t === P.titan || (P.seq && P.seq.T === t)) { throwClear(t); say("Your Titan is doomed. You have been thrown clear.", 3); } else say(t.team === "you" ? "Your Titan is doomed." : "The Opposition Titan is doomed.", 3); } }
 function stepTitans(dt) {
   for (let i = LATER.length - 1; i >= 0; i--) { const l = LATER[i]; l.t -= dt; if (l.t <= 0) { LATER.splice(i, 1); l.fn(); } }
   for (let i = DROPS.length - 1; i >= 0; i--) { const D = DROPS[i]; D.t += dt; const gy = groundH(D.x, D.z), k = Math.min(1, D.t / D.dur), y = lerp(gy + 150, gy + 2.5, k * k); D.pod.position.set(D.x * U, y * U, D.z * U);
     if (rnd() < dt * 60) puff(V3(D.x * U, (y + 4) * U, D.z * U), { n: 5, color: "#ffb060", hot: 3, size: 6, life: .5, drag: 1, vel: () => V3((rnd() - .5) * 30, 60 + rnd() * 80, (rnd() - .5) * 30) });
-    if (k >= 1) { DROPS.splice(i, 1); scene.remove(D.pod); snd("titanfall", { pos: [D.x, 1, D.z] }); const at = V3(D.x, gy + .05, D.z), t = makeTitan(D.team, D.x, D.z, D.yaw); t.pos.y = gy + .05; placeTitan(t, .016); if (D.team === "you") P.mine = t;
+    if (k >= 1) { DROPS.splice(i, 1); scene.remove(D.pod); snd("titanfall", { pos: [D.x, 1, D.z] }); const at = V3(D.x, gy + .05, D.z); if (D.ghost) { const p = toU(at); flareFx(p, "#ffb060", 9, 1.1); ringFx(p.clone().setY(p.y + 1), "#f2c46a", 11 * U, .7); chunksFx(p.clone().setY(p.y + 3), "#5c4c3a", 8, 70); continue; } const t = makeTitan(D.team, D.x, D.z, D.yaw); t.pos.y = gy + .05; placeTitan(t, .016); if (D.team === "you") P.mine = t;
       const p = toU(at); flareFx(p, "#ffb060", 9, 1.1); ringFx(p.clone().setY(p.y + 1), "#f2c46a", 11 * U, .7); chunksFx(p.clone().setY(p.y + 3), "#5c4c3a", 8, 70);
       puff(p, { n: 40, color: "#ad9677", dark: true, opacity: .5, size: 8, life: 2.6, grow: 2.2, drag: 1.4, vel: () => { const a = rnd() * 6.28; return V3(Math.cos(a) * (60 + rnd() * 90), 8 + rnd() * 30, Math.sin(a) * (60 + rnd() * 90)); } });
       const d = Math.hypot(D.x - P.pos.x, D.z - P.pos.z); P.shake = Math.max(P.shake, clamp(9 / (d + 4), 0, .9));
@@ -170,8 +170,8 @@ function stepTitans(dt) {
   for (let i = ROCKETS.length - 1; i >= 0; i--) { const r = ROCKETS[i]; r.t += dt; _d.copy(r.tgt).sub(r.pos); const dist = _d.length(); _d.divideScalar(dist || 1); r.vel.lerp(_d.clone().multiplyScalar(38), clamp(dt * (2 + r.t * 9), 0, 1));
     const step = r.vel.length() * dt, dir = r.vel.clone().normalize(), hitW = rayWorld(r.pos, dir, step + .2) < step + .2; r.pos.addScaledVector(r.vel, dt); r.mesh.position.set(r.pos.x * U, r.pos.y * U, r.pos.z * U); r.mesh.lookAt(r.mesh.position.clone().add(dir));
     puff(toU(r.pos), { n: 2, color: "#8f8a80", dark: true, opacity: .45, size: 5, life: .9, grow: 1.8, drag: 2, vel: () => V3((rnd() - .5) * 8, 4, (rnd() - .5) * 8) });
-    if (hitW || dist < 1.4 || r.t > 4) { scene.remove(r.mesh); ROCKETS.splice(i, 1); blast(r.pos, 1.9, { team: r.team, titan: 20, pilot: 24 }); } }
-  for (let i = TITANS.length - 1; i >= 0; i--) { const t = TITANS[i];
+    if (hitW || dist < 1.4 || r.t > 4) { scene.remove(r.mesh); ROCKETS.splice(i, 1); blast(r.pos, 1.9, r.ghost ? {} : { team: r.team, titan: 20, pilot: 24 }); } }
+  for (let i = TITANS.length - 1; i >= 0; i--) { const t = TITANS[i]; if (t.remote != null) { stepPuppet(t, dt); continue; }
     if (t.doom > 0) { t.doom -= dt; t.vel.set(0, t.vel.y, 0); if (rnd() < dt * 12) { const q = toU(t.pos).add(V3((rnd() - .5) * 30, (1 + rnd() * 4) * U, (rnd() - .5) * 30)); puff(q, { n: 8, color: "#ff9a3c", hot: 3, size: 5, life: .4, vel: () => V3((rnd() - .5) * 50, 40 + rnd() * 50, (rnd() - .5) * 50) }); flash(q, "#ff8a3a", 1200, .15); }
       placeTitan(t, dt);
       if (t.doom <= 0) { t.alive = false; blast(V3(t.pos.x, t.pos.y + 2.5, t.pos.z), 5, { team: t.team, titan: 60, pilot: 60 }); chunksFx(toU(t.pos).setY(t.pos.y * U + 60), "#34373a", 8, 90); t.rig.wreck(); HUSKS.push(t.rig); TITANS.splice(i, 1); if (t.team === "you") { P.mine = null; P.meter = 0; } checkDone(); }
@@ -186,10 +186,10 @@ function stepTitans(dt) {
 // the rocket pod: six rockets, one after another
 function fireRockets(t, at) { t.rk = t === P.titan ? 8 : 9 + rnd() * 4; for (let i = 0; i < 6; i++) later(i * .09, () => { if (!t.alive || t.doom > 0) return; const from = t.rig.pod.getWorldPosition(V3()).divideScalar(U), aim = at.clone().sub(from).normalize();
   const m = fxLayer(new THREE.Mesh(new THREE.BoxGeometry(3, 3, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, 2, .8) }))); scene.add(m);
-  ROCKETS.push({ pos: from, vel: aim.multiplyScalar(14).add(V3((rnd() - .5) * 6, 9 + rnd() * 4, (rnd() - .5) * 6)), tgt: at.clone().add(V3((rnd() - .5) * 2.4, (rnd() - .5) * 1, (rnd() - .5) * 2.4)), team: t.team, t: 0, mesh: m });
+  ROCKETS.push({ pos: from, vel: aim.multiplyScalar(14).add(V3((rnd() - .5) * 6, 9 + rnd() * 4, (rnd() - .5) * 6)), tgt: at.clone().add(V3((rnd() - .5) * 2.4, (rnd() - .5) * 1, (rnd() - .5) * 2.4)), team: t.team, t: 0, mesh: m }); if (B.mp) { const q = ROCKETS[ROCKETS.length - 1].tgt; relay("tfx", [1, r2(from.x), r2(from.y), r2(from.z), r2(q.x), r2(q.y), r2(q.z)], false); }
   snd("rocket", t === P.titan ? undefined : { pos: xyz(from) }); flash(toU(from), "#ffb060", 1800, .12); puff(toU(from), { n: 8, color: "#c7cbc8", dark: true, opacity: .5, size: 8, life: 1.2, grow: 2, drag: 2, vel: () => V3((rnd() - .5) * 30, 10 + rnd() * 20, (rnd() - .5) * 30) }); if (t === P.titan) P.shake = Math.max(P.shake, .08); }); }
 // the fist: whatever stands in front of it is hit hard
-function doPunch(t, yaw) { if (t.punchCd > 0) return; t.punch = .45; t.punchCd = 1.3; later(.17, () => { if (!t.alive || t.doom > 0) return; const fx = -Math.sin(yaw), fz = -Math.cos(yaw), at = V3(t.pos.x + fx * 3, t.pos.y + 3.4, t.pos.z + fz * 3); let hit = false;
+function doPunch(t, yaw) { if (t.punchCd > 0) return; t.punch = .45; t.punchCd = 1.3; if (B.mp) relay("tfx", [2]); later(.17, () => { if (!t.alive || t.doom > 0) return; const fx = -Math.sin(yaw), fz = -Math.cos(yaw), at = V3(t.pos.x + fx * 3, t.pos.y + 3.4, t.pos.z + fz * 3); let hit = false;
   for (const o of TITANS) if (o !== t && o.alive && o.team !== t.team) { const dx = o.pos.x - t.pos.x, dz = o.pos.z - t.pos.z, d = Math.hypot(dx, dz); if (d < 4.8 && (dx * fx + dz * fz) / (d || 1) > .3) { hurtTitan(o, 110); o.vel.x += fx * 9; o.vel.z += fz * 9; hit = true; } }
   blastUnits(at, 3.2, victims(t.team), 9999, 110, t.team === "you"); hit = true;
   if (t.team !== "you" && !P.titan && !P.seq && Math.hypot(P.pos.x - at.x, P.pos.z - at.z) < 3 && Math.abs(P.pos.y - t.pos.y) < 5) { hurtPilot(80); hit = true; }
@@ -227,11 +227,10 @@ function stepTitanAI(t, dt) {
 function callTitan(team, x, z, yaw) { const pod = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(3.2 * U, 5 * U, 3.2 * U), new THREE.MeshToonMaterial({ color: "#332a21" })), fire = new THREE.Mesh(new THREE.BoxGeometry(2.4 * U, 9 * U, 2.4 * U), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2, .7) }));
   fire.position.y = 7 * U; pod.add(body, fire); pod.position.set(x * U, 150 * U, z * U); scene.add(pod); DROPS.push({ team, x, z, yaw, t: 0, dur: 2.4, pod }); }
 function tryCallTitan() {
-  if (B.mp) { say("Titans are not in two-player matches yet.", 2.5); return; }
-  if (P.mine || DROPS.some((D) => D.team === "you")) return; if (P.meter < 100) { say("Your Titan is not ready yet. The meter fills over time and with every grunt you put down.", 2.5); return; }
+  if (P.mine || DROPS.some((D) => D.team === "you" && !D.ghost)) return; if (P.meter < 100) { say("Your Titan is not ready yet. The meter fills over time and with every grunt you put down.", 2.5); return; }
   cam.getWorldDirection(_d); _o.copy(P.pos).setY(P.pos.y + P.eye); const t = rayWorld(_o, _d, 60), at = _o.clone().addScaledVector(_d, t);
   if (t >= 60 || at.y > groundH(at.x, at.z) + .7 || !freeG(at.x, at.z, 5.9, 1.7, .55) || rayWorld(V3(at.x, groundH(at.x, at.z) + 6.5, at.z), V3(0, 1, 0), 100, false) < 100) { say("Your Titan needs open ground under open sky. Aim at a clear patch within 60 metres.", 3); return; }
-  P.meter = 0; callTitan("you", at.x, at.z, Math.atan2(-(P.pos.x - at.x), -(P.pos.z - at.z))); say("Titanfall is on its way. Stand clear.", 2.4);
+  P.meter = 0; { const yw = Math.atan2(-(P.pos.x - at.x), -(P.pos.z - at.z)); callTitan("you", at.x, at.z, yw); if (B.mp) relay("tdrop", [r2(at.x), r2(at.z), r2(yw)]); } say("Titanfall is on its way. Stand clear.", 2.4);
 }
 function callFoe() { foeCalled = true; let best = null, bd = 0; for (const [x, z] of [[0, -120], [0, -80], [20, -22], [-10, 8], [22, 16], [-36, -8], [10, 24], [100, 0], [-60, -30], [0, 80]]) { if (!freeG(x, z, 5.9, 1.8, .55)) continue; const d = Math.hypot(x - P.pos.x, z - P.pos.z); if (d > bd) { bd = d; best = [x, z]; } }
   if (!best) return; callTitan("foe", best[0], best[1], 0); say("The Opposition is dropping a Titan of its own.", 3.5); }
@@ -305,7 +304,7 @@ function fireCarbine() {
   let best = rayWorld(_o, _d, 220); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
   const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .7); tracer(from, eu, "#ffd890", 9000, .5); flash(from, "#ffc477", 900, .06);
   netShot(end, 0);
-  if (rh.hit) { const head = end.y - RP.pos.y > RP.h * .82; send("phit", [pw().dmg * (head ? 2 : 1), head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
+  if (rh.hit) { const head = end.y - rh.rp.pos.y > rh.rp.h * .82; relay("phit", [rh.rp.slot, pw().dmg * (head ? 2 : 1), head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
   else if (th.who) { hurtTitan(th.who, 3); snd("hitmarker", { gain: .7 }); hitT = .08; puff(eu, { n: 6, color: th.who.shield > 0 ? "#8fe0f0" : "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
   else if (gh.who) { const g = gh.who, head = !g.veh && end.y - g.hitY > g.hitH * .8; snd(g.veh ? "impact_metal" : "impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); damage(g, pw().dmg * (head ? 2.5 : 1) * (g.veh ? .2 : 1), toU(P.pos), head ? "head" : "chest", true); hitT = .12; if (g.veh) puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
   else { snd(surface(end), { pos: xyz(end) }); puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, grav: -170, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); puff(eu, { n: 2, color: "#a09684", dark: true, opacity: .4, size: 4, life: .7, grow: 1.8, drag: 3, vel: () => V3((rnd() - .5) * 12, 8, (rnd() - .5) * 12) }); }
@@ -317,13 +316,13 @@ function fireCharge() {
   const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .8); tracer(from, eu, "#8fe0f0", 30000, 1.6); flash(from, "#8fe0f0", 2600, .14); flash(eu, "#8fe0f0", 2200, .2);
   puff(eu, { n: 18, color: "#d8f8ff", hot: 3, size: 4, life: .35, vel: () => V3((rnd() - .5) * 110, rnd() * 90, (rnd() - .5) * 110) }); ringFx(eu, "#8fe0f0", 30, .3);
   netShot(end, 1);
-  if (rh.hit) { const head = end.y - RP.pos.y > RP.h * .82; send("phit", [80, head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
+  if (rh.hit) { const head = end.y - rh.rp.pos.y > rh.rp.h * .82; relay("phit", [rh.rp.slot, 80, head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
   else if (th.who) { hurtTitan(th.who, 70); snd("hitmarker", { gain: .9 }); hitT = .15; } else if (!gh.who) snd("impact_metal", { pos: xyz(end), gain: 1.4, pitch: .8 }); else if (gh.who) { snd("hitmarker"); hitT = .15; damage(gh.who, gh.who.veh ? 130 : 9999, toU(P.pos), "chest", true); }
 }
 function fireCannon(t) {
   t.ammo--; snd("cannon"); t.fireCd = .24; P.kick = 1; t.recoil = 1; flashT = .06; P.shake = Math.max(P.shake, .1); aimRay(.006);
   let best = rayWorld(_o, _d, 260); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best;
-  const end = _o.clone().addScaledVector(_d, Math.max(0, best - .1)), from = muzzleAt(.9, .7, 2.4); tracer(from, toU(end), "#ffd890", 9000, 1.5); flash(from, "#ffc477", 3200, .1);
+  const end = _o.clone().addScaledVector(_d, Math.max(0, best - .1)), from = muzzleAt(.9, .7, 2.4); tracer(from, toU(end), "#ffd890", 9000, 1.5); flash(from, "#ffc477", 3200, .1); if (B.mp) relay("tfx", [0, r2(end.x), r2(end.y), r2(end.z)], false);
   puff(from, { n: 8, color: "#8f8a80", dark: true, opacity: .35, size: 8, life: 1.2, grow: 2, drag: 2.4, vel: () => V3((rnd() - .5) * 20, 10 + rnd() * 14, (rnd() - .5) * 20) });
   if (th.who) { hurtTitan(th.who, 34); hitT = .12; } else if (gh.who && gh.who.veh) damage(gh.who, 80, toU(P.pos), "blast", true); if (gh.who || th.who) { hitT = .12; snd("hitmarker", { gain: .8 }); }
   blast(end, 2.2, { team: "you" });
@@ -347,7 +346,7 @@ function stepGun(dt) {
 
 /* ---------- the run ---------- */
 function checkDone() {}
-function restart() { for (const t of TITANS) scene.remove(t.rig.root); TITANS.length = 0; for (const h of HUSKS) scene.remove(h.root); HUSKS.length = 0; for (const r of ROCKETS) scene.remove(r.mesh); ROCKETS.length = 0; P.seq = null; CK.mode = "off"; for (const D of DROPS) scene.remove(D.pod); DROPS.length = 0; LATER.length = 0; foeCalled = false; P.mine = null; P.meter = 0; P.weapon = 0; P.charge = 0;
+function restart() { for (const rp of RPS.values()) rp.titan = null; for (const t of TITANS) scene.remove(t.rig.root); TITANS.length = 0; for (const h of HUSKS) scene.remove(h.root); HUSKS.length = 0; for (const r of ROCKETS) scene.remove(r.mesh); ROCKETS.length = 0; P.seq = null; CK.mode = "off"; for (const D of DROPS) scene.remove(D.pod); DROPS.length = 0; LATER.length = 0; foeCalled = false; P.mine = null; P.meter = 0; P.weapon = 0; P.charge = 0;
   respawn(); resetBattle(); if (MAP.on) setMap(false); runT = 0; runOn = true; runDone = false; say(""); }
 
 /* ---------- input ---------- */
@@ -466,7 +465,7 @@ function hud(dt) { el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { s
 /* ---------- frame ---------- */
 const H = 1 / 120; let acc = 0, last = performance.now(), menuSpin = 0;
 function advance(dt) {
-  if (active() || (B.mp && started)) { acc += dt; while (acc >= H) { stepPilot(H); acc -= H; } stepGun(dt); stepBattle(dt); stepTitans(dt); if (!B.mp && !foeCalled && B.time > 100 && !B.over) callFoe(); if (!B.mp && !P.mine && !B.over) P.meter = Math.min(100, P.meter + .8 * dt); if (B.mp) netTick(dt); }
+  if (active() || (B.mp && started)) { acc += dt; while (acc >= H) { stepPilot(H); acc -= H; } stepGun(dt); stepBattle(dt); stepTitans(dt); if (!B.mp && !foeCalled && B.time > 100 && !B.over) callFoe(); if (!P.mine && !B.over) P.meter = Math.min(100, P.meter + .8 * dt); if (B.mp) netTick(dt); }
   try { SOL.update(dt); } catch (e) { if (!advance.w1) { advance.w1 = 1; console.error("[soldiers]", e); } }
 }
 function frame(now) {
@@ -491,48 +490,98 @@ function frame(now) {
 }
 buildPass(); respawn();
 
-/* ---------- two players ----------
-   Each player's own pilot runs on their own machine and is sent to the other about twenty times a second. A hit is
-   decided on the screen of the one who fired. The battle itself runs on the host (see mf/battle.js). */
-const RP = { on: false, pos: V3(), net: V3(), yaw: 0, pitch: 0, h: 1.8, dead: false, grounded: true, speed: 0, s: null, seen: 0, shown: false };
-const swap = (sd) => (sd === "you" ? "foe" : "you");
-function rpHit(o, d, best) { if (!B.mp || !RP.on || RP.dead) return { best, hit: false }; const p = RP.pos, t = rayBox(o, d, [p.x - .42, p.y, p.z - .42], [p.x + .42, p.y + RP.h, p.z + .42], best); return t < best ? { best: t, hit: true } : { best, hit: false }; }
-function netShot(end, kind) { if (B.mp) send("sh", [+P.pos.x.toFixed(1), +(P.pos.y + P.h * .8).toFixed(1), +P.pos.z.toFixed(1), +end.x.toFixed(1), +end.y.toFixed(1), +end.z.toFixed(1), kind], false); }
-function rpFigure() { if (RP.s) { try { RP.s.remove(); } catch (e) {} RP.s = null; } const fac = B.fac.foe, mil = fac === "militia";
-  const s = SOL.make({ x: RP.pos.x * U, z: RP.pos.z * U, y: RP.pos.y * U, yaw: 0, weapon: "rifle", role: "rifleman", camo: mil ? "ranger" : "urban", seed: 4242 });
-  if (!mil && window.CBMech) { try { window.CBMech.dress(s, "light", THREE, charMat, { scheme: "steel" }); } catch (e) {} }
-  const tag = new THREE.Mesh(new THREE.OctahedronGeometry(2.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, .5, .25) })); tag.position.y = 40; s.root.add(tag); RP.s = s; }
-function stepRemote(dt) { if (!RP.on) return; const k = 1 - Math.exp(-dt * 16); RP.pos.lerp(RP.net, RP.pos.distanceTo(RP.net) > 12 ? 1 : k);
-  if (!RP.s) rpFigure(); const s = RP.s; if (RP.dead) { if (s.dead < 0) s.die(V3((RP.pos.x + 2) * U, 0, RP.pos.z * U), { zone: "chest", force: 1 }); return; } if (s.dead >= 0) { rpFigure(); return; }
-  s.place(RP.pos.x * U, RP.pos.z * U, RP.pos.y * U); const cp = Math.cos(RP.pitch); s.aimAt(V3((RP.pos.x - Math.sin(RP.yaw) * cp * 30) * U, (RP.pos.y + 1.5 + Math.sin(RP.pitch) * 30) * U, (RP.pos.z - Math.cos(RP.yaw) * cp * 30) * U));
-  const cr = RP.h < 1.5; if (cr !== !!s.crouch) { try { s.setCrouch(cr); } catch (e) {} } }
+/* ---------- more than one player ----------
+   Up to four: two sides of one or two. Each player's own pilot and Titan run on their own machine and are sent to the
+   others about twenty times a second, by way of the host. A hit is decided on the screen of the one who fired. The
+   battle itself runs on the host (see mf/battle.js). A player whose link drops keeps their place, their troops stay on
+   the field, and they are let back in when their browser finds the host again. */
+const MY = { slot: 0, team: 0, south: true, name: "", token: (() => { try { if (/[?&]local/.test(location.search)) throw 0; let t = localStorage.getItem("afterburn-token"); if (!t) { t = Math.random().toString(36).slice(2, 12); localStorage.setItem("afterburn-token", t); } return t; } catch (e) { return Math.random().toString(36).slice(2, 12); } })() };
+let ROSTER = [], mpOn = false;   // everyone in the match: { slot, name, team, kit, here } and, on the host, { id, token }
+const RPS = new Map(), keyOf = (slot) => (slot === 0 ? "you" : "p" + slot), slotOf = (id) => { const r = ROSTER.find((q) => q.id === id); return r ? r.slot : -1; };
+const myKit = () => ({ fac: LOAD.side, list: LOAD.list[LOAD.side].slice(), doctrine: LOAD.doctrine, chassis: LOAD.chassis, paint: LOAD.paint });
+const relSide = (hostSide) => ((hostSide === "you") === MY.south ? "you" : "foe");   // the host's side names, as this screen sees them
+const ONE = { phit: 1, thit: 1 };   // messages meant for one player; the rest are for everybody
+// send something to the player it is for, or to everyone, whichever this player is
+function relay(k, d, sure = true) { if (!B.mp) return; if (B.mp === "guest") return send(k, d, sure); if (ONE[k]) { const r = ROSTER.find((q) => q.slot === d[0]); if (r && r.id) send(k, d, sure, r.id); } else send(k, [0, d], sure); }
+function mkRP(r) { const rp = { slot: r.slot, name: r.name, kit: r.kit || {}, side: r.team === MY.team ? "you" : "foe", on: false, seen: 0, pos: V3(), net: V3(), chest: V3(), yaw: 0, pitch: 0, h: 1.8, dead: false, grounded: true, sliding: false, wall: 0, speed: 0, vy: 0, djN: 0, djT: 9, inTitan: false, fig: null, titan: null, pk: null,
+    get ok() { return this.on && !this.dead && !this.inTitan; } }; RPS.set(r.slot, rp); return rp; }
+function dropRP(rp) { if (rp.fig) { rp.fig.dispose(); rp.fig = null; } if (rp.titan) { scene.remove(rp.titan.rig.root); const i = TITANS.indexOf(rp.titan); if (i >= 0) TITANS.splice(i, 1); rp.titan = null; } }
+function setRoster(list) { for (const rp of RPS.values()) dropRP(rp); RPS.clear(); ROSTER = list; const me = ROSTER.find((r) => r.slot === MY.slot); if (me) MY.team = me.team; for (const r of ROSTER) if (r.slot !== MY.slot) mkRP(r); }
+function rpHit(o, d, best) { let rp = null; if (B.mp) for (const q of RPS.values()) { if (!q.ok || q.side === "you") continue; const p = q.pos, t = rayBox(o, d, [p.x - .42, p.y, p.z - .42], [p.x + .42, p.y + q.h, p.z + .42], best); if (t < best) { best = t; rp = q; } } return { best, hit: !!rp, rp }; }
+function netShot(end, kind) { if (B.mp) relay("sh", [+P.pos.x.toFixed(1), +(P.pos.y + P.h * .8).toFixed(1), +P.pos.z.toFixed(1), +end.x.toFixed(1), +end.y.toFixed(1), +end.z.toFixed(1), kind], false); }
+const r2 = (v) => +v.toFixed(2);
+let djN = 0, wasDouble = true;
+function myPacket() { if (wasDouble && !P.canDouble && !P.grounded) djN++; wasDouble = P.canDouble; const t = P.mine && P.mine.alive ? P.mine : null, w = P.wall ? Math.sign(-(P.wall.ax === 0 ? P.wall.n * Math.cos(P.yaw) : -P.wall.n * Math.sin(P.yaw))) : 0;
+  return [r2(P.pos.x), r2(P.pos.y), r2(P.pos.z), r2(P.yaw), r2(P.pitch), r2(P.h), (P.dead > 0 ? 1 : 0) | (P.grounded ? 2 : 0) | (P.sliding ? 4 : 0) | (P.titan || P.seq ? 8 : 0), +hs().toFixed(1), w, djN, +P.vel.y.toFixed(1),
+    t ? [r2(t.pos.x), r2(t.pos.y), r2(t.pos.z), r2(t.yaw), +t.vel.x.toFixed(1), +t.vel.z.toFixed(1), r2(t.kneel), r2(t.hatch), r2(t.aimYaw), r2(t.aimPitch), Math.round(t.shield), Math.round(t.hull), t.hullMax, (t.doom > 0 ? 1 : 0) | (t === P.titan ? 2 : 0)] : 0]; }
+function applyPk(rp, a) { rp.pk = a; rp.net.set(a[0], a[1], a[2]); if (!rp.on) rp.pos.copy(rp.net); rp.on = true; rp.seen = performance.now(); rp.yaw = a[3]; rp.pitch = a[4]; rp.h = a[5]; rp.dead = !!(a[6] & 1); rp.grounded = !!(a[6] & 2); rp.sliding = !!(a[6] & 4); rp.inTitan = !!(a[6] & 8); rp.speed = a[7]; rp.wall = a[8]; if (a[9] !== rp.djN) { rp.djN = a[9]; rp.djT = 0; } rp.vy = a[10];
+  const tn = a[11]; if (tn) { if (!rp.titan) { const t = makeTitan(rp.side, tn[0], tn[2], tn[3], rp.kit); t.remote = rp.slot; t.pos.y = tn[1]; t.land = 0; rp.titan = t; } rp.titan.net = tn; } else if (rp.titan) { const t = rp.titan; rp.titan = null; const i = TITANS.indexOf(t); if (i >= 0) TITANS.splice(i, 1); blast(V3(t.pos.x, t.pos.y + 2.5, t.pos.z), 5, {}); chunksFx(toU(t.pos).setY(t.pos.y * U + 60), "#34373a", 8, 90); t.rig.wreck(); HUSKS.push(t.rig); } }
+// a Titan that belongs to someone else: it goes where its owner's machine says it is
+function stepPuppet(t, dt) { const n = t.net; if (n) { const k = 1 - Math.exp(-dt * 12); t.pos.x += (n[0] - t.pos.x) * k; t.pos.y += (n[1] - t.pos.y) * k; t.pos.z += (n[2] - t.pos.z) * k; let dy = (n[3] - t.yaw) % (Math.PI * 2); if (dy > Math.PI) dy -= Math.PI * 2; if (dy < -Math.PI) dy += Math.PI * 2; t.yaw += dy * k;
+    t.vel.set(n[4], 0, n[5]); t.kneelTo = n[6]; t.hatchTo = n[7]; t.aimYaw = n[8]; t.aimPitch = n[9]; t.shield = n[10]; t.hull = n[11]; t.hullMax = n[12]; t.doom = n[13] & 1 ? 1 : 0; } placeTitan(t, dt); }
+function stepRemote(dt) { const now = performance.now(); for (const rp of RPS.values()) { if (rp.on && now - rp.seen > 2500) rp.on = false; if (!rp.on) { if (rp.fig) rp.fig.root.visible = false; continue; }
+    rp.pos.lerp(rp.net, rp.pos.distanceTo(rp.net) > 12 ? 1 : 1 - Math.exp(-dt * 18)); rp.chest.set(rp.pos.x, rp.pos.y + rp.h * .6, rp.pos.z); rp.djT += dt;
+    if (!rp.fig) rp.fig = makeFigure(rp.kit.fac, rp.side === "foe");
+    rp.fig.pose(dt, { x: rp.pos.x, y: rp.pos.y, z: rp.pos.z, yaw: rp.yaw, pitch: rp.pitch, speed: rp.speed, grounded: rp.grounded, sliding: rp.sliding, crouch: rp.h < 1.5 && !rp.sliding, wall: rp.wall, dj: rp.djT, vy: rp.vy, dead: rp.dead, hidden: rp.inTitan }); } }
 let netT = 0, snapT = 0, pingT = 0;
-function netTick(dt) { stepRemote(dt); if (!NET.open) return; netT += dt; snapT += dt; pingT += dt;
-  if (netT >= .05) { netT = 0; send("p", [+P.pos.x.toFixed(2), +P.pos.y.toFixed(2), +P.pos.z.toFixed(2), +P.yaw.toFixed(2), +P.pitch.toFixed(2), +P.h.toFixed(2), (P.dead > 0 ? 1 : 0) | (P.grounded ? 2 : 0), +hs().toFixed(1)], false); }
-  if (B.mp === "host" && snapT >= .1) { snapT = 0; send("snap", snapshot(), false); }
-  if (pingT >= 1) { pingT = 0; $("tr").textContent = (B.mp === "host" ? "Hosting " + NET.code : "Joined " + NET.code) + "  ·  ping " + NET.ping + " ms  ·  Esc: free the mouse"; } }
-onMsg("p", (a) => { RP.on = true; RP.net.set(a[0], a[1], a[2]); if (!RP.seen) RP.pos.copy(RP.net); RP.seen = performance.now(); RP.yaw = a[3]; RP.pitch = a[4]; RP.h = a[5]; RP.dead = !!(a[6] & 1); RP.grounded = !!(a[6] & 2); RP.speed = a[7]; });
-onMsg("phit", (a) => { hurtPilot(a[0] * (a[1] ? 1.25 : 1)); });
-onMsg("pdown", () => { snd("kill"); say("You put their pilot down.", 2.5); });
-onMsg("sh", (a) => { const from = V3(a[0] * U, a[1] * U, a[2] * U), to = V3(a[3] * U, a[4] * U, a[5] * U); tracer(from, to, a[6] ? "#8fe0f0" : "#ffb890", a[6] ? 30000 : 9000, a[6] ? 1.6 : .5); flash(from, a[6] ? "#8fe0f0" : "#ffc477", 900, .06); snd("grunt_shot", { pos: [a[0], a[1], a[2]] }); });
+function netTick(dt) { stepRemote(dt); netT += dt; snapT += dt; pingT += dt;
+  if (netT >= .05) { netT = 0; const pk = myPacket(); if (B.mp === "guest") send("p", pk, false); else send("pp", [[0, pk], ...ROSTER.filter((r) => r.here && r.slot && RPS.get(r.slot) && RPS.get(r.slot).pk).map((r) => [r.slot, RPS.get(r.slot).pk])], false); }
+  if (B.mp === "host" && snapT >= .1) { snapT = 0; for (const r of ROSTER) if (r.id && r.here) send("snap", snapshot(keyOf(r.slot)), false, r.id); }
+  if (pingT >= 1) { pingT = 0; const n = ROSTER.filter((r) => r.here !== false).length; $("tr").textContent = (B.mp === "host" ? "Hosting " + NET.code : "In " + NET.code + "  ·  ping " + NET.ping + " ms") + "  ·  " + n + " of " + ROSTER.length + " here  ·  Esc: free the mouse"; } }
+// what happens on this screen when another player does something
+const ACT = {
+  sh: (slot, a) => { const from = V3(a[0] * U, a[1] * U, a[2] * U), to = V3(a[3] * U, a[4] * U, a[5] * U); tracer(from, to, a[6] ? "#8fe0f0" : "#ffb890", a[6] ? 30000 : 9000, a[6] ? 1.6 : .5); flash(from, a[6] ? "#8fe0f0" : "#ffc477", 900, .06); snd("grunt_shot", { pos: [a[0], a[1], a[2]] }); },
+  pdown: (slot) => { const rp = RPS.get(slot); if (!rp) return; if (rp.side === "foe") { snd("kill"); say("An enemy pilot is down.", 2.5); } else say((rp.name || "Your teammate") + " is down.", 2.5); },
+  tdrop: (slot, a) => { const rp = RPS.get(slot); if (!rp) return; callTitan(rp.side, a[0], a[1], a[2]); DROPS[DROPS.length - 1].ghost = true; say(rp.side === "foe" ? "An enemy Titan is dropping." : (rp.name || "Your teammate") + " has called a Titan.", 3); },
+  tfx: (slot, a) => { const rp = RPS.get(slot), t = rp && rp.titan; if (!t) return;
+    if (a[0] === 0) { const from = muzzleOf(t), end = V3(a[1], a[2], a[3]); tracer(from, toU(end), "#ffd890", 9000, 1.5); flash(from, "#ffc477", 3200, .1); t.recoil = 1; snd("cannon", { pos: [t.pos.x, t.pos.y + 4, t.pos.z] }); later(.03, () => blast(end, 2.2, {})); }
+    else if (a[0] === 1) { const from = V3(a[1], a[2], a[3]), tgt = V3(a[4], a[5], a[6]), m = fxLayer(new THREE.Mesh(new THREE.BoxGeometry(3, 3, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, 2, .8) }))); scene.add(m); ROCKETS.push({ pos: from, vel: tgt.clone().sub(from).normalize().multiplyScalar(14).add(V3(0, 10, 0)), tgt, team: null, ghost: true, t: 0, mesh: m }); snd("rocket", { pos: xyz(from) }); }
+    else if (a[0] === 2) { t.punch = .45; } } };
+for (const k in ACT) onMsg(k, (m, from) => { if (B.mp === "host") { const slot = slotOf(from); if (slot < 0) return; ACT[k](slot, m); send(k, [slot, m], k !== "sh", null, from); } else if (B.mp === "guest" && m[0] !== MY.slot) ACT[k](m[0], m[1]); });
+for (const k in ONE) onMsg(k, (a, from) => { if (B.mp === "host" && a[0] !== 0) { const r = ROSTER.find((q) => q.slot === a[0]); if (r && r.id) send(k, a, true, r.id); return; } if (!B.mp) return; if (k === "phit") hurtPilot(a[1] * (a[2] ? 1.25 : 1)); else if (P.mine) hurtTitan(P.mine, a[1]); });
+onMsg("p", (a, from) => { const rp = RPS.get(slotOf(from)); if (rp && B.mp === "host") applyPk(rp, a); });
+onMsg("pp", (list) => { if (B.mp !== "guest") return; for (const [slot, pk] of list) { const rp = RPS.get(slot); if (rp && pk) applyPk(rp, pk); } });
 onMsg("snap", (o) => { if (B.mp === "guest") applySnap(o); });
-onMsg("util", (a) => { if (B.mp === "guest") useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, swap(a[4]), true); else if (B.mp === "host") netIn.util(a); });
-for (const k of ["dep", "doc", "order", "act"]) onMsg(k, (a) => { if (B.mp === "host") netIn[k](a); });
-onMsg("hit", (a) => { if (B.mp === "host") netIn.hit(a, V3(RP.pos.x * U, RP.pos.y * U, RP.pos.z * U)); });
-// setting a match up: the guest says what it is bringing, the host answers with its own and both begin
-const myKit = () => ({ fac: LOAD.side, list: LOAD.list[LOAD.side].slice(), doctrine: LOAD.doctrine });
-const mpNote = (t) => { $("mp-status").textContent = t; };
-function mpBegin(role, peer) { B.mp = role; B.peer = peer; RP.on = false; RP.seen = 0; RP.dead = false; if (RP.s) { try { RP.s.remove(); } catch (e) {} RP.s = null; } begin(false); say(role === "host" ? "The other player has joined. The match is on." : "You are in. The match is on.", 3); }
-onMsg("hello", (kit) => { if (NET.role !== "host") return; send("start", myKit()); mpBegin("host", kit); });
-onMsg("start", (kit) => { if (NET.role !== "guest") return; mpBegin("guest", kit); });
-onMsg("again", (kit) => { if (B.mp === "guest") { B.peer = kit; restart(); say("The host has started the match again.", 3); } });
-onMsg("bye", () => { NET.open = false; ended("The other player has left the match."); });
-onMsg("_close", (why) => ended(why));
-function ended(why) { mpNote(why); if (B.mp && started) { say(why + " Press T to play on alone.", 0); B.over = B.over || "you"; } }
-function again() { if (B.mp === "guest" && NET.open) { say("Only the host can start the match again.", 2.5); return; } if (B.mp && !NET.open) { B.mp = null; B.peer = null; RP.on = false; if (RP.s) { try { RP.s.remove(); } catch (e) {} RP.s = null; } $("tr").textContent = "P: tuning   T: restart   Esc: free the mouse"; } if (B.mp === "host") send("again", myKit()); restart(); }
-$("mp-host").onclick = async () => { if (NET.role) return; mpNote("Asking for a code..."); try { const code = await host(); mpNote("Your code is " + code + ". Give it to the other player and wait here. The match starts when they join."); $("mp-code").value = code; } catch (e) { mpNote(e.message + " Try again."); NET.role = null; } };
-$("mp-join").onclick = async () => { if (NET.role) return; const code = $("mp-code").value.trim(); if (code.length < 3 && !/[?&]local/.test(location.search)) { mpNote("Type the host's code first."); return; } mpNote("Linking..."); try { await join(code); mpNote("Linked. Starting..."); send("hello", myKit()); } catch (e) { mpNote(e.message); NET.role = null; } };
+onMsg("util", (a, from) => { if (B.mp === "guest") useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, relSide(a[4]), true); else if (B.mp === "host" && slotOf(from) > 0) netIn.util(a, keyOf(slotOf(from))); });
+for (const k of ["dep", "doc", "order", "act"]) onMsg(k, (a, from) => { if (B.mp === "host" && slotOf(from) > 0) netIn[k](a, keyOf(slotOf(from))); });
+onMsg("hit", (a, from) => { const slot = slotOf(from), rp = RPS.get(slot); if (B.mp === "host" && rp) netIn.hit(a, keyOf(slot), V3(rp.pos.x * U, rp.pos.y * U, rp.pos.z * U)); });
 
-window.__mf = { NET, RP, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+/* the room before a match, and getting into one */
+const mpNote = (t) => { $("mp-status").textContent = t; };
+function showRoster() { const el = $("mp-roster"); if (!ROSTER.length) { el.innerHTML = ""; $("mp-start").style.display = $("mp-team").style.display = "none"; return; }
+  const row = (r) => `<div class="${r.team ? "foe" : "you"}">${r.slot === MY.slot ? "▸ " : ""}${(r.name || "Player " + (r.slot + 1)).replace(/[<>&]/g, "")}${r.slot === 0 ? " (host)" : ""}${r.here === false ? " (dropped)" : ""}</div>`;
+  el.innerHTML = `<div><div class="lab">Side one</div>${ROSTER.filter((r) => !r.team).map(row).join("") || "<div class=\"dim\">nobody yet</div>"}</div><div><div class="lab">Side two</div>${ROSTER.filter((r) => r.team).map(row).join("") || "<div class=\"dim\">nobody yet</div>"}</div>`;
+  $("mp-team").style.display = started ? "none" : ""; $("mp-start").style.display = NET.role === "host" && !started ? "" : "none"; }
+const lobbyOut = () => { for (const r of ROSTER) if (r.id) send("lobby", { you: r.slot, players: ROSTER.map(({ slot, name, team, here }) => ({ slot, name, team, here })) }, true, r.id); showRoster(); };
+const startMsg = (r, back) => ({ slot: r.slot, duo: B.duo, south: r.team === ROSTER[0].team, back: !!back, roster: ROSTER.map(({ slot, name, team, kit, here }) => ({ slot, name, team, kit, here })) });
+function mpBegin(role) { B.mp = role; mpOn = true; B.flip = !MY.south; if (role === "host") B.roster = ROSTER.map((r) => ({ key: keyOf(r.slot), side: r.team === ROSTER[0].team ? "you" : "foe", ...(r.kit || {}) })); begin(false); showRoster(); }
+function hostStart(again) { if (ROSTER.length < 2) { mpNote("Wait for at least one other player to join."); return; } if (!ROSTER.some((r) => r.team !== ROSTER[0].team)) { mpNote("Both sides need at least one player. Someone has to switch sides."); return; }
+  ROSTER[0].kit = myKit(); B.duo = ROSTER.length > 2; MY.slot = 0; MY.south = true; MY.team = ROSTER[0].team; const list = ROSTER; setRoster(list); for (const r of ROSTER) if (r.id) send(again ? "again" : "start", startMsg(r), true, r.id);
+  if (again) { B.roster = ROSTER.map((r) => ({ key: keyOf(r.slot), side: r.team === ROSTER[0].team ? "you" : "foe", ...(r.kit || {}) })); restart(); } else mpBegin("host"); say(again ? "The match starts again." : "The match is on.", 3); }
+onMsg("_join", () => {});
+onMsg("hello", (m, from) => { if (NET.role !== "host") return; let r = ROSTER.find((q) => q.token === m.token && q.slot);
+  if (r) { r.id = from; r.here = true; r.kit = started ? r.kit : m.kit; r.name = m.name || r.name; B.away[keyOf(r.slot)] = false; if (started) { send("start", startMsg(r, true), true, from); say((r.name || "A player") + " is back in.", 3); } lobbyOut(); return; }
+  if (started) { send("no", "That match has already started.", true, from); return; } if (ROSTER.length >= 4) { send("no", "That match is full.", true, from); return; }
+  const slot = [1, 2, 3].find((k) => !ROSTER.some((q) => q.slot === k)), t0 = ROSTER.filter((q) => !q.team).length, t1 = ROSTER.length - t0;
+  ROSTER.push({ slot, token: m.token, id: from, name: m.name || "Player " + (slot + 1), team: t1 < t0 ? 1 : 0, kit: m.kit, here: true }); ROSTER.sort((a, b) => a.slot - b.slot); mpNote("Your code is " + NET.code + ". " + (ROSTER.length - 1) + " joined. Start when everyone is in."); lobbyOut(); });
+onMsg("_leave", (id) => { const r = ROSTER.find((q) => q.id === id); if (!r) return; if (!started) { ROSTER = ROSTER.filter((q) => q !== r); lobbyOut(); return; } r.here = false; r.id = null; B.away[keyOf(r.slot)] = true; const rp = RPS.get(r.slot); if (rp) rp.on = false; say((r.name || "A player") + " has dropped. Their place is held for them.", 4); lobbyOut(); });
+onMsg("team", (x, from) => { if (NET.role !== "host" || started) return; const r = ROSTER.find((q) => q.id === from); if (r && ROSTER.filter((q) => q.team !== r.team).length < 2) { r.team = r.team ? 0 : 1; lobbyOut(); } });
+onMsg("lobby", (m) => { if (NET.role !== "guest") return; MY.slot = m.you; ROSTER = m.players; showRoster(); if (!started) mpNote("You are in. Waiting for the host to start the match."); });
+onMsg("no", (why) => { mpNote(why); leave(); ROSTER = []; showRoster(); });
+onMsg("start", (m) => { if (NET.role !== "guest") return; MY.slot = m.slot; MY.south = m.south; B.duo = m.duo; setRoster(m.roster); if (m.back && B.mp === "guest" && started) { B.over = null; say("You are back in.", 3); return; } mpBegin("guest"); say(m.back ? "You are back in." : "The match is on.", 3); });
+onMsg("again", (m) => { if (B.mp !== "guest") return; MY.slot = m.slot; MY.south = m.south; B.duo = m.duo; B.flip = !MY.south; setRoster(m.roster); restart(); say("The host has started the match again.", 3); });
+const hello = () => send("hello", { token: MY.token, name: MY.name, kit: myKit() });
+onMsg("_open", () => { if (mpOn) hello(); });   // the link came back by itself: ask for the same place
+onMsg("_close", () => { if (B.mp === "guest" && started) say("The link to the host has dropped. Trying to get back in.", 0); else mpNote("The link to the host has dropped."); });
+onMsg("_retry", (secs) => { mpNote("Trying to get back in. " + secs + " seconds left."); });
+onMsg("_lost", () => { mpNote("Could not get back in."); if (B.mp && started) { say("Could not get back to the host. Press T to play on alone.", 0); B.over = B.over || "foe"; } });
+function again() { if (B.mp === "guest") { if (NET.open) { say("Only the host can start the match again.", 2.5); return; } leave(); B.mp = null; mpOn = false; B.duo = false; B.flip = false; setRoster([]); $("tr").textContent = "P: tuning   T: restart   Esc: free the mouse"; restart(); return; } if (B.mp === "host") { hostStart(true); return; } restart(); }
+const nameOf = () => { MY.name = ($("mp-name").value || "").trim().slice(0, 16); try { localStorage.setItem("afterburn-name", MY.name); } catch (e) {} };
+try { $("mp-name").value = localStorage.getItem("afterburn-name") || ""; $("mp-code").value = sessionStorage.getItem("afterburn-code") || ""; } catch (e) {}
+$("mp-host").onclick = async () => { if (NET.role) return; nameOf(); mpNote("Asking for a code..."); try { const code = await host(); MY.slot = 0; ROSTER = [{ slot: 0, id: null, token: MY.token, name: MY.name || "Player 1", team: 0, kit: myKit(), here: true }]; mpNote("Your code is " + code + ". Give it to the other players, and start when everyone is in."); $("mp-code").value = code; showRoster(); } catch (e) { mpNote(e.message + " Try again."); } };
+$("mp-join").onclick = async () => { if (NET.role) return; nameOf(); const code = $("mp-code").value.trim(); if (code.length < 3 && !/[?&]local/.test(location.search)) { mpNote("Type the host's code first."); return; } mpNote("Linking..."); try { await join(code); try { sessionStorage.setItem("afterburn-code", NET.code); } catch (e) {} mpOn = true; mpNote("Linked."); hello(); } catch (e) { mpNote(e.message); } };
+$("mp-team").onclick = () => { if (NET.role === "guest") send("team", 0); else if (NET.role === "host") { const r = ROSTER[0]; if (ROSTER.filter((q) => q.team !== r.team).length < 2) { r.team = r.team ? 0 : 1; lobbyOut(); } } };
+$("mp-start").onclick = () => hostStart(false);
+window.__mf = { NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);

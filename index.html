@@ -89,7 +89,7 @@
   .mk.card > b { width: 34px; height: 42px; line-height: 42px; font-size: 18px; border-right: 0; }
   .mk.card span { display: block; min-width: 96px; height: 42px; box-sizing: content-box; padding: 0 8px; background: rgba(20,16,12,.92); border: 2px solid currentColor; line-height: 1.25; display: flex; flex-direction: column; justify-content: center; }
   .mk.card strong { color: #efe2c8; font-size: 12px; } .mk.card q { quotes: none; color: currentColor; font-size: 9px; letter-spacing: 1px; } .mk.card em { color: #b9a582; font-size: 11px; }
-  .mk.card.foe span { min-width: 0; } .mk.card.foe { opacity: .92; }
+  .mk.card.foe span { min-width: 0; } .mk.card.ally { opacity: .8; } #mp-roster .dim { color: #b9a582; } #mp-roster > div > div:not(.lab) { padding: 1px 0; } .mk.card.foe { opacity: .92; }
   .mk.card.sel { color: #f2c46a; z-index: 5; filter: drop-shadow(0 0 8px #f2c46a); } .mk.card.sel span { background: #4a3210; } .mk.card.sel strong { color: #fff3d0; } .mk.card.sel em { color: #f2c46a; }
   /* supply: a bar that fills as supply comes in and drops when it is spent */
   #map-supply { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); padding: 6px 12px 5px; width: min(520px, 60vw); }
@@ -210,10 +210,12 @@
     <tr><td>On the map</td><td>Left click a squad's card to pick it, or drag a box round several. Left click the ground or a point to send them there. Hold Shift and click to add stops on the way, then let go of Shift and click where they should end up. Right drag moves the map, middle drag turns it.</td></tr>
   </table></details>
   <div class="row"><button class="go" id="go" style="margin-top:0">Drop in alone</button><button id="lab">Open the sound lab</button></div>
-  <h2>Two players</h2>
-  <p class="note" style="color:#b9a582;font-size:12px;margin:0">One of you hosts and gets a code. The other types the code and joins. Each of you brings the side, pilot and army list chosen above, and you fight each other across the same field. The host should keep this tab in front, since the battle runs on the host's machine.</p>
-  <div class="row"><button id="mp-host">Host a match</button><input id="mp-code" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" style="font:inherit;width:90px;text-transform:uppercase;background:#1b1713;color:#f2c46a;border:2px solid #6b5438;padding:6px 8px;letter-spacing:.2em"><button id="mp-join">Join with this code</button></div>
+  <h2>Play with others</h2>
+  <p class="note" style="color:#b9a582;font-size:12px;margin:0">Two to four players, in two sides of one or two. One of you hosts and gets a code; the others type the code and join. Each of you brings the side, pilot, Titan and army list chosen above. The host should keep this tab in front, since the battle runs on the host's machine. If your link drops, your place is held and your browser tries to get you back in.</p>
+  <div class="row"><input id="mp-name" maxlength="16" placeholder="Your name" autocomplete="off" spellcheck="false" style="font:inherit;width:130px;background:#1b1713;color:#efe2c8;border:2px solid #6b5438;padding:6px 8px"><button id="mp-host">Host a match</button><input id="mp-code" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" style="font:inherit;width:90px;text-transform:uppercase;background:#1b1713;color:#f2c46a;border:2px solid #6b5438;padding:6px 8px;letter-spacing:.2em"><button id="mp-join">Join with this code</button></div>
   <p id="mp-status" class="lab" style="margin-top:8px;text-transform:none;letter-spacing:0;color:#8fe0f0"></p>
+  <div id="mp-roster" style="display:flex;gap:28px;margin-top:6px"></div>
+  <div class="row"><button id="mp-team" style="display:none">Switch sides</button><button id="mp-start" class="go" style="display:none;margin-top:0">Start the match</button></div>
   <p class="lab" style="margin-top:12px">Sound effects generated with ElevenLabs.</p>
 </div>
 
