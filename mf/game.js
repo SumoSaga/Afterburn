@@ -521,7 +521,7 @@ function stepPuppet(t, dt) { const n = t.net; if (n) { const k = 1 - Math.exp(-d
     t.vel.set(n[4], 0, n[5]); t.kneelTo = n[6]; t.hatchTo = n[7]; t.aimYaw = n[8]; t.aimPitch = n[9]; t.shield = n[10]; t.hull = n[11]; t.hullMax = n[12]; t.doom = n[13] & 1 ? 1 : 0; } placeTitan(t, dt); }
 function stepRemote(dt) { const now = performance.now(); for (const rp of RPS.values()) { if (rp.on && now - rp.seen > 2500) rp.on = false; if (!rp.on) { if (rp.fig) rp.fig.root.visible = false; continue; }
     rp.pos.lerp(rp.net, rp.pos.distanceTo(rp.net) > 12 ? 1 : 1 - Math.exp(-dt * 18)); rp.chest.set(rp.pos.x, rp.pos.y + rp.h * .6, rp.pos.z); rp.djT += dt;
-    if (!rp.fig) rp.fig = makeFigure(rp.kit.fac, rp.side === "foe");
+    if (!rp.fig) rp.fig = makeFigure(rp.kit.fac, rp.side === "foe", rp.kit.paint);
     rp.fig.pose(dt, { x: rp.pos.x, y: rp.pos.y, z: rp.pos.z, yaw: rp.yaw, pitch: rp.pitch, speed: rp.speed, grounded: rp.grounded, sliding: rp.sliding, crouch: rp.h < 1.5 && !rp.sliding, wall: rp.wall, dj: rp.djT, vy: rp.vy, dead: rp.dead, hidden: rp.inTitan }); } }
 let netT = 0, snapT = 0, pingT = 0;
 function netTick(dt) { stepRemote(dt); netT += dt; snapT += dt; pingT += dt;

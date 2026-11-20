@@ -1,45 +1,37 @@
-/* Machine-Fall FPS: the Titan, an original humanoid walker about six metres tall.
+/* Afterburn: the Titan, an original humanoid walker about six metres tall.
    A skeleton of joints (hips, two legs of thigh, shin and foot, a torso that turns at the waist, two arms of upper arm
-   and forearm) carrying armour built from rounded boxes. The chest is a hollow shell with a hatch hinged at its top,
+   and forearm) carrying a frame, layered armour plates, joints, pistons and stowage built from the pieces in mf/parts.js. The chest is a hollow shell with a hatch hinged at its top,
    so a pilot can really go in through the front. The right hand carries the 40 mm cannon, the left is a fist, and a
    rocket pod sits on the left shoulder. It is posed every frame from a few numbers: how fast it walks, how far it
    kneels, how far the hatch is open, where it aims, recoil, a punch. Built in metres, facing -z, drawn at U. */
 import { THREE, U, clamp, lerp, charMat, grad } from "./engine.js";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { build, box as B, hull as H, drum as C } from "./parts.js";
 
 const SCHEMES = {
-  you: { frame: "#34373a", plate: "#b9b3a4", plate2: "#8f8a80", accent: "#c45a1e", dark: "#1e2022", glow: [.5, 2.6, 3.2] },
-  foe: { frame: "#1e2022", plate: "#4a4e52", plate2: "#36393c", accent: "#b0312a", dark: "#141516", glow: [3.4, .5, .3] },
+  you: { frame: "#34373a", plate: "#b9b3a4", plate2: "#8f8a80", accent: "#c45a1e", dark: "#1e2022", glow: [.5, 2.6, 3.2], steel: "#a3a8ab", canvas: "#7a6a4c", cream: "#e2dac4" },
+  foe: { frame: "#1e2022", plate: "#4a4e52", plate2: "#36393c", accent: "#b0312a", dark: "#141516", glow: [3.4, .5, .3], steel: "#7c8084", canvas: "#4a4336", cream: "#b9b3a4" },
 };
 const L1 = 1.3, L2 = 1.35, ANK = .27, HIP_Y = 2.85, HIP_X = .8, KNEEL = 1.25;
-const _c = new THREE.Color();
-// parts: [w, h, d, x, y, z, paint, rx, rz]; paint "glow" goes to a second mesh that is brighter than white
-function build(parent, list, S, glowMat) {
-  const solid = [], glow = [];
-  for (const [w, h, d, x, y, z, key, rx = 0, rz = 0] of list) {
-    if (key === "glow") { const g = new THREE.BoxGeometry(w, h, d); if (rx) g.rotateX(rx); if (rz) g.rotateZ(rz); g.translate(x, y, z); glow.push(g); continue; }
-    let g = new RoundedBoxGeometry(w, h, d, 1, Math.min(.07, Math.min(w, h, d) * .22)); if (rx) g.rotateX(rx); if (rz) g.rotateZ(rz); g.translate(x, y, z); g = g.toNonIndexed(); g.deleteAttribute("uv");
-    _c.set(S[key] || key); const P = g.attributes.position, a = new Float32Array(P.count * 3), j = .94 + Math.random() * .12;
-    for (let i = 0; i < P.count; i++) { const k = j * lerp(.82, 1.06, clamp((P.getY(i) - (y - h / 2)) / h, 0, 1)); a[i * 3] = _c.r * k; a[i * 3 + 1] = _c.g * k; a[i * 3 + 2] = _c.b * k; }
-    g.setAttribute("color", new THREE.BufferAttribute(a, 3)); solid.push(g);
-  }
-  if (solid.length) { const m = new THREE.Mesh(mergeGeometries(solid), charMat); m.castShadow = m.receiveShadow = true; parent.add(m); }
-  if (glow.length) parent.add(new THREE.Mesh(mergeGeometries(glow), glowMat));
-}
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeRig(team, o = {}) {
   const S = { ...(SCHEMES[team] || SCHEMES.you), ...o }, glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) }), hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.9, .7) });
   const root = new THREE.Group(); root.scale.setScalar(U);
   const hips = joint(root, 0, HIP_Y, 0);
-  build(hips, [[1.5, .7, 1.1, 0, 0, 0, "frame"], [1.74, .36, 1.26, 0, .16, 0, "plate2"], [.62, .62, .32, 0, -.2, -.6, "plate"], [.3, .3, .1, 0, -.12, -.78, "accent"], [.5, .62, .62, HIP_X + .05, 0, 0, "dark"], [.5, .62, .62, -HIP_X - .05, 0, 0, "dark"],
-    [.5, .5, .3, .5, -.1, .62, "plate2"], [.5, .5, .3, -.5, -.1, .62, "plate2"]], S, glowMat);
+  build(hips, [B(1.3, .6, 1.0, 0, 0, 0, "frame"), C(.5, .32, 0, .34, 0, "dark", "y", 10), H(1.6, .3, 1.2, 0, .2, 0, "plate2", { sx: .86, sz: .86 }),
+    ...[-1, 1].flatMap((sd) => [C(.36, .5, sd * (HIP_X + .05), 0, 0, "dark", "x", 10), C(.2, .14, sd * (HIP_X + .36), 0, 0, "plate2", "x", 8), H(.2, .62, .86, sd * 1.0, -.22, 0, "plate2", { sz: .72 }), B(.22, .08, .5, sd * 1.0, -.3, 0, "accent")]),
+    H(.66, .74, .2, 0, -.26, -.62, "plate", { sx: .68 }, -.12), B(.26, .07, .05, -.09, -.2, -.75, "accent", 0, .55), B(.26, .07, .05, .09, -.2, -.75, "accent", 0, -.55),
+    C(.21, 1.0, 0, 0, .74, "plate2", "x", 8), B(.07, .46, .46, -.28, 0, .74, "dark"), B(.07, .46, .46, .28, 0, .74, "dark"), B(.3, .2, .16, 0, -.3, .62, "dark")], S, glowMat);
   const legs = [-1, 1].map((sd) => {
     const thigh = joint(hips, sd * HIP_X, 0, 0), shin = joint(thigh, 0, -L1, 0), foot = joint(shin, 0, -L2, 0);
-    build(thigh, [[.62, 1.3, .7, 0, -.65, 0, "frame"], [.78, .95, .5, 0, -.55, -.22, "plate"], [.22, .85, .66, sd * .38, -.55, 0, "plate2"], [.4, .3, .3, 0, -.2, -.5, "accent"]], S, glowMat);
-    build(shin, [[.5, 1.35, .56, 0, -.68, 0, "frame"], [.68, 1.1, .42, 0, -.62, -.24, "plate"], [.74, .42, .5, 0, -.02, -.3, "plate2"], [.3, .95, .32, 0, -.6, .32, "dark"], [.2, .5, .1, sd * .3, -.5, -.3, "accent"]], S, glowMat);
-    build(foot, [[.82, .3, 1.5, 0, -.12, -.25, "frame"], [.9, .24, .62, 0, -.1, -.86, "plate"], [.62, .3, .42, 0, -.1, .52, "plate2"], [.3, .4, .5, 0, .1, -.1, "dark"]], S, glowMat);
+    build(thigh, [B(.5, 1.3, .56, 0, -.65, 0, "frame"), H(.8, 1.0, .22, 0, -.58, -.38, "plate", { sx: .78, oz: .07 }), H(.88, .34, .74, 0, -.14, -.04, "plate2", { sx: .82, sz: .82 }), B(.5, .09, .04, 0, -.34, -.5, "accent"),
+      B(.2, .5, .5, sd * .42, -.62, .06, "canvas"), B(.23, .06, .53, sd * .42, -.52, .06, "dark"), B(.23, .06, .53, sd * .42, -.74, .06, "dark"),
+      C(.1, .8, 0, -.5, .37, "dark", "y", 6), C(.055, .6, 0, -1.0, .37, "steel", "y", 6), H(.6, .3, .2, 0, -1.12, -.36, "plate2", { sx: 1.15, oz: -.05 })], S, glowMat);
+    build(shin, [C(.3, .68, 0, 0, 0, "dark", "x", 10), C(.16, .78, 0, 0, 0, "steel", "x", 8), H(.72, .5, .24, 0, .04, -.38, "plate2", { sx: .7, oz: .06 }), B(.42, 1.35, .48, 0, -.68, 0, "frame"),
+      H(.6, 1.05, .26, 0, -.68, -.3, "plate", { sx: 1.2, oz: -.06 }), B(.36, .09, .04, 0, -.3, -.46, "accent"), B(.34, .7, .3, 0, -.5, .32, "plate2"), H(.3, .3, .3, 0, -1.0, .32, "plate2", { sz: .5, oz: -.06 }, Math.PI),
+      C(.07, .9, sd * .27, -.62, .16, "dark", "y", 6), C(.04, .5, sd * .27, -1.05, .16, "steel", "y", 6), B(.1, .3, .4, -sd * .27, -.7, .0, "dark")], S, glowMat);
+    build(foot, [C(.24, .62, 0, 0, 0, "dark", "x", 8), B(.8, .22, 1.3, 0, -.16, -.2, "frame"), H(.88, .32, .72, 0, -.02, -.74, "plate", { sx: .84, sz: .42, oz: .14 }), H(.62, .34, .5, 0, -.02, .44, "plate2", { sz: .58, oz: -.1 }),
+      B(.14, .2, .62, .47, -.14, -.5, "dark"), B(.14, .2, .62, -.47, -.14, -.5, "dark"), H(.5, .3, .3, 0, .14, -.3, "plate2", { sx: .7, sz: .6 })], S, glowMat);
     return { thigh, shin, foot, sd };
   });
   // the torso turns at the waist; its chest is a shell with a hole in the front that the hatch covers
@@ -47,27 +39,40 @@ export function makeRig(team, o = {}) {
   build(torso, [[1.05, .5, .95, 0, .22, 0, "dark"],
     [2.3, 1.7, .16, 0, 1.35, .87, "plate2"], [.16, 1.7, 1.9, -1.07, 1.35, 0, "plate2"], [.16, 1.7, 1.9, 1.07, 1.35, 0, "plate2"], [2.3, .16, 1.9, 0, .58, 0, "frame"], [2.3, .16, 1.9, 0, 2.12, 0, "plate"],
     [.5, 1.7, .16, -.9, 1.35, -.87, "plate"], [.5, 1.7, .16, .9, 1.35, -.87, "plate"], [1.3, .44, .16, 0, .72, -.87, "plate"],
-    [.56, 1.0, .2, -.92, 1.5, -1.0, "plate", 0, .1], [.56, 1.0, .2, .92, 1.5, -1.0, "plate", 0, -.1], [.4, .16, .22, -.92, 1.05, -1.02, "accent"], [.4, .16, .22, .92, 1.05, -1.02, "accent"],
-    [.95, .46, .86, 0, 2.42, -.2, "frame"], [.7, .3, .5, 0, 2.6, -.1, "plate2"], [.5, .12, .06, 0, 2.44, -.66, "glow"], [.12, .5, .12, .38, 2.9, .1, "dark"],
-    [.95, .95, 1.25, -1.62, 1.75, 0, "plate"], [.95, .95, 1.25, 1.62, 1.75, 0, "plate"], [1.05, .26, 1.36, 1.64, 2.27, 0, "accent"], [1.05, .2, 1.36, -1.64, 2.25, 0, "plate2"],
-    [1.45, 1.25, .62, 0, 1.4, 1.2, "frame"], [.9, .5, .3, 0, 2.0, 1.4, "dark"], [.26, .7, .06, -.42, 1.4, 1.52, "glow"], [.26, .7, .06, .42, 1.4, 1.52, "glow"],
-    // rocket pod on the left shoulder
-    [1.0, .74, 1.36, -1.66, 2.74, .1, "plate2"], [1.06, .16, 1.42, -1.66, 3.13, .1, "plate"], [.9, .62, .06, -1.66, 2.74, -.6, "dark"],
-    ...[-.26, 0, .26].flatMap((dx) => [-.16, .16].map((dy) => [.17, .17, .05, -1.66 + dx, 2.74 + dy, -.64, "accent"])),
+    // sloped plates over the shell: cheeks beside the hatch, a lip under it, a pitched roof, side skirts
+    ...[-1, 1].flatMap((sd) => [H(.56, 1.15, .28, sd * .92, 1.45, -1.04, "plate", { sx: .78, oz: .12, ox: -sd * .04 }), B(.4, .12, .06, sd * .92, 1.02, -1.2, "accent"), H(.22, 1.2, 1.5, sd * 1.2, 1.3, .05, "plate", { sz: .8, ox: -sd * .06 }), C(.03, 1.1, sd * 1.33, 1.95, .1, "dark", "z", 4),
+      C(.5, .62, sd * 1.42, 1.75, 0, "dark", "x", 10), H(1.02, .5, 1.42, sd * 1.66, 2.08, 0, sd > 0 ? "accent" : "plate", { sx: .78, sz: .84, ox: -sd * .06 }), H(.3, .95, 1.3, sd * 2.1, 1.66, 0, "plate2", { sz: .8 }, 0, sd * .14), B(.34, .1, 1.0, sd * 2.1, 1.4, 0, "dark")]),
+    H(1.4, .42, .3, 0, .76, -1.0, "plate2", { sx: .86, oz: .1 }), H(2.16, .3, 1.76, 0, 2.34, 0, "plate", { sx: .8, sz: .8 }),
+    // the unit mark on the left shoulder: a pale disc with a bar across it
+    C(.24, .05, -2.28, 1.7, 0, "cream", "x", 10), B(.07, .1, .4, -2.3, 1.7, 0, "accent"),
+    // the head: a collar ring, a low sensor housing with one lit slit and an eye, cheek plates, two whip aerials
+    C(.56, .2, 0, 2.56, -.15, "dark", "y", 10), H(.72, .44, .84, 0, 2.86, -.18, "plate2", { sx: .74, sz: .78, oz: -.06 }), B(.08, .32, .56, -.4, 2.82, -.18, "plate"), B(.08, .32, .56, .4, 2.82, -.18, "plate"),
+    [.44, .1, .06, 0, 2.86, -.62, "glow"], C(.12, .2, .26, 2.72, -.6, "dark", "z", 8), [.1, .1, .04, .26, 2.72, -.71, "glow"], B(.12, .16, .12, .42, 3.08, .28, "dark"), C(.018, 1.7, .42, 3.95, .28, "dark", "y", 4), C(.018, 1.0, -.4, 3.5, .34, "dark", "y", 4),
+    // the engine pack on the back: louvres, two stacks, vents that glow
+    [1.5, 1.25, .62, 0, 1.4, 1.2, "frame"], ...[0, 1, 2, 3].map((i) => B(1.1, .06, .1, 0, 1.1 + i * .2, 1.53, "dark", -.5)), [.26, .7, .06, -.56, 1.4, 1.52, "glow"], [.26, .7, .06, .56, 1.4, 1.52, "glow"],
+    C(.12, 1.0, -.62, 2.36, 1.36, "dark", "y", 8, .12, [.22, 0]), C(.12, 1.0, .62, 2.36, 1.36, "dark", "y", 8, .12, [.22, 0]), C(.15, .1, -.62, 2.86, 1.47, "steel", "y", 8, .15, [.22, 0]), C(.15, .1, .62, 2.86, 1.47, "steel", "y", 8, .15, [.22, 0]),
+    // what a crew straps to it: a bedroll across the top, cans and a crate under the pack
+    C(.19, 1.3, 0, 2.32, .98, "canvas", "x", 8), B(.06, .42, .42, -.4, 2.32, .98, "dark"), B(.06, .42, .42, .4, 2.32, .98, "dark"),
+    B(.3, .44, .17, -.52, .68, 1.6, "plate2"), B(.3, .44, .17, -.18, .68, 1.6, "plate2"), B(.1, .08, .1, -.52, .94, 1.6, "dark"), B(.1, .08, .1, -.18, .94, 1.6, "dark"), B(.56, .4, .3, .44, .68, 1.62, "canvas"), B(.6, .06, .34, .44, .7, 1.62, "dark"),
+    // rocket pod on the left shoulder: a box of six tubes
+    [1.0, .74, 1.36, -1.66, 2.86, .1, "plate2"], H(1.06, .16, 1.42, -1.66, 3.3, .1, "plate", { sx: .9, sz: .9 }), [.9, .62, .06, -1.66, 2.86, -.6, "dark"],
+    ...[-.26, 0, .26].flatMap((dx) => [-.16, .16].flatMap((dy) => [C(.1, .1, -1.66 + dx, 2.86 + dy, -.64, "accent", "z", 8), C(.065, .12, -1.66 + dx, 2.86 + dy, -.66, "dark", "z", 8)])),
     // inside the cockpit: a seat and a few lit panels
     [.72, .5, .56, 0, .9, .42, "dark"], [.6, .8, .16, 0, 1.4, .7, "dark"], [.04, .3, .5, -.97, 1.5, -.15, "glow"], [.04, .3, .5, .97, 1.5, -.15, "glow"], [.5, .1, .04, 0, 1.0, -.76, "glow"]], S, glowMat);
   const hatch = joint(torso, 0, 2.06, -.96);
-  build(hatch, [[1.36, 1.16, .2, 0, -.6, -.04, "plate"], [1.1, .5, .12, 0, -.82, -.16, "plate2"], [.52, .12, .14, 0, -.2, -.14, "accent"], [.86, .1, .05, 0, -.4, -.16, "glow"]], S, glowMat);
+  build(hatch, [[1.36, 1.16, .2, 0, -.6, -.04, "plate"], H(1.0, .7, .16, 0, -.74, -.18, "plate2", { sx: .7, oz: .05 }), C(.06, 1.3, 0, -.02, -.02, "dark", "x", 6), B(.5, .08, .1, 0, -.22, -.18, "accent"), [.7, .08, .05, 0, -.38, -.16, "glow"], B(.3, .06, .1, 0, -1.08, -.18, "dark")], S, glowMat);
   const arm = (sd) => { const up = joint(torso, sd * 1.72, 1.7, 0), fore = joint(up, 0, -1.2, 0);
-    build(up, [[.55, 1.2, .6, 0, -.6, 0, "frame"], [.7, .72, .7, sd * .04, -.45, 0, "plate"], [.5, .34, .5, 0, -1.2, 0, "dark"]], S, glowMat);
-    build(fore, [[.5, 1.2, .55, 0, -.6, 0, "frame"], [.64, .8, .66, 0, -.6, 0, "plate2"], [.2, .6, .1, sd * .34, -.6, 0, "accent"]], S, glowMat); return { up, fore, sd }; };
+    build(up, [C(.33, .5, 0, 0, 0, "dark", "x", 8), B(.46, 1.2, .5, 0, -.6, 0, "frame"), H(.68, .8, .72, sd * .06, -.5, 0, "plate", { sx: .84, sz: .84 }), C(.27, .62, 0, -1.2, 0, "dark", "x", 8), C(.14, .7, 0, -1.2, 0, "steel", "x", 8)], S, glowMat);
+    build(fore, [B(.44, 1.2, .5, 0, -.6, 0, "frame"), H(.6, .8, .62, 0, -.62, 0, "plate2", { sx: 1.14, sz: 1.08 }), B(.18, .6, .1, sd * .36, -.6, 0, "accent"), C(.05, .8, -sd * .16, -.5, .32, "steel", "y", 6), C(.08, .4, -sd * .16, -.3, .32, "dark", "y", 6)], S, glowMat); return { up, fore, sd }; };
   const armR = arm(1), armL = arm(-1);
-  // the 40 mm cannon in the right hand, lying along the forearm
-  build(armR.fore, [[.56, .5, .6, 0, -1.36, 0, "dark"], [.5, 1.5, .66, 0, -1.9, -.34, "frame"], [.56, .7, .3, 0, -1.7, -.74, "plate2"], [.6, .56, .56, 0, -1.6, .2, "plate"], [.62, .12, .58, 0, -1.6, .2, "accent"],
-    [.36, .56, .36, 0, -2.75, -.34, "plate2"], [.16, 1.5, .16, -.09, -3.2, -.42, "dark"], [.16, 1.5, .16, .09, -3.2, -.42, "dark"], [.16, 1.5, .16, 0, -3.2, -.26, "dark"], [.4, .12, .4, 0, -3.9, -.34, "frame"]], S, glowMat);
+  // the 40 mm cannon in the right hand, lying along the forearm: receiver, drum, shroud, barrel and brake
+  build(armR.fore, [[.56, .5, .6, 0, -1.36, 0, "dark"], [.5, 1.4, .62, 0, -1.9, -.34, "frame"], H(.56, .9, .26, 0, -1.8, -.74, "plate2", { sx: .8 }, 0, 0), C(.36, .34, 0, -1.72, .14, "plate", "x", 10), C(.37, .08, 0, -1.72, .14, "accent", "x", 10), B(.5, .3, .3, 0, -1.3, -.6, "plate"),
+    C(.21, .76, 0, -2.84, -.34, "plate2", "y", 8), C(.115, 1.5, 0, -3.3, -.34, "dark", "y", 8), C(.18, .3, 0, -3.88, -.34, "frame", "y", 8), C(.2, .06, 0, -3.78, -.34, "steel", "y", 8), C(.045, 1.1, 0, -3.0, -.1, "steel", "y", 5),
+    B(.08, .5, .18, 0, -2.0, -.96, "dark"), B(.1, .14, .14, 0, -2.42, -.92, "dark"), B(.3, .34, .2, 0, -2.3, .02, "canvas")], S, glowMat);
   const muzzle = joint(armR.fore, 0, -4.0, -.34), flash = new THREE.Mesh(new THREE.BoxGeometry(.5, .7, .5), hot); flash.visible = false; muzzle.add(flash);
-  build(armL.fore, [[.66, .56, .7, 0, -1.42, 0, "dark"], [.72, .3, .76, 0, -1.3, 0, "plate"], [.2, .2, .74, -.22, -1.66, 0, "frame"], [.2, .2, .74, .22, -1.66, 0, "frame"]], S, glowMat);
-  const pod = joint(torso, -1.66, 2.74, -.7);
+  // the left hand: a plated fist of three fingers and a thumb
+  build(armL.fore, [[.6, .44, .62, 0, -1.42, 0, "dark"], H(.72, .28, .76, 0, -1.28, 0, "plate", { sx: .88, sz: .88 }), ...[-.22, 0, .22].flatMap((x) => [B(.17, .34, .22, x, -1.74, -.18, "frame"), B(.17, .16, .3, x, -1.9, -.04, "frame")]), B(.16, .3, .2, .3, -1.62, .22, "frame")], S, glowMat);
+  const pod = joint(torso, -1.66, 2.86, -.7);
   const husk = new THREE.MeshToonMaterial({ color: "#1c1a18", gradientMap: grad, side: THREE.DoubleSide });
 
   const rig = { root, hips, torso, hatch, muzzle, pod, flash, phase: Math.random(), aimYaw: 0, aimPitch: 0,
