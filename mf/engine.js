@@ -142,8 +142,8 @@ export const post = new THREE.ShaderMaterial({
       // flat faces and hard corners of its parts melt into a sprite
       if (useBlock > 0.5) {
         ivec2 p3 = cl((p / 3) * 3 + 1), p2 = cl((p / 2) * 2); float a3 = mask(p3), a2 = mask(p2);
-        if (a3 > 0.3 && a3 < 0.55 && dep(p3) < 3.2 * unit) { p = p3; st = 3; }
-        else if (a2 > 0.3 && a2 < 0.7 && (a2 > 0.55 || dep(p2) < 10.0 * unit)) { p = p2; st = 2; }
+        // (the close tier of 3 by 3 blocks made troops hard to read at arm's length, so figures now only ever go to 2 by 2, and only within 6 m)
+        if (a2 > 0.3 && a2 < 0.7 && (a2 > 0.55 || dep(p2) < 6.0 * unit)) { p = p2; st = 2; }
       }
       vec3 lin = texelFetch(tColor, p, 0).rgb;
       if (st > 1) { ivec2 o0 = st == 3 ? p - 1 : p; vec3 sum = vec3(0.0); float n = 0.0;   // the block shows the average of the figure's pixels inside it
