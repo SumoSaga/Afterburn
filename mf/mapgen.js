@@ -49,11 +49,11 @@ const CAPS = { apartment: 2, office: 2, terminal: 1, church: 2, firestation: 2, 
 const MIX = { mixed: null, town: ["town", "town", "town", "farm", "works"], works: ["works", "works", "works", "town", "airfield"], airfield: ["airfield", "works", "airfield", "town", "works"], farm: ["farm", "farm", "farm", "town", "works"] };
 
 export function planMap(key, api) {
-  const kp = key.split("-"), theme = THEMES[kp[0]] ? kp[0] : "mixed", size = (kp[2] || "sa")[0], flip = (kp[2] || "sa")[1] === "d", R = rng(hashStr(kp[0] + "-" + kp[1] + "-" + size)), wear = R.range(.25, .7);
+  const kp = key.split("-"), theme = THEMES[kp[0]] ? kp[0] : "mixed", size = (kp[2] || "sa")[0], flip = (kp[2] || "sa")[1] === "d", R = rng(hashStr(kp[0] + "-" + kp[1] + "-" + size + (api.salt ? "~" + api.salt : ""))), wear = R.range(.25, .7);
   const plan = { key, theme, zones: [], sites: [], districts: [], roads: [], prims: [], gens: [], trees: [], bushes: [], rocks: [], paint: [], yards: [], lit: 0 };
   const P = plan.prims, occ = [], keep = [], count = {};
   const fits = (x0, z0, x1, z1, m = 0, lists = [occ, keep]) => { for (const L of lists) for (const o of L) if (x0 - m < o[2] && x1 + m > o[0] && z0 - m < o[3] && z1 + m > o[1]) return false; return true; };
-  const S = (x, z, w, h, d, col, o, dy = 0) => P.push(["s", x, z, w, h, d, col, o || { stripe: false, base: col, cap: col }, dy]), D = (x, z, w, h, d, col, dy = 0) => P.push(["d", x, z, w, h, d, col, dy]), G = (x, z, w, h, d, dy = 0) => P.push(["g", x, z, w, h, d, dy]);
+  const S = (x, z, w, h, d, col, o, dy = 0) => P.push(["s", x, z, w, h, d, col, o || { stripe: false, base: col, cap: col }, dy]), D = (x, z, w, h, d, col, dy = 0, roof = 0) => P.push(["d", x, z, w, h, d, col, dy, roof]), G = (x, z, w, h, d, dy = 0) => P.push(["g", x, z, w, h, d, dy]);
   const state = () => { const k = R(); return k < wear * .22 ? "ruined" : k < wear * .75 ? "damaged" : "timber"; };
 
   /* ---------- small things built from boxes: each gives its size (along, across) and how to put it down turned or not ---------- */
@@ -118,13 +118,13 @@ export function planMap(key, api) {
   /* ---------- an objective hall: the roofed point. Hollow, four doorways a squad can use and a mech cannot, a roof you
      can run on with two skylights to drop through, a gallery inside and cover on the floor. 22 m by 16 m. ---------- */
   function hall(d, W, rect) { const col = d.last ? CON : HALLCOL[d.kn] || CON, trim = d.last ? "#c9733a" : "#3c4046", HL = 11, HW = 8, T = .5, H = 5.5, DW = 2.2, DH = 3.2, dl = R.pick([-4, 4]);
-    const bx = (u0, v0, u1, v1, y, h, c, o) => { const q = rect(u0, v0, u1, v1); S((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], h, q[3] - q[1], c, o || { stripe: false, base: c, cap: c }, y); }, dc = (u0, v0, u1, v1, y, h, c) => { const q = rect(u0, v0, u1, v1); D((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], h, q[3] - q[1], c, y); };
+    const bx = (u0, v0, u1, v1, y, h, c, o) => { const q = rect(u0, v0, u1, v1); S((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], h, q[3] - q[1], c, o || { stripe: false, base: c, cap: c }, y); }, dc = (u0, v0, u1, v1, y, h, c, roof) => { const q = rect(u0, v0, u1, v1); D((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], h, q[3] - q[1], c, y, roof ? 1 : 0); };
     for (const sd of [-1, 1]) { const v0 = sd * HW - T / 2, v1 = sd * HW + T / 2, du = sd * dl;   // the long walls, a doorway in each, off centre and not facing each other
       bx(-HL, v0, du - DW, v1, .001, H, col); bx(du + DW, v0, HL, v1, .001, H, col); bx(du - DW, v0, du + DW, v1, DH, H - DH, col); dc(du - DW, v0 - .06, du + DW, v1 + .06, DH - .12, .14, trim);
       const u0 = sd * HL - T / 2, u1 = sd * HL + T / 2;   // the end walls, a doorway in the middle of each where the main street runs in
       bx(u0, -HW, u1, -DW, .001, H, col); bx(u0, DW, u1, HW, .001, H, col); bx(u0, -DW, u1, DW, DH, H - DH, col); dc(u0 - .06, -DW, u1 + .06, DW, DH - .12, .14, trim); }
-    for (const [u0, v0, u1, v1] of [[-HL - .4, -HW - .4, HL + .4, -1.5], [-HL - .4, 1.5, HL + .4, HW + .4], [-HL - .4, -1.5, -7, 1.5], [-4, -1.5, 4, 1.5], [7, -1.5, HL + .4, 1.5]]) bx(u0, v0, u1, v1, H, .4, "#3c4046");   // the roof, with two skylights
-    for (const u of [-7, -4, 4, 7]) dc(u - .08, -1.5, u + .08, 1.5, H + .4, .25, trim);
+    for (const [u0, v0, u1, v1] of [[-HL - .4, -HW - .4, HL + .4, -1.5], [-HL - .4, 1.5, HL + .4, HW + .4], [-HL - .4, -1.5, -7, 1.5], [-4, -1.5, 4, 1.5], [7, -1.5, HL + .4, 1.5]]) bx(u0, v0, u1, v1, H, .4, "#3c4046", { roof: true });   // the roof, with two skylights
+    for (const u of [-7, -4, 4, 7]) dc(u - .08, -1.5, u + .08, 1.5, H + .4, .25, trim, true);
     bx(-10.5, 4.6, -1.5, 7.6, 2.8, .3, WOOD2); dc(-10.5, 4.5, -1.5, 4.62, 3.1, .9, "#3c4046"); bx(-1.4, 5.2, .2, 7, .001, 1.9, DRAB); bx(.3, 5.4, 1.7, 6.8, .001, 1, DRAB2);   // a gallery along one wall, and crates to climb to it
     for (const [u, v, w, dd, h, c] of [[-6, -3.5, 3, .5, 1.2, CON2], [6, 3.2, .5, 3, 1.2, CON2], [5.5, -4.5, 1.4, 1.4, 1.3, DRAB], [-4, 1.6, 1.3, 1.3, 1.1, WOOD2], [8.5, -1, 1.2, 2.4, 1, DRAB2], [-8.5, -5.5, 2.6, 1.2, 1.3, STEEL]]) bx(u - w / 2, v - dd / 2, u + w / 2, v + dd / 2, .001, h, c);
     for (const sd of [-1, 1]) { const q = rect(sd * dl - 1.5, sd * (HW + .3), sd * dl + 1.5, sd * (HW + .5)); G((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], .16, q[3] - q[1], DH + .2); }

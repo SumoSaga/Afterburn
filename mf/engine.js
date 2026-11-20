@@ -13,6 +13,9 @@ import { planMap, THEMES } from "./mapgen.js";
 const okKey = (k) => !!k && /^[a-z]+-\d{1,6}-[sml][ad]$/.test(k) && !!THEMES[k.split("-")[0]];
 export const MAPKEY = (() => { let k = null; try { if (sessionStorage.getItem("ab-autojoin")) k = sessionStorage.getItem("ab-map-join"); else sessionStorage.removeItem("ab-map-join"); } catch (e) {} if (!okKey(k)) k = new URLSearchParams(location.search).get("map"); try { if (!okKey(k)) k = localStorage.getItem("ab-map"); } catch (e) {} if (!okKey(k)) { k = "mixed-" + (1000 + Date.now() % 9000) + "-sa"; try { localStorage.setItem("ab-map", k); } catch (e) {} } return k; })();
 export const setMap = (k, extra) => { if (!okKey(k)) return false; try { localStorage.setItem("ab-map", k); sessionStorage.removeItem("ab-map-join"); if (extra) sessionStorage.setItem("ab-map-go", JSON.stringify(extra)); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("map"); location.href = u.toString(); return true; };
+export const SALT = (() => { try { return Math.min(6, +localStorage.getItem("ab-salt:" + MAPKEY) || 0); } catch (e) { return 0; } })();
+// a field that fails its walk test is made again with the next salt, so the same key still gives everyone the same field
+export const retryField = (to) => { const n = to != null ? to : SALT + 1; if (n > 6 || n === SALT) return false; try { localStorage.setItem("ab-salt:" + MAPKEY, n); } catch (e) { return false; } location.reload(); return true; };
 const KEYN = [...MAPKEY.slice(0, -1)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
 export { THREE };
 export const U = 1 / .06;
@@ -241,7 +244,7 @@ const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t 
 const NOX = (KEYN % 977) * 1.3, NOZ = ((KEYN >>> 10) % 991) * 1.7;   // every made field has its own hills
 const HK = KEYN ? .78 : 1, hillsRaw = (x, z) => 4 + HK * 17 * fbm(x * .011 + 3 + NOX, z * .011 + NOZ) + HK * 8 * fbm(x * .034 + 9 + NOX, z * .034 + NOZ) + Math.max(0, Math.hypot(x, z + 20) - 150) * .5 + clamp((-z - 40) / 150, 0, 1) * 7 + clamp((-x - 40) / 120, 0, 1) * 5;
 const genDims = (model) => { try { const e = GEN.entry(model); return e ? [e.dims[0] / U, e.dims[1] / U, e.dims[2] / U] : null; } catch (e) { return null; } };
-export const PLAN = GEN ? planMap(MAPKEY, { hills: hillsRaw, dims: genDims, isVeh: (t) => !!(GEN.TYPES[t] && GEN.TYPES[t].vehicle) }) : null;
+export const PLAN = GEN ? planMap(MAPKEY, { hills: hillsRaw, salt: SALT, dims: genDims, isVeh: (t) => !!(GEN.TYPES[t] && GEN.TYPES[t].vehicle) }) : null;
 export const MAPNAME = PLAN ? PLAN.name : "The refinery", SITES = PLAN ? PLAN.sites : [["A", 100, 14, "Town square"], ["B", -6, -4, "Refinery"], ["C", -95, -20, "Lodge"], ["D", 52, -118, "Ridge relay"], ["E", -34, 86, "Depot"]];
 // built ground: [x0, z0, x1, z1, height, how far it takes to blend into the hills]
 const ZONES = PLAN ? PLAN.zones : [[-56, -56, 56, 56, 0, 34], [62, -48, 152, 66, 0, 30], [-34, 104, 34, 150, 0, 26], [-34, -190, 34, -146, 2, 26], [-8, 56, 8, 104, 0, 16], [-8, -146, 8, -56, 1, 16], [56, -7, 62, 7, 0, 14], [-112, -36, -80, -6, 9, 22], [36, -134, 66, -108, 17, 18], [-54, 68, -18, 98, 3, 20]];
@@ -321,9 +324,12 @@ for (const [x, z] of [[96, 24], [104, -4], [84, 8], [116, 10], [66, -20], [132, 
   for (const [x, z, r, c] of [[-30, 80, 0, "#3f6f9a"], [-27, 90, 1, RUST], [-40, 92, 0, DRAB], [-23, 73, 1, "#5f676d"], [-34, 71, 0, "#c9733a"]]) solid(x, y, z, r ? 2.4 : 6, 2.6, r ? 6 : 2.4, c, { stripe: false }); for (const [x, z] of [[-36, 84], [-28, 96], [-22, 82]]) solid(x, y, z, 1.6, 1.2, 1.6, DRAB2); }
 }
 for (const [x, z, y] of [[-10, 112, 0], [10, 112, 0], [0, 108, 0], [-18, 120, 0], [18, 120, 0], [-12, -150, 2], [12, -150, 2], [2, -146, 2], [-18, -160, 2], [18, -160, 2]]) solid(x, y, z, 4, 1.1, .6, CON);
+const roofGeos = [];
 // a made field: every piece the plan wrote down, stood on the ground where it falls
 if (PLAN) for (const p of PLAN.prims) { const k = p[0], x = p[1], z = p[2], y = groundH(x, z);
-  if (k === "s") { const sink = p[8] ? 0 : .15; solid(x, y + p[8] - sink, z, p[3], p[4] + sink, p[5], p[6], p[7]); } else if (k === "d") deco(x, y + p[7], z, p[3], p[4], p[5], p[6], true); else if (k === "g") glow(x, y + p[6], z, p[3], p[4], p[5]);
+  if (k === "s" && p[7] && p[7].roof) { BOXES.push({ min: [x - p[3] / 2, y + p[8], z - p[5] / 2], max: [x + p[3] / 2, y + p[8] + p[4], z + p[5] / 2] }); roofGeos.push(boxGeo(p[3], p[4], p[5], x, y + p[8], z, p[6])); }
+  else if (k === "d" && p[8]) roofGeos.push(boxGeo(p[3], p[4], p[5], x, y + p[7], z, p[6], true));
+  else if (k === "s") { const sink = p[8] ? 0 : .15; solid(x, y + p[8] - sink, z, p[3], p[4] + sink, p[5], p[6], p[7]); } else if (k === "d") deco(x, y + p[7], z, p[3], p[4], p[5], p[6], true); else if (k === "g") glow(x, y + p[6], z, p[3], p[4], p[5]);
   else if (k === "sb") sandbags(x, z, p[3], p[4], y - .05); else if (k === "br") barrels(x, z, p[3], undefined, groundH(x + .4, z + .8) - .05); else if (k === "ct") { cyl(x, y - .15, z, p[3], p[4] + .15, p[5], 12); cyl(x, y + p[4], z, p[3] * .8, .12, "#3c4046", 12); BOXES.push({ min: [x - p[3] * .8, y - .3, z - p[3] * .8], max: [x + p[3] * .8, y + p[4], z + p[3] * .8] }); }
   else if (k === "li") { lamp(x, y + p[3], z, "#ffd9a0", 1100); glow(x, y + p[3] + .35, z, .9, .12, .9); }
   else if (k === "lp") lampPost(x, z, p[3], p[4], undefined, undefined, y - .1); else if (k === "fb") fireBarrel(x, z, y - .05); }
@@ -363,6 +369,7 @@ if (PLAN) for (const [cx, cz, r] of PLAN.yards) { const N = Math.round(2 * r / .
   g.setAttribute("color", new THREE.BufferAttribute(a, 3)); g.computeVertexNormals(); geos.push(g); }
 
 const world = new THREE.Mesh(mergeGeometries(geos), flatToon); world.scale.setScalar(U); world.castShadow = world.receiveShadow = true; scene.add(world);
+export const ROOFS = roofGeos.length ? new THREE.Mesh(mergeGeometries(roofGeos), flatToon) : null; if (ROOFS) { ROOFS.scale.setScalar(U); ROOFS.castShadow = ROOFS.receiveShadow = true; scene.add(ROOFS); }   // the roofs of the objective halls, hidden when you look down from the battle map
 { const m = new THREE.Mesh(mergeGeometries(glowGeos), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.8, 1.8, .7) })); m.scale.setScalar(U); scene.add(m); }
 for (const b of BULBS) { const m = new THREE.Mesh(new THREE.BoxGeometry(b.s[0] * U, b.s[1] * U, b.s[2] * U), new THREE.MeshBasicMaterial({ color: "#ffd9a0" })); m.position.set(b.at[0] * U, b.at[1] * U, b.at[2] * U); scene.add(m); b.L.bulb = m; b.L.fire = !!b.fire; }
 
@@ -459,15 +466,16 @@ function columns(mesh, y0) { const bb = new THREE.Box3().setFromObject(mesh), x0
     const det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz), top = Math.max(ay, by, cy), bot = Math.min(ay, by, cy), flat = Math.abs(det) < .02;
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { let y = top, yl = bot; if (!flat) { const px = i + .5, pz = j + .5, l1 = ((bz - cz) * (px - cx) + (cx - bx) * (pz - cz)) / det, l2 = ((cz - az) * (px - cx) + (ax - cx) * (pz - cz)) / det, l3 = 1 - l1 - l2; if (l1 < -.05 || l2 < -.05 || l3 < -.05) continue; y = yl = clamp(l1 * ay + l2 * by + l3 * cy, bot, top); }
       const k = j * nx + i; if (y > hi[k]) hi[k] = y; if (yl < lo[k]) lo[k] = yl; } }
-  let prev = []; for (let j = 0; j < nz; j++) { const row = []; for (let i = 0; i < nx; i++) { const k = j * nx + i; if (hi[k] < .45 || lo[k] > 2.3) continue; const h = Math.max(.5, Math.round(hi[k] * 2) / 2); let e = i; while (e + 1 < nx && hi[j * nx + e + 1] >= .45 && lo[j * nx + e + 1] <= 2.3 && Math.max(.5, Math.round(hi[j * nx + e + 1] * 2) / 2) === h) e++;
-      const old = prev.find((q) => q.i === i && q.e === e && q.h === h); if (old) { old.b.max[2] = z0 + j + 1; row.push(old); } else { const b = { min: [x0 + i, y0 - .4, z0 + j], max: [x0 + e + 1, y0 + h, z0 + j + 1] }; BOXES.push(b); row.push({ i, e, h, b }); } i = e; } prev = row; } }
+  let prev = []; const made = []; for (let j = 0; j < nz; j++) { const row = []; for (let i = 0; i < nx; i++) { const k = j * nx + i; if (hi[k] < .45 || lo[k] > 2.3) continue; const h = Math.max(.5, Math.round(hi[k] * 2) / 2); let e = i; while (e + 1 < nx && hi[j * nx + e + 1] >= .45 && lo[j * nx + e + 1] <= 2.3 && Math.max(.5, Math.round(hi[j * nx + e + 1] * 2) / 2) === h) e++;
+      const old = prev.find((q) => q.i === i && q.e === e && q.h === h); if (old) { old.b.max[2] = z0 + j + 1; row.push(old); } else { const b = { min: [x0 + i, y0 - .4, z0 + j], max: [x0 + e + 1, y0 + h, z0 + j + 1] }; BOXES.push(b); made.push([b, h]); row.push({ i, e, h, b }); } i = e; } prev = row; }
+  for (const [b, h] of made) (h >= .8 && h <= 2.6 && b.max[0] - b.min[0] < 8 && b.max[2] - b.min[2] < 8 ? SOL.addCover : SOL.addSolid)({ x: (b.min[0] + b.max[0]) / 2 * U, z: (b.min[2] + b.max[2]) / 2 * U, yaw: 0, w: (b.max[0] - b.min[0]) / 2 * U, d: (b.max[2] - b.min[2]) / 2 * U, h: h * U }); }
 function placePlan(q) { try { const e = GEN.entry(q.model), y = groundH(q.x, q.z) - (q.kind === "v" ? 0 : .08), key = q.model + "|" + q.state; let geo = GENGEO.get(key);
   if (!geo) { const parts = [GEN.geo(e.variants[q.state] || e.variants.timber)]; (e.floors || []).forEach((_, i) => parts.push(GEN.geo(GEN.floorKey(q.model, q.state, i)))); const live = parts.filter((g) => g && g.attributes.position && g.attributes.position.count); geo = live.length > 1 ? mergeGeometries(live) || live[0] : live[0]; GENGEO.set(key, geo); }
   if (!geo) return; const m = new THREE.Mesh(geo, genToon); m.position.set(q.x * U, y * U, q.z * U); m.rotation.y = q.rot; m.castShadow = m.receiveShadow = true; scene.add(m); m.updateMatrixWorld(true);
   const bx = new THREE.Box3().setFromObject(m), cxm = (bx.min.x + bx.max.x) / 2, czm = (bx.min.z + bx.max.z) / 2, top = bx.max.y / U;
   if (q.kind === "v") { BOXES.push({ min: [bx.min.x / U + .15, y - .3, bx.min.z / U + .15], max: [bx.max.x / U - .15, Math.max(y + .6, top - .1), bx.max.z / U - .15] }); SOL.addCover({ x: cxm, z: czm, yaw: 0, w: Math.max(4, (bx.max.x - bx.min.x) / 2 - 2), d: Math.max(4, (bx.max.z - bx.min.z) / 2 - 2), h: Math.min(40, bx.max.y - y * U) }); }
   else if (q.kind === "t") { if (q.core) { BOXES.push({ min: [q.x - q.core, y - .3, q.z - q.core], max: [q.x + q.core, top, q.z + q.core] }); SOL.addSolid({ x: q.x * U, z: q.z * U, yaw: 0, w: q.core * U, d: q.core * U, h: 80 }); } }
-  else { columns(m, y); SOL.addSolid({ x: cxm, z: czm, yaw: 0, w: (bx.max.x - bx.min.x) / 2, d: (bx.max.z - bx.min.z) / 2, h: Math.min(120, bx.max.y - y * U) }); }
+  else columns(m, y);
 } catch (err) { console.warn("[map]", q.model, err); } }
 if (PLAN) { const t0 = performance.now(); for (const q of PLAN.gens) placePlan(q); console.log("[map] " + MAPKEY + ": " + PLAN.gens.length + " pieces, " + GENGEO.size + " shapes, " + BOXES.length + " boxes, " + Math.round(performance.now() - t0) + " ms"); }
 else if (GEN) { placeGen("gen:humvee:c1", "damaged", -12, 26, 0); placeGen("gen:sedan:a1", "ruined", 21, 2, Math.PI / 2); placeGen("gen:pickup:b1", "damaged", -22, -12, Math.PI / 2); placeGen("gen:sedan:e5", "ruined", 14, -40, 0); placeGen("gen:sedan:b3", "ruined", 88, 14, .0); placeGen("gen:pickup:c2", "damaged", 112, -12, Math.PI / 2); placeGen("gen:humvee:a4", "damaged", 132, 22, 0); placeGen("gen:sedan:d1", "ruined", 68, 44, Math.PI / 2); }
@@ -517,7 +525,7 @@ if (window.CBWEATHER) window.CBWEATHER.start({ THREE, scene: wxGroup, game: WEAT
 
 /* ---------- drawing a frame ---------- */
 const _pv = new THREE.Matrix4();
-export function render(t, dt, hurt, cool, fromAbove) {
+export function render(t, dt, hurt, cool, fromAbove) { if (ROOFS) ROOFS.visible = !fromAbove;
   tickFx(dt); tickAir(dt, t); if (NAT) NAT.WIND.uTime.value = t;
   sky.position.copy(cam.position); wxGroup.position.set(cam.position.x, Math.max(0, cam.position.y - 120 * U), cam.position.z); cam.updateMatrixWorld();
   const u = post.uniforms; u.time.value = t; u.shaftK.value = fromAbove ? .12 : 1; u.fogMix.value = fromAbove ? .25 : 1; u.hurt.value = hurt; u.cool.value = cool || 0; u.useLine.value = CFG.outlines; u.usePal.value = CFG.palette; u.useBlock.value = CFG.blocks;

@@ -36,9 +36,9 @@ export const PASSIVES = { combined: ["Combined Arms", "Your troops within 20 met
 export const CP0 = 150, CPMAX = 600, CPRATE = 6, SUPCAP = 10, LIST_MAX = 6;
 export const DOCTRINES = { manual: ["Manual", "You bring in every squad yourself and they wait for your orders."], rush: ["Infantry rush", "Infantry as fast as supply allows, sent at the nearest point you do not hold."], armor: ["Armor support", "Vehicles first, with infantry to hold what they take."], mixed: ["Mixed", "Two squads of infantry for every vehicle."] };
 export const LIST_PTS = 100, GOAL = 400;
-export const LOAD = { side: "militia", weapon: "carbine", chassis: "vanguard", paint: "#c45a1e", doctrine: "manual", passive: "combined", v: 2, list: { militia: ["assault", "breachers", "antiarmor", "skirmishers", "turret"], machine: ["assault", "breachers", "antiarmor", "aegis", "turret"] } };
+export const LOAD = { side: "militia", weapon: "carbine", chassis: "vanguard", paint: "#c45a1e", doctrine: "manual", passive: "combined", v: 2, tags: { militia: {}, machine: {} }, list: { militia: ["assault", "breachers", "antiarmor", "skirmishers", "turret"], machine: ["assault", "breachers", "antiarmor", "aegis", "turret"] } };
 try { const s = JSON.parse(localStorage.getItem("mf-fps-load") || "null"); if (s) { if (s.v !== 2) { s.doctrine = "manual"; s.v = 2; } Object.assign(LOAD, s); LOAD.list = { ...LOAD.list, ...(s.list || {}) }; } } catch (e) {}
-for (const f in FACTIONS) { LOAD.list[f] = (LOAD.list[f] || []).filter((id) => FACTIONS[f].units[id]).slice(0, LIST_MAX); if (!LOAD.list[f].length) LOAD.list[f] = Object.keys(FACTIONS[f].units); } if (!PASSIVES[LOAD.passive]) LOAD.passive = "combined";
+for (const f in FACTIONS) { LOAD.list[f] = (LOAD.list[f] || []).filter((id) => FACTIONS[f].units[id]).slice(0, LIST_MAX); if (!LOAD.list[f].length) LOAD.list[f] = Object.keys(FACTIONS[f].units); } if (!PASSIVES[LOAD.passive]) LOAD.passive = "combined"; LOAD.tags = { militia: {}, machine: {}, ...(LOAD.tags || {}) };
 export const saveLoad = () => { try { localStorage.setItem("mf-fps-load", JSON.stringify(LOAD)); } catch (e) {} };
 
 export const GRUNTS = [], ALLIES = [], VEH = [], SQUADS = [], POINTS = [];
@@ -98,9 +98,14 @@ for (const [name, x, z, label, sector = 0, roof = 0] of SITES) { const gy = grou
    defenders get 40 seconds to fall back, and the next sector opens. The attackers have tickets: a pilot coming back costs
    one (or, with no pilots on that side, a bought squad wiped costs one and a Titan lost costs three). At no tickets the
    first battalion is spent and a second comes in where the first stopped. When the second is spent the defenders have won. */
+B.stats = { stuck: 0, moved: 0, repath: 0 };
 export const OP = { atk: PLAN ? PLAN.atk : "you", sector: 0, tickets: 30, max: 30, batt: 1, phase: "fight", t: 0, wave: 4, ot: 0, ai: false };
 export const SECN = 1 + Math.max(0, ...SITES.map((q) => q[4] || 0)), ATK = PLAN ? PLAN.atk : "you", HOMES = PLAN ? PLAN.homes : [{ atk: [0, 126], def: [0, -152] }];
 const say = (t, n) => { if (B.hooks.say) B.hooks.say(t, n); };
+/* Can troops get where the operation needs them? From each side's way in to every point of every sector, on foot,
+   and for the open points by vehicle too. Returns what failed, as short lines. */
+export function fieldTest() { const bad = [], walk = (a, b, G) => { const [ax, az] = nearestWalk(a[0], a[1], G), [bx, bz] = nearestWalk(b[0], b[1], G); if (Math.hypot(bx - b[0], bz - b[1]) > (G === PASS ? 9 : 3.5) || Math.hypot(ax - a[0], az - a[1]) > 8) return false; return segClear(ax, az, bx, bz, G) || !!astar(cj(az) * NX + ci(ax), cj(bz) * NX + ci(bx), G); };
+  HOMES.forEach((h, k) => { for (const p of POINTS) if (p.sector === k) for (const [who, at] of [["attackers", h.atk], ["defenders", h.def]]) { if (!walk(at, [p.x, p.z], WALK)) bad.push(p.name + ": " + who + " cannot walk in"); else if (!p.roof && !walk(at, [p.x, p.z], PASS)) bad.push(p.name + ": " + who + " cannot drive in"); } }); return bad; }
 export function setHomes() { const k = Math.min(OP.sector, SECN - 1), kd = Math.min(SECN - 1, k + (OP.phase === "retreat" ? 1 : 0)), fix = (p, raw) => (raw ? p.slice() : nearestWalk(p[0], p[1])), pa = fix(HOMES[k].atk, k === 0), pd = fix(HOMES[kd].def, kd === SECN - 1), d = other(ATK);
   BASE[ATK] = pa; RALLY[ATK] = pa; BASE[d] = pd; RALLY[d] = pd; }
 export const homeOf = (side) => BASE[side];   // side as the map has it: "you" is the south end
@@ -204,11 +209,12 @@ function stepSoldier(g, dt) { const s = g.s, rp = s.root.position;
     if (g.cv && g.cvHop && !near) { g.hop -= 2; if (s.cover && g.hop > 0) return; if (g.hop <= 0 || (!s.cover && !s.goal && !s.pendCover)) drop(g); else return; }   // behind something part way: stay a few seconds, then on
     if (!g.cv && (near || (t && far > 12))) { const c = findCover(g, near ? sq.dest : V3(px, 0, pz), near ? 9 : 11, near ? null : sq.dest, far, thr); if (c) { g.cv = c; c.mfUser = g; g.cvHop = !near; g.hop = 5 + rnd() * 4; } }
     let dx, dz; if (g.cv) { const c = g.cv, ux = c.p.x / U - thr.x, uz = c.p.z / U - thr.z, l = Math.hypot(ux, uz) || 1; dx = c.p.x / U + ux / l * (c.d / U + .9); dz = c.p.z / U + uz / l * (c.d / U + .9); if (s.cover) return; }
-    else { const a = g.slot * 2.4 + sq.id, r = 1.5 + g.slot * .75; dx = sq.dest.x + Math.cos(a) * r; dz = sq.dest.z + Math.sin(a) * r; }
+    else { const a = g.slot * 2.4 + sq.id, r = sq.path.length > 1 ? .5 + g.slot * .3 : 1.5 + g.slot * .75; [dx, dz] = nearestWalk(sq.dest.x + Math.cos(a) * r, sq.dest.z + Math.sin(a) * r); }   // close together on the way, spread out on arriving, and never a place inside something
     const d = Math.hypot(px - dx, pz - dz); s.autoCover = !!g.cv;
     if (d > 2.2) { if (s.cover) s.leaveCover(); if (s.crouch) s.setStance("stand"); const still = g.lx != null && Math.hypot(px - g.lx, pz - g.lz) < .4 && !s.pendCover; g.lx = px; g.lz = pz;
       // walked into something and stopped: step back and round it, one side then the other
-      if (still) { g.stuck = (g.stuck || 0) + 1; if (g.stuck > 3) drop(g); const ux = (dx - px) / d, uz = (dz - pz) / d, sd = g.stuck % 2 ? 1 : -1, k = 3 + g.stuck * .8; s.autoCover = false; s.moveTo(V3((px - uz * sd * k - ux * 1.2) * U, 0, (pz + ux * sd * k - uz * 1.2) * U), "run"); g.moveT = 1.1; }
+      if (still && g.stuck >= 4) { g.stuck++; drop(g); s.autoCover = false; B.stats.stuck++; if (g.stuck > 9) { const [wx, wz] = nearestWalk(sq.c.x + (rnd() - .5) * 2, sq.c.z + (rnd() - .5) * 2); rp.set(wx * U, groundH(wx, wz) * U, wz * U); g.stuck = 0; g.lx = null; B.stats.moved++; } else { const way = legNodes(V3(px, 0, pz), V3(dx, 0, dz), false), n0 = way[0]; s.moveTo(V3(n0.x * U, 0, n0.z * U), "run"); g.moveT = 1.4; } }
+      else if (still) { g.stuck = (g.stuck || 0) + 1; if (g.stuck > 3) drop(g); const ux = (dx - px) / d, uz = (dz - pz) / d, sd = g.stuck % 2 ? 1 : -1, k = 3 + g.stuck * .8; s.autoCover = false; s.moveTo(V3((px - uz * sd * k - ux * 1.2) * U, 0, (pz + ux * sd * k - uz * 1.2) * U), "run"); g.moveT = 1.1; }
       else { g.stuck = 0; s.moveTo(V3(dx * U, 0, dz * U), t ? "tacrun" : "run"); } }
     else if (!s.moving && !t && !s.cover && sq.arrived && rnd() < .3) s.setCrouch(rnd() < .6); }
 }
@@ -257,6 +263,7 @@ function stepSquad(sq, dt) {
   const o = sq.order || { type: "move", pos: V3(RALLY[sq.side][0], 0, RALLY[sq.side][1]) }, fin = o.pos || V3(POINTS[o.i].x, 0, POINTS[o.i].z), reach = sq.veh ? 5.5 : 4.5;
   while (sq.path.length && Math.hypot(sq.path[0].x - sq.c.x, sq.path[0].z - sq.c.z) < (sq.path.length === 1 ? 6.5 : reach)) { sq.path.shift(); sq.nodeT = 0; }
   if (sq.path.length > 1 && Math.hypot(sq.path[0].x - sq.c.x, sq.path[0].z - sq.c.z) < 11 && !sq.eng) { sq.nodeT = (sq.nodeT || 0) + dt; if (sq.nodeT > 7) { sq.path.shift(); sq.nodeT = 0; } }   // close to a corner for a while without quite reaching it: on to the next
+  if (!sq.veh && !sq.eng && sq.path.length) { sq.lagT = (sq.lagT || 0) + dt; if (sq.lagT > 6) { const moved = sq.lagC ? Math.hypot(sq.c.x - sq.lagC.x, sq.c.z - sq.lagC.z) : 99; sq.lagC = sq.c.clone(); sq.lagT = 0; if (moved < 2.5) { const end = sq.path[sq.path.length - 1]; sq.path = legNodes(sq.c, end, false); B.stats.repath++; } } } else sq.lagT = 0;
   sq.dest = sq.path.length ? sq.path[0] : fin; sq.arrived = !sq.path.length && Math.hypot(fin.x - sq.c.x, fin.z - sq.c.z) < 6.5;
   const where = o.type === "point" ? POINTS[o.i].name + ", the " + POINTS[o.i].label.toLowerCase() : null;
   sq.state = sq.eng ? (where ? (sq.arrived ? "Fighting on " : "Fighting on the way to ") + where : "Fighting") : sq.arrived ? (where ? (POINTS[o.i].owner === sq.side ? "Holding " : "Taking ") + where : "Holding position") : where ? "Moving to " + where + (sq.path.some((p) => p.stop) ? " by your stops" : "") : "Moving";
@@ -375,7 +382,7 @@ export function applySnap(o) { const now = performance.now();
   o.p.forEach((a, i) => { const p = POINTS[i], ow = a[1] ? (a[1] === 1 ? "you" : "foe") : null; p.prog = a[0] / 100; p.n = { you: a[2], foe: a[3] }; if (ow !== p.owner) { p.owner = ow; ownerChanged(p); } });
   const seenQ = new Set(), seenG = new Set();
   for (const a of o.q) { let q = GH.sq.get(a[0]); const side = a[1] & 1 ? "you" : "foe", mine = !!(a[1] & 2);
-    if (!q) { const fac = FACS[a[2]], def = FACTIONS[fac] && FACTIONS[fac].units[a[3]]; if (!def) continue; q = mkSquad(side, a[3], def, a[0], [0, 0], null, mine ? "you" : side === "you" ? "ally" : "foe", fac); q.order = null; GH.sq.set(a[0], q); SQUADS.push(q); if (a[8]) { mkVeh(q, a[8][0], a[8][1]); q.c.set(a[8][0], 0, a[8][1]); } }
+    if (!q) { const fac = FACS[a[2]], def = FACTIONS[fac] && FACTIONS[fac].units[a[3]]; if (!def) continue; q = mkSquad(side, a[3], def, a[0], [0, 0], null, mine ? "you" : side === "you" ? "ally" : "foe", fac); q.order = null; GH.sq.set(a[0], q); SQUADS.push(q); if (mine && MAP.want && now - MAP.want < 5000) { MAP.sels = [q]; MAP.want = 0; } if (a[8]) { mkVeh(q, a[8][0], a[8][1]); q.c.set(a[8][0], 0, a[8][1]); } }
     seenQ.add(a[0]); q.state = a[5]; if (mine && !(q.holdT > now)) { q.auto = !!a[4]; q.path = a[6] ? a[6].map((n) => { const v = V3(n[0], 0, n[1]); if (n[2]) v.stop = true; return v; }) : []; q.order = a[7] ? { type: a[7][0] >= 0 ? "point" : "move", i: a[7][0], pos: a[7][3] ? V3(a[7][1], 0, a[7][2]) : null } : null; }
     if (q.veh && a[8]) { q.veh.net = a[8]; q.veh.hp = a[8][3]; if (!a[8][3] && q.veh.alive) wreckVeh(q.veh); } }
   for (const a of o.s) { let g = GH.g.get(a[0]); const q = GH.sq.get(a[1]); if (!q) continue; if (!g) { if (a[5] & 1) continue; g = mkSoldier(q, a[2], a[3], a[4], a[0]); GH.g.set(a[0], g); g.shots = a[6]; } seenG.add(a[0]); g.net = a; }
@@ -400,7 +407,7 @@ const theirs = (ids, who) => SQUADS.filter((q) => q.owner === who && ids.include
 export const netIn = {
   dep: (id, who) => { deploy(who, id); },
   doc: (k, who) => { if (DOCTRINES[k]) B.doctrine[who] = k; },
-  order: (a, who) => { const g = V3(a[1], 0, a[2]); g.ping = !!a[4]; orderTo(g, !!a[3], theirs(a[0], who), true); },
+  order: (a, who) => { const g = V3(a[1], 0, a[2]); g.ping = a[4] | 0; orderTo(g, !!a[3], theirs(a[0], who), true); },
   act: (a, who) => squadAct(a[0], theirs(a[1], who), true),
   util: (a, who) => { useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, who); },
   hit: (a, who, fromU) => { const sd = B.side[who], u = a[0] < 0 ? VEH.find((v) => v.sq.id === -a[0] && v.side !== sd) : [...ALLIES, ...GRUNTS].find((g) => g.id === a[0] && g.side !== sd); if (u) damage(u, Math.min(a[1], 9999), fromU, a[2] || "chest", who); } };
@@ -476,9 +483,9 @@ function drawDeck() { const side = B.fac.you, Un = FACTIONS[side].units, S = MAP
 }
 // Send the picked squads to exactly where was clicked. With Shift each click is a stop on the way; the squads go from
 // node to node in straight lines, and only a line that is blocked gets corners added to take it round.
-export const pingTo = (g, sels) => { g.ping = true; orderTo(g, false, sels); };
-function orderTo(g, way, sels = MAP.sels, asked = false) { if (g.ping && B.mp !== "guest") sels = sels.filter((q) => !q.lock); g.x = clamp(g.x, WORLD.x0 + 2, WORLD.x1 - 2); g.z = clamp(g.z, WORLD.z0 + 2, WORLD.z1 - 2); const i = POINTS.findIndex((p) => Math.hypot(p.x - g.x, p.z - g.z) < 8);
-  if (B.mp === "guest" && !asked) B.hooks.net("order", [sels.map((q) => q.id), r1(g.x), r1(g.z), way ? 1 : 0, g.ping ? 1 : 0]);
+export const pingTo = (g, sels, force) => { g.ping = force ? 2 : 1; orderTo(g, false, sels); };
+function orderTo(g, way, sels = MAP.sels, asked = false) { if (g.ping === 1 && B.mp !== "guest") sels = sels.filter((q) => !q.lock); g.x = clamp(g.x, WORLD.x0 + 2, WORLD.x1 - 2); g.z = clamp(g.z, WORLD.z0 + 2, WORLD.z1 - 2); const i = POINTS.findIndex((p) => Math.hypot(p.x - g.x, p.z - g.z) < 8);
+  if (B.mp === "guest" && !asked) B.hooks.net("order", [sels.map((q) => q.id), r1(g.x), r1(g.z), way ? 1 : 0, g.ping || 0]);
   for (const s of sels) { s.auto = false; if (!s.fresh) s.path = []; const start = s.path.length ? s.path[s.path.length - 1] : s.c, nodes = legNodes(start, g, !!s.veh), end = nodes[nodes.length - 1]; if (way) end.stop = true; s.path.push(...nodes); s.fresh = way; s.holdT = performance.now() + 700;
     s.order = !way && i >= 0 ? { type: "point", i, pos: end.clone() } : { type: "move", pos: end.clone() }; s.lock = !g.ping && !way && i >= 0; for (const m of s.members) m.moveT = 0; } if (!asked) drawDeck(); }
 function squadAct(a, sels, asked = false) { if (B.mp === "guest" && !asked) B.hooks.net("act", [a, sels.map((q) => q.id)]);
@@ -486,7 +493,7 @@ function squadAct(a, sels, asked = false) { if (B.mp === "guest" && !asked) B.ho
 mapEl.addEventListener("contextmenu", (e) => e.preventDefault());
 mapEl.addEventListener("wheel", (e) => { MAP.dist = clamp(MAP.dist * Math.exp(e.deltaY * .0012), 24, 300); e.preventDefault(); }, { passive: false });
 mapEl.addEventListener("mousedown", (e) => { const b = e.target.closest("button");
-  if (b) { if (b.dataset.dep) { deploy("you", b.dataset.dep); deckKey = ""; } else if (b.dataset.pod) { MAP.arm = b.classList.contains("off") ? null : { kind: "pod", unit: b.dataset.pod }; deckKey = ""; } else if (b.dataset.util) { MAP.arm = b.classList.contains("off") ? null : { kind: b.dataset.util }; deckKey = ""; } else if (b.dataset.doc) { B.doctrine.you = LOAD.doctrine = b.dataset.doc; saveLoad(); deckKey = ""; if (B.mp === "guest") B.hooks.net("doc", b.dataset.doc); } else if (b.dataset.act) { const a = b.dataset.act; if (a === "none") MAP.sels = []; else squadAct(a, MAP.sels); } drawDeck(); return; }
+  if (b) { if (b.dataset.dep) { const nq = deploy("you", b.dataset.dep); if (nq) MAP.sels = [nq]; else if (B.mp === "guest") MAP.want = performance.now(); deckKey = ""; } else if (b.dataset.pod) { MAP.arm = b.classList.contains("off") ? null : { kind: "pod", unit: b.dataset.pod }; deckKey = ""; } else if (b.dataset.util) { MAP.arm = b.classList.contains("off") ? null : { kind: b.dataset.util }; deckKey = ""; } else if (b.dataset.doc) { B.doctrine.you = LOAD.doctrine = b.dataset.doc; saveLoad(); deckKey = ""; if (B.mp === "guest") B.hooks.net("doc", b.dataset.doc); } else if (b.dataset.act) { const a = b.dataset.act; if (a === "none") MAP.sels = []; else squadAct(a, MAP.sels); } drawDeck(); return; }
   if (e.target.closest("#map-top, #map-bottom, #map-sel, #map-supply")) return; e.preventDefault();
   MAP.drag = { b: e.button, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, moved: false }; });
 addEventListener("mousemove", (e) => { const d = MAP.drag; if (!MAP.on || !d) return; const dx = e.clientX - d.lx, dy = e.clientY - d.ly; d.lx = e.clientX; d.ly = e.clientY; if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) d.moved = true;
