@@ -10,6 +10,7 @@
    Built in metres, facing +z, drawn at U. */
 import { THREE, U, charMat, fxLayer, clamp, scene } from "./engine.js";
 import { loadModel, puppet } from "./puppet.js";
+import { carriedRifle } from "./hands.js";
 import { build, box as B, drum as C, loft as Lf, ball as Bl } from "./parts.js";
 
 const PAINT = {
@@ -54,13 +55,14 @@ export function makeFigure(fac, enemy, paint) {
   const gun = new THREE.Object3D(); chest.add(gun);
   build(gun, [Lf([[-.06, .04, .1], [0, .05, .13], [.045, .045, .1]], 0, 0, .06, "gun", 8, .5), B(.055, .1, .36, 0, 0, .28, "gun"), B(.04, .11, .045, 0, -.09, .2, "dark", -.3), B(.045, .15, .07, 0, -.11, .33, "wrap", -.12), Lf([[-.035, .06, .26], [.03, .05, .22]], 0, .0, .56, "gun", 8, .6),
     C(.016, .26, 0, .0, .78, "dark", "z", 8), C(.024, .06, 0, .0, .9, "gun", "z", 8), B(.035, .08, .04, 0, -.07, .52, "dark"), B(.03, .02, .3, 0, .06, .3, "dark"), B(.045, .05, .1, 0, .095, .27, "dark"), [.03, .03, .01, 0, .095, .325, "glow"], B(.012, .05, .4, .035, -.03, .3, "dark", 0, 0), Lf([[-.03, .06, .07], [.03, .06, .07]], 0, 0, .1, "wrap", 8, .4, Math.PI / 2)], S, glowMat);
+  const carried = carriedRifle(charMat); if (carried) { gun.traverse((o) => { if (o.isMesh) o.visible = false; }); gun.add(carried); }   // the model rifle in place of the built one
   const tag = new THREE.Mesh(new THREE.OctahedronGeometry(1.9), new THREE.MeshBasicMaterial({ color: enemy ? new THREE.Color(3.4, .5, .25) : new THREE.Color(.5, 2.4, 3) })); tag.position.y = 39; root.add(tag);
   const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
   // bend one arm so its hand is at T (in the chest's own space), elbow toward the pole
   function reach(A, T, px, py, pz) { const S0 = A.up.position, l1 = A1, l2 = A2 + .03; v1.copy(T).sub(S0); let d = v1.length(); v1.divideScalar(d || 1); d = clamp(d, Math.abs(l1 - l2) + .01, l1 + l2 - .005);
     const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)); v2.set(px, py, pz).addScaledVector(v1, -(px * v1.x + py * v1.y + pz * v1.z)); if (v2.lengthSq() < 1e-6) v2.set(0, -1, 0); v2.normalize();
     v3.copy(v1).multiplyScalar(a).addScaledVector(v2, h); q1.setFromUnitVectors(DOWN, v2.copy(v3).normalize()); A.up.quaternion.copy(q1); v2.copy(v1).multiplyScalar(d).sub(v3).normalize(); q2.setFromUnitVectors(DOWN, v2); A.fo.quaternion.copy(q1).invert().multiply(q2); }
-  const GRIP = new THREE.Vector3(0, -.09, .2), FORE = new THREE.Vector3(0, -.07, .52), tR = new THREE.Vector3(), tL = new THREE.Vector3(), out = new THREE.Vector3();
+  const GRIP = carried ? new THREE.Vector3(0, -.1, .24) : new THREE.Vector3(0, -.09, .2), FORE = carried ? new THREE.Vector3(0, -.075, .5) : new THREE.Vector3(0, -.07, .52), tR = new THREE.Vector3(), tL = new THREE.Vector3(), out = new THREE.Vector3();
   // what is posed, each value easing toward where the pilot's state says it should be
   const keys = ["tl", "kl", "fl", "tr", "kr", "fr", "off", "lean", "twist", "nod", "roll", "fall", "thrust", "wall", "gunLow"], cur = {}; for (const k of keys) cur[k] = 0; let ph = 0, t = 0;
   const W = MODEL ? puppet(MODEL, { root: body, height: 1.84, turn: 0, team: enemy ? "foe" : "you", hips, hipY: HIP, ankle: HIP - .06 - TH - SH, fwd: [0, 0, 1], full: [["Spine", waist], ["Spine2", chest], ["Head", head]], keep: [gun, ...flames],

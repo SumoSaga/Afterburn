@@ -11,6 +11,7 @@
    Each move is a set of key poses on a clock from 0 to 1, eased so that the fast parts are fast and the stops are hard.
    game.js owns the rules (ammunition, timers, what gets hit); this file only shows them. */
 import { THREE, gunScene, gunMat, clamp, lerp, rnd } from "./engine.js";
+import { loadModel } from "./puppet.js";
 import { build, box as B, drum as C, loft as Lf, ball as Bl } from "./parts.js";
 
 const S = { gun: "#3d444a", gun2: "#4b5258", dark: "#1c1d1f", mag: "#2e3236", suit: "#6f745c", wrap: "#8c917a", shell: "#d6cfb8", accent: "#c45a1e", steel: "#9aa0a4", grit: .75, gritScale: 26 };
@@ -35,8 +36,27 @@ function charger(mat = gunMat) { const g = new THREE.Group(); build(g, [B(.06, .
   const coil = new THREE.Mesh(new THREE.BoxGeometry(.045, .045, .11), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.4, 3) })); coil.position.set(0, .03, -.62); g.add(coil);
   g.userData = { coil, fore: new THREE.Vector3(0, -.01, -.3), well: new THREE.Vector3(0, -.09, -.1), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .03, -.75) }; return g; }
 const SPEC = { shotgun: { barrel: .14, guard: .34, mag: .035 }, pistol: { barrel: .03, guard: .09, mag: .1, pistol: true }, carbine: { barrel: .2, guard: .26, mag: .12 }, longrifle: { barrel: .36, guard: .3, mag: .09, scope: true }, smg: { barrel: .08, guard: .16, mag: .17 } };
-export const gunProp = (kind, mat) => (kind === "charge" ? charger(mat) : rifle(SPEC[kind] || SPEC.carbine, mat));   // the same guns as the ones in your hands, for standing about in the garage
-const GUNS = { charge: charger() }; for (const k in SPEC) GUNS[k] = rifle(SPEC[k]);
+/* The assault rifle is a model (models/rifle.glb): one mesh, no moving parts of its own. Its magazine is cut away from the
+   rest by where its triangles lie (below the well, between the grip and the front of the well), so it can come out, and
+   it is given a top so it looks whole in the hand. The model is 1 unit long with its muzzle toward +z; here it is turned
+   to point along -z with the grip at the origin, like the built guns, and carries the same marks they do (where the
+   hands go, the muzzle, the sight line), so the reload, the recoil and everything else written for them plays on it. */
+const RM = await loadModel("rifle.glb", "mfRifle"), RSC = .9, RMATS = {};
+function modelRifle(mat) { if (!RM) return null; let src = null; RM.scene.traverse((o) => { if (o.isMesh) src = o; }); const key = mat === gunMat ? "held" : "prop", tex = RMATS[key] || (RMATS[key] = RM.mk("#ffffff", key, mat === gunMat ? "0.6" : "0.5"));
+  const pos = src.geometry.attributes.position, idx = src.geometry.index.array, body = [], mag = [];
+  for (let i = 0; i < idx.length; i += 3) { let cy = 0, zl = 9, zh = -9, yh = -9; for (let k = 0; k < 3; k++) { const v = idx[i + k], y = pos.getY(v), z = pos.getZ(v); cy += y / 3; zl = Math.min(zl, z); zh = Math.max(zh, z); yh = Math.max(yh, y); }
+    (cy < .128 && zl > -.08 && zh < .035 && yh < .145 ? mag : body).push(idx[i], idx[i + 1], idx[i + 2]); }
+  const M = new THREE.Matrix4().makeRotationY(Math.PI).scale(new THREE.Vector3(RSC, RSC, RSC)).setPosition(0, .028 - .31 * RSC, -.12), geo = (ix) => { const g = src.geometry.clone(); g.setIndex(ix); g.applyMatrix4(M); return g; }, bodyG = geo(body), magGeo = geo(mag), part = (g) => { const m = new THREE.Mesh(g, tex); m.frustumCulled = false; return m; };
+  const g = new THREE.Group(); g.add(part(bodyG));
+  const top = [B(.03, .07, .074, .004, -.125, -.1, "dark", -.44)], magG = new THREE.Group(); magG.position.set(0, -.018, 0); { const m = part(magGeo); m.position.y = .018; magG.add(m); } const cap = new THREE.Group(); cap.position.y = .018; magG.add(cap); build(cap, top, S, glow, mat); g.add(magG);
+  const bolt = new THREE.Group(); bolt.position.set(.046, .052, .04); g.add(bolt); build(bolt, [B(.014, .014, .034, 0, 0, 0, "steel")], S, glow, mat);
+  // a magazine on its own, centred, for the hand and for the one that falls
+  const loose = () => { const o = new THREE.Group(), m = part(magGeo); m.position.set(0, .19, .1); o.add(m); const c = new THREE.Group(); c.position.set(0, .19, .1); o.add(c); build(c, top, S, glow, mat); return o; };
+  g.userData = { sightY: .128, mag: magG, bolt, loose, fore: new THREE.Vector3(0, -.06, -.27), well: new THREE.Vector3(0, -.19, -.1), top: new THREE.Vector3(.046, .052, .06), muzzle: new THREE.Vector3(0, .028, -.12 - .5 * RSC), magLen: .12 }; return g; }
+// the rifle for a figure to carry: built along +z from the butt of its stock, about 0.75 m long
+export function carriedRifle(mat) { const r = modelRifle(mat); if (!r) return null; const s = .75 / RSC, o = new THREE.Group(); r.rotation.y = Math.PI; r.scale.setScalar(s); r.position.set(0, -.028 * s, (.5 * RSC - .12) * s); o.add(r); return o; }
+export const gunProp = (kind, mat) => (kind === "charge" ? charger(mat) : (kind === "carbine" && modelRifle(mat)) || rifle(SPEC[kind] || SPEC.carbine, mat));   // the same guns as the ones in your hands, for standing about in the garage
+const GUNS = { charge: charger() }; for (const k in SPEC) GUNS[k] = (k === "carbine" && modelRifle(gunMat)) || rifle(SPEC[k]);
 for (const k in GUNS) { GUNS[k].visible = false; rig.add(GUNS[k]); }
 
 /* ---------- arms: the hand is at the arm's origin and the forearm runs back along +z toward the elbow ---------- */
@@ -49,6 +69,7 @@ const held = { mag: new THREE.Group(), nade: new THREE.Group(), knife: new THREE
 build(held.mag, [B(.03, .12, .052, 0, -.02, -.05, "mag", .5)], S, glow, gunMat); build(held.nade, [Bl(.058, .07, .058, 0, -.01, -.06, "gun2"), C(.014, .03, 0, .03, -.06, "steel", "y", 6), B(.012, .05, .03, .03, .0, -.06, "steel")], S, glow, gunMat);
 build(held.knife, [B(.022, .03, .1, 0, -.02, -.04, "dark"), B(.05, .012, .012, 0, -.02, -.095, "steel"), B(.008, .044, .24, 0, -.02, -.22, "shell"), B(.008, .026, .07, 0, -.029, -.36, "shell", .25)], S, glow, gunMat);
 for (const k in held) { held[k].visible = false; armL.add(held[k]); }
+for (const k in GUNS) { const D = GUNS[k].userData; if (D.loose) { D.handMag = D.loose(); D.handMag.position.set(0, -.02, -.05); D.handMag.rotation.x = .5; D.handMag.visible = false; armL.add(D.handMag); } }   // a model's own magazine in the hand
 const drops = [];   // magazines on their way to the floor
 
 /* ---------- easing and key poses ---------- */
@@ -58,11 +79,11 @@ function key(u, keys) { if (u <= keys[0][0]) return keys[0][1]; for (let i = 1; 
 const key3 = (u, keys, o) => { for (let j = 0; j < 3; j++) o[j] = key(u, keys.map((q) => [q[0], q[1][j], q[2]])); return o; };
 const spring = (s, k, c, dt) => { s.v += (-k * s.x - c * s.v) * dt; s.x += s.v * dt; };
 const rec = { z: { x: 0, v: 0 }, p: { x: 0, v: 0 }, y: { x: 0, v: 0 }, r: { x: 0, v: 0 }, up: { x: 0, v: 0 } }, sway = { x: { x: 0, v: 0 }, y: { x: 0, v: 0 } }, land = { x: 0, v: 0 }, jolt = { x: 0, v: 0 };
-let carry = 0, lastYaw = 0, lastPitch = 0, wasAir = false, shown = "", bobT = 0;
+let cycle = 0, carry = 0, lastYaw = 0, lastPitch = 0, wasAir = false, shown = "", bobT = 0;
 const gp = [0, 0, 0], gr = [0, 0, 0], lh = [0, 0, 0], lw = [0, 0, 0], tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Euler();
 export const VM = { cam: { pitch: 0, roll: 0 }, muzzle: new THREE.Vector3(),
   // a shot: k is how hard it kicks
-  kick(k) { rec.z.v += 2.6 * k; rec.p.v += 3.4 * k; rec.up.v += .9 * k; rec.y.v += (rnd() - .5) * 2.4 * k; rec.r.v += (rnd() - .5) * 3 * k; VM.cam.pitch += .006 * k; },
+  kick(k) { rec.z.v += 2.6 * k; rec.p.v += 3.4 * k; rec.up.v += .9 * k; rec.y.v += (rnd() - .5) * 2.4 * k; rec.r.v += (rnd() - .5) * 3 * k; VM.cam.pitch += .006 * k; cycle = 1; const G = GUNS[shown], D = G && G.userData; if (D && D.mag && root.visible) { const m = new THREE.Group(); build(m, [B(.007, .007, .02, 0, 0, 0, "accent")], S, glow, gunMat); m.position.copy(D.top).applyMatrix4(rig.matrix); m.quaternion.copy(rig.quaternion); root.add(m); drops.push({ m, v: new THREE.Vector3(.5 + rnd() * .3, .45 + rnd() * .3, .1 + rnd() * .2), s: new THREE.Vector3(10 + rnd() * 20, 0, 10 + rnd() * 20), t: .25 }); } },   // the bolt cycles and a case is thrown out to the right
   // a hard stop somewhere in a move (a magazine seated, a handle let go): the whole rig jumps
   bump(k) { jolt.v += k; },
   /* st: { kind, visible, charge, reload (0..1 or -1), swap (0..1 or -1), swapFrom, nade (0..1 or -1), melee (0..1 or -1), speed, grounded, vy, sliding, mantle, roll, dip, yaw, pitch, firing } */
@@ -91,14 +112,14 @@ export const VM = { cam: { pitch: 0, roll: 0 }, muzzle: new THREE.Vector3(),
     const A = st.ads || 0, sy = D.sightY || .1;
     rig.position.set((.155 + bx + st.roll * .22 - carry * .04) * (1 - A) + gp[0] + sway.x.x * .012 * (1 - A * .7) + (ch ? (rnd() - .5) * .004 * ch : 0), A * (-sy + .165 - by) + -.165 + by - st.dip * .3 - (st.sliding ? .03 : 0) + gp[1] - carry * .05 + land.x + rec.up.x * .012 - sway.y.x * .01 + jolt.x * .012, -.4 + A * .12 + rec.z.x * .06 * (1 - A * .4) + gp[2] + carry * .02);
     e.set(rec.p.x * .09 * (1 - A * .5) + gr[0] + (st.mantle ? .6 : 0) + carry * .22 - sway.y.x * .05 - land.x * 1.2 + jolt.x * .05, .03 * (1 - A) + gr[1] + rec.y.x * .03 + carry * .55 + sway.x.x * .06, st.roll * .6 + (st.sliding ? -.2 : 0) + gr[2] + rec.r.x * .05 + carry * .25 + sway.x.x * .05, "YXZ"); rig.quaternion.setFromEuler(e);
-    if (D.mag) { D.mag.position.y = -.018 + magOff; D.mag.visible = magShow; D.bolt.position.z = .04 + boltZ; } if (D.coil) { D.coil.scale.setScalar(.6 + ch * 1.6); D.coil.material.color.setRGB(.5 + ch * 2, 2.4 + ch * 3, 3 + ch * 4); }
+    cycle = Math.max(0, cycle - dt * 16); if (D.mag) { D.mag.position.y = -.018 + magOff; D.mag.visible = magShow; D.bolt.position.z = .04 + boltZ + Math.sin(cycle * Math.PI) * .04; } if (D.coil) { D.coil.scale.setScalar(.6 + ch * 1.6); D.coil.material.color.setRGB(.5 + ch * 2, 2.4 + ch * 3, 3 + ch * 4); }
     rig.updateMatrix(); VM.muzzle.copy(D.muzzle).applyMatrix4(rig.matrix);
     // the right hand on the grip; the left on the foregrip, or wherever the move has sent it
     tmp.set(0, -.062, .04).applyMatrix4(rig.matrix); armR.position.copy(tmp); armR.lookAt(elbowR); armR.rotateZ(-1.25);
     tmp.copy(D.fore); tmp.x += lh[0]; tmp.y += lh[1]; tmp.z += lh[2]; tmp.applyMatrix4(rig.matrix); if (free > 0) { tmp2.set(lw[0], lw[1], lw[2]); tmp.lerp(tmp2, free); }
     armL.position.copy(tmp); armL.lookAt(elbowL); armL.rotateZ(lerp(1.35, .5, free));
-    held.mag.visible = st.reload >= .5 && st.reload < .655 && !!D.mag; held.nade.visible = item === "nade"; held.knife.visible = item === "knife";
-    if (st.reload >= 0 && D.mag && st.reload >= .27 && !VM._dropped) { VM._dropped = true; const m = new THREE.Group(); build(m, [B(.03, .12, .052, 0, 0, 0, "mag")], S, glow, gunMat); m.position.copy(D.well).applyMatrix4(rig.matrix); m.quaternion.copy(rig.quaternion); root.add(m); drops.push({ m, v: new THREE.Vector3(-.15, -.2, .1), s: new THREE.Vector3(rnd() * 6, rnd() * 6, rnd() * 6), t: 0 }); }
+    { const inHand = st.reload >= .5 && st.reload < .655 && !!D.mag; held.mag.visible = inHand && !D.handMag; for (const k in GUNS) { const hm = GUNS[k].userData.handMag; if (hm) hm.visible = inHand && GUNS[k] === G; } } held.nade.visible = item === "nade"; held.knife.visible = item === "knife";
+    if (st.reload >= 0 && D.mag && st.reload >= .27 && !VM._dropped) { VM._dropped = true; const m = D.loose ? D.loose() : new THREE.Group(); if (!D.loose) build(m, [B(.03, .12, .052, 0, 0, 0, "mag")], S, glow, gunMat); m.position.copy(D.well).applyMatrix4(rig.matrix); m.quaternion.copy(rig.quaternion); root.add(m); drops.push({ m, v: new THREE.Vector3(-.15, -.2, .1), s: new THREE.Vector3(rnd() * 6, rnd() * 6, rnd() * 6), t: 0 }); }
     if (st.reload < 0) VM._dropped = false;
     for (let i = drops.length - 1; i >= 0; i--) { const d = drops[i]; d.t += dt; d.v.y -= 4.5 * dt; d.m.position.addScaledVector(d.v, dt); d.m.rotation.x += d.s.x * dt; d.m.rotation.z += d.s.z * dt; if (d.t > .7) { root.remove(d.m); drops.splice(i, 1); } }
   } };

@@ -11,8 +11,8 @@ import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 
 export async function loadModel(file, key, foeTint = "#b98f86") {
   try { const g = await new GLTFLoader().loadAsync(new URL("../models/" + file + "?v=" + (globalThis.AB_BUILD || ""), import.meta.url).href); let map = null; g.scene.traverse((o) => { if (o.isMesh && o.material.map) map = o.material.map; });
-    const mk = (col, k) => { const m = new THREE.MeshToonMaterial({ map, color: col, gradientMap: grad }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a = 0.5;"); }; m.customProgramCacheKey = () => key + k; return m; };   // alpha .5 marks a figure for the pixel pass
-    return { scene: g.scene, mats: { you: mk("#ffffff", "A"), foe: mk(foeTint, "B"), husk: mk("#2a2624", "H") } };
+    const mk = (col, k, alpha = "0.5") => { const m = new THREE.MeshToonMaterial({ map, color: col, gradientMap: grad, side: THREE.DoubleSide }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a = " + alpha + ";"); }; m.customProgramCacheKey = () => key + k; return m; };   // the alpha marks what it is for the pixel pass: .5 a figure, .6 what the pilot holds
+    return { scene: g.scene, mk, mats: { you: mk("#ffffff", "A"), foe: mk(foeTint, "B"), husk: mk("#2a2624", "H") } };
   } catch (e) { console.warn("model " + file + " not loaded, using the built look", e); return null; }
 }
 
