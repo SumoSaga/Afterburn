@@ -8,7 +8,7 @@
 import { THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, SITES, PLAN, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
 
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
-const WPN = { rifle: { range: 48, dmg: 22, burst: 3, acc: .5, cd: [1.4, 2.4] }, lmg: { range: 52, dmg: 16, burst: 6, acc: .42, cd: [1.6, 2.4] }, dmr: { range: 75, dmg: 48, burst: 1, acc: .7, cd: [1.6, 2.2] }, shotgun: { range: 16, dmg: 50, burst: 1, acc: .75, cd: [1.1, 1.6] }, at: { range: 62, dmg: 20, burst: 1, acc: .6, cd: [3.2, 4.4], titan: 9, veh: 5 } };
+const WPN = { rifle: { range: 48, dmg: 22, burst: 3, acc: .5, cd: [1.4, 2.4] }, lmg: { range: 52, dmg: 16, burst: 6, acc: .42, cd: [1.6, 2.4] }, dmr: { range: 75, dmg: 48, burst: 1, acc: .7, cd: [1.6, 2.2] }, shotgun: { range: 16, dmg: 50, burst: 1, acc: .75, cd: [1.1, 1.6] }, at: { range: 62, dmg: 20, burst: 1, acc: .6, cd: [3.2, 4.4], titan: 30, veh: 5 } };
 /* The cards. cost is Command Points in the fight, sup is the supply the squad holds while it lives, pts is what the card
    costs in the 100-point battlegroup (cost divided by ten). capw is how much one trooper counts on a point. core marks
    the Core Infantry the Attrition Wave doctrine pays back. militia is the Frontier Coalition, machine the Core Directorate. */
@@ -160,6 +160,7 @@ export const room = (who, def) => supUsed(who) + (def.sup || 3) <= SUPCAP;
 export const credit = (who, n) => { if (who && B.supply[who] !== undefined && !B.over) B.supply[who] = Math.min(CPMAX, B.supply[who] + n); };
 const passive = (who) => (B.passive && B.passive[who]) || null, cmdPilot = (who) => PIL.find((p) => p.key === who);
 let PIL = [];
+export function addDome(side, x, z, r, sec) { const col = side === "you" ? "#6fd8ff" : "#ff8a6a", gy = groundH(x, z), dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(r * U, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }))); dome.position.set(x * U, (gy - 1) * U, z * U); scene.add(dome); DOMES.push({ x, z, r, side, t: sec, mesh: dome, box: new THREE.Object3D() }); }   // a short shield over troops, as the Vortex Wall gives
 export function stunAt(x, z, r, bySide, sec) { for (const v of VEH) if (v.alive && v.side !== bySide && v.def.veh.static && Math.hypot(v.pos.x - x, v.pos.z - z) < r) v.stun = sec; }   // an arc grenade shuts placed assets down for a while
 export const nearAI = (side, x, z, r) => arr(side).some((g) => g.s.dead < 0 && Math.hypot(g.s.root.position.x / U - x, g.s.root.position.z / U - z) < r);
 export const utilCost = (who, k) => Math.round(UTILS[k].cost * (passive(who) === "logistics" ? .85 : 1));
@@ -237,7 +238,7 @@ function stepHover(v, dt) { const sq = v.sq, D = v.def.veh; let tx = v.pos.x, tz
 // a mine waits a moment after it is laid, then goes off under the first enemy to come close: a trooper, a vehicle on the ground, a pilot or a Titan
 function stepMines(dt) { for (let i = MINES.length - 1; i >= 0; i--) { const m = MINES[i], foe = other(m.side); m.arm -= dt; if (m.arm > 0) continue;
     const hit = arr(foe).some((g) => g.s.dead < 0 && Math.hypot(g.s.root.position.x / U - m.x, g.s.root.position.z / U - m.z) < 2.2) || VEH.some((v) => v.alive && v.side === foe && !v.def.veh.hover && Math.hypot(v.pos.x - m.x, v.pos.z - m.z) < 3) || PIL.some((p) => p.side === foe && Math.hypot(p.x - m.x, p.z - m.z) < 2.5) || (B.hooks.titans ? B.hooks.titans() : []).some((t) => t.alive && t.team === foe && Math.hypot(t.pos.x - m.x, t.pos.z - m.z) < 4);
-    if (hit) { scene.remove(m.mesh); MINES.splice(i, 1); if (B.hooks.blast) B.hooks.blast(V3(m.x, groundH(m.x, m.z) + .3, m.z), 4.2, { team: m.side, titan: 70, pilot: 90 }); } } }
+    if (hit) { scene.remove(m.mesh); MINES.splice(i, 1); if (B.hooks.blast) B.hooks.blast(V3(m.x, groundH(m.x, m.z) + .3, m.z), 4.2, { team: m.side, titan: 35, pilot: 90 }); } } }
 function stepVeh(v, dt) { if (!v.alive) return; if (v.stun > 0) { v.stun -= dt; v.tgt = null; return; } if (v.def.veh.hover) return stepHover(v, dt); const sq = v.sq, dest = sq.dest;
   v.think -= dt; if (v.think <= 0) { v.think = .5; v.tgt = v.def.veh.gun ? nearestEnemy(v.side, V3(v.pos.x, groundH(v.pos.x, v.pos.z) + 1.7, v.pos.z), v.def.veh.range || 55, v.def.veh.gun === "rocket") : null; }
   const t = v.tgt && tgtAlive(v.tgt) ? v.tgt : null, far = Math.hypot(dest.x - v.pos.x, dest.z - v.pos.z);
@@ -281,7 +282,7 @@ function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null, rps
     const was = p.owner; if (p.prog >= 1) p.owner = "you"; else if (p.prog <= -1) p.owner = "foe"; else if ((p.owner === "you" && p.prog <= 0) || (p.owner === "foe" && p.prog >= 0)) p.owner = null;
     if (was !== p.owner) ownerChanged(p); }
   if (OP.phase === "fight" && !B.over && POINTS.every((p) => p.sector !== OP.sector || p.owner === OP.atk)) sectorFalls(); }
-function ownerChanged(p, quiet) { const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (!quiet && p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
+function ownerChanged(p, quiet) { if (!quiet && p.owner === "you" && B.hooks.onCap) B.hooks.onCap(p); const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (!quiet && p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
 
 // a commander that plays by a doctrine: what to bring in next, as supply allows
 function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[side] = 1.5; const doc = B.doctrine[side]; if (doc === "manual" || B.away[side]) return;
