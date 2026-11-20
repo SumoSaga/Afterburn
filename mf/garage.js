@@ -26,13 +26,13 @@ box(1.2, .5, .75, -5.6, 0, 3.4, "#4f5a3c"); box(1.25, .06, .8, -5.6, .5, 3.4, "#
 box(1, 2.1, .6, -8, 0, 1.4, "#4a5560"); box(1, 2.1, .6, -9.05, 0, 1.4, "#44505a"); box(.04, 1.5, .5, -7.48, .3, 1.4, "#2a2d30"); box(.9, .9, .6, -7.2, 0, 3.9, "#b0312a"); box(.95, .05, .65, -7.2, .9, 3.9, "#2a2724"); box(.6, .35, .4, -7.2, .95, 3.9, "#3c4046");
 box(3.4, .04, 2.6, -5, 0, 3.3, "#3d3a34"); box(.06, 3.2, .06, -5, 8.9, 3.2, "#2a2724"); box(.9, .12, .9, -5, 8.8, 3.2, "#2a2724"); box(.5, .1, .5, -5, 8.7, 3.2, lit(new THREE.Color(3, 2.2, 1.2)));
 box(1.6, .12, .5, 5, 11.3, -3, lit(new THREE.Color(1.6, 2.2, 3))); box(1.6, .12, .5, 5, 11.3, 2, lit(new THREE.Color(1.6, 2.2, 3)));
-const lamps = [new THREE.PointLight("#ffc890", 3400, 520, 1.5), new THREE.PointLight("#bcd8ff", 5200, 1100, 1.4)]; lamps[0].position.set(-4.8 * U, 2.6 * U, 4.6 * U); lamps[1].position.set(4 * U, 10.5 * U, 0); for (const l of lamps) { l.visible = false; root.add(l); }
+const lamps = [new THREE.PointLight("#ffc890", 1700, 520, 1.5), new THREE.PointLight("#bcd8ff", 5200, 1100, 1.4)]; lamps[0].position.set(-4.8 * U, 2.6 * U, 4.6 * U); lamps[1].position.set(4 * U, 10.5 * U, 0); for (const l of lamps) { l.visible = false; root.add(l); }
 
 // what changes with your choices
 const gear = new THREE.Group(); root.add(gear); let fig = null, figKey = "", rig = null, rigKey = "", gearKey = "";
 function refresh() { if (!root.visible) return;
   const fk = LOAD.side + LOAD.paint; if (fk !== figKey) { figKey = fk; if (fig) fig.dispose(); fig = makeFigure(LOAD.side, false, LOAD.paint); root.add(fig.root); }
-  const rk = LOAD.paint + LOAD.chassis; if (rk !== rigKey) { rigKey = rk; if (rig) rig.root.removeFromParent(); rig = makeRig("you", { accent: LOAD.paint }); root.add(rig.root); rig.root.position.set(5 * U, 0, -4 * U); rig.root.rotation.y = 0; }
+  const rk = LOAD.paint + LOAD.chassis; if (rk !== rigKey) { rigKey = rk; if (rig) rig.root.removeFromParent(); rig = makeRig("you", { accent: LOAD.paint }); root.add(rig.root); rig.root.position.set(5 * U, 0, -4 * U); rig.root.rotation.y = Math.PI - .25; }
   const gk = LOAD.weapon + LOAD.kit; if (gk !== gearKey) { gearKey = gk; while (gear.children.length) gear.remove(gear.children[0]);
     const lay = (kind, x, z, ry) => { const g = gunProp(kind, charMat); g.scale.setScalar(U); g.position.set(x * U, .88 * U, z * U); g.rotation.set(0, ry, Math.PI / 2); gear.add(g); };
     lay(LOAD.weapon, -4.7, 2.42, 1.45); lay("pistol", -3.85, 2.8, 1.9); const ch = gunProp("charge", charMat); ch.scale.setScalar(U); ch.position.set(-3.2 * U, .62 * U, 2.75 * U); ch.rotation.set(-1.25, 0, .08); gear.add(ch);   // primary and sidearm on the bench, the rail-charge rifle leaning on it
@@ -53,7 +53,7 @@ export const GARAGE = {
   refresh,
   step(dt) { if (!tab) return false; time += dt; if (cam.fov !== GARAGE_FOV) { cam.fov = GARAGE_FOV; cam.updateProjectionMatrix(); } const v = VIEWS[tab]; if (k < 1) { k = Math.min(1, k + dt / 1.6); const e = ease(k); cur.p.lerpVectors(from.p, V(v.p), e); cur.t.lerpVectors(from.t, V(v.t), e); cur.p.y += Math.sin(e * Math.PI) * .5; }
     const sway = Math.sin(time * .25) * .12; cam.position.set((cur.p.x + sway) * U, cur.p.y * U, cur.p.z * U); cam.lookAt(cur.t.x * U, cur.t.y * U, cur.t.z * U);
-    if (fig) fig.pose(dt, { x: -5.6, y: 0, z: 3.42, yaw: .55, pitch: 0, speed: 0, grounded: true, sit: true, sliding: false, crouch: false, wall: 0, dj: 9, vy: 0, dead: false, hidden: false });
+    if (fig) fig.pose(dt, { x: -5.6, y: 0, z: 3.5, yaw: Math.PI + .3, pitch: 0, speed: 0, grounded: true, sit: true, sliding: false, crouch: false, wall: 0, dj: 9, vy: 0, dead: false, hidden: false });
     if (rig) rig.pose(dt, { speed: 0, kneel: 0, hatch: 0, aimYaw: Math.sin(time * .2) * .08, aimPitch: 0, recoil: 0, punch: 0, limp: false });
     return true; },
   leave() { if (tab) { cam.fov = CFG.fov; cam.updateProjectionMatrix(); } tab = null; root.visible = false; for (const l of lamps) l.visible = false; } };
