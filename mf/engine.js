@@ -12,7 +12,9 @@ export const U = 1 / .06;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-export const rnd = Math.random;
+// While the field is being built, every roll comes from one fixed sequence, so that two players' fields are the same field.
+const _mr = Math.random; { let sd = 20261120; Math.random = () => { sd |= 0; sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+export const rnd = () => Math.random();
 export const $ = (id) => document.getElementById(id);
 function seeded(seed) { let s = seed; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
 const hash2 = (x, y) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return h - Math.floor(h); };
@@ -469,3 +471,4 @@ export function render(t, dt, hurt, cool, fromAbove) {
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 makeRTs();
+Math.random = _mr;   // the field is built; from here on, chance is chance

@@ -1,10 +1,11 @@
-/* Machine-Fall FPS, prototype 4: the game (the pilot and what the pilot carries, the Titans, the cockpit, the screens).
+/* Afterburn, prototype 6: the game (the pilot and what the pilot carries, the Titans, the cockpit, the screens).
    The battle itself (squads, vehicles, points, the commander's map) is in mf/battle.js.
    Everything here is in metres; the engine draws at U units to the metre. */
 import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, cam, gunScene, gunMat, makeRTs, render, BOXES, hitsBox, free, freeG, boxesNear, groundH, WORLD, rayBox, rayWorld,
-  flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER } from "./engine.js";
+  flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat } from "./engine.js";
 import { makeRig, TITAN } from "./titan.js";
-import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt } from "./battle.js";
+import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, GOAL, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn } from "./battle.js";
+import { NET, onMsg, send, host, join, leave } from "./net.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
@@ -45,7 +46,7 @@ function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .3 : 0), z
 const _down = V3(0, -1, 0);
 function groundBelow() { const t = rayWorld(P.pos.clone().setY(P.pos.y + .1), _down, 50); return P.pos.y + .1 - t; }
 function endWall(cd) { const w = P.wall; P.lastWall = { ax: w.ax, n: w.n, c: P.pos.getComponent(w.ax) }; P.wall = null; P.wallCd = cd; }
-function respawn() { P.pos.set(...SPAWN); P.vel.set(0, 0, 0); P.yaw = 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
+function respawn() { if (B.mp === "guest") P.pos.set(0, groundH(0, -146) + .1, -146); else P.pos.set(...SPAWN); P.vel.set(0, 0, 0); P.yaw = B.mp === "guest" ? Math.PI : 0; P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
 
 function stepPilot(dt) {
   P.jumpBuf -= dt; P.coyote -= dt; P.slideCd -= dt; P.wallCd -= dt; P.hurtT += dt;
@@ -104,7 +105,7 @@ function stepPilot(dt) {
 }
 
 /* ---------- blasts and damage ---------- */
-function hurtPilot(n, from) { if (P.dead > 0 || P.titan || P.seq) return; if (domeAt(P.pos.x, P.pos.z, "you")) n *= .5; snd("pilot_hurt", { gain: clamp(.6 + n / 40, .6, 1.4) }); P.hp -= n; P.hurtT = 0; hurtFx = 1; if (P.hp <= 0) { P.hp = 0; P.dead = 6; mouseDown = false; if (!MAP.on) { setMap(true, true); if (document.pointerLockElement) document.exitPointerLock(); } } }
+function hurtPilot(n, from) { if (P.dead > 0 || P.titan || P.seq) return; if (domeAt(P.pos.x, P.pos.z, "you")) n *= .5; snd("pilot_hurt", { gain: clamp(.6 + n / 40, .6, 1.4) }); P.hp -= n; P.hurtT = 0; hurtFx = 1; if (P.hp <= 0) { P.hp = 0; P.dead = 6; mouseDown = false; if (B.mp) send("pdown", 0); if (!MAP.on) { setMap(true, true); if (document.pointerLockElement) document.exitPointerLock(); } } }
 function blast(at, radius, o = {}) {   // at in metres
   const p = toU(at); snd("explosion", { pos: xyz(at), gain: clamp(radius / 2.2, .6, 2) }); flash(p.clone().setY(p.y + 12), "#ffb45a", 2500 + radius * 2200, .35);
   puff(p, { n: 26, color: "#fbe6a0", hot: 3, size: 5 + radius, life: .32, drag: 3, vel: () => V3((rnd() - .5) * 90 * radius, rnd() * 70 * radius, (rnd() - .5) * 90 * radius) });
@@ -113,6 +114,7 @@ function blast(at, radius, o = {}) {   // at in metres
   const d = Math.hypot(at.x - P.pos.x, at.z - P.pos.z); if (d < 30) P.shake = Math.max(P.shake, clamp(radius / (d + 2), 0, .6));
   blastUnits(at, radius, victims(o.team), 9999, 70, o.team === "you");
   if (o.team !== "you" && o.pilot && d < radius && Math.abs(at.y - P.pos.y) < radius + 1) hurtPilot(o.pilot * (1 - d / radius * .6));
+  if (B.mp === "host" && o.team === "you" && o.pilot && RP.on && !RP.dead) { const d2 = Math.hypot(at.x - RP.pos.x, at.z - RP.pos.z); if (d2 < radius && Math.abs(at.y - RP.pos.y) < radius + 1) send("phit", [o.pilot * (1 - d2 / radius * .6), 0]); }
   for (const t of TITANS) if (t.alive && t.team !== o.team && o.titan && Math.hypot(t.pos.x - at.x, t.pos.z - at.z) < radius + t.r) hurtTitan(t, o.titan);
 }
 
@@ -124,7 +126,8 @@ const PW = { carbine: { name: "Carbine", mag: 24, cd: .095, dmg: 25, spread: .00
 const pw = () => PW[LOAD.weapon] || PW.carbine;
 const CHASSIS = { vanguard: { name: "Vanguard", hull: 350, speed: 6.2, dash: 2, desc: "The all-round frame: 350 hull, two dashes." }, bastion: { name: "Bastion", hull: 470, speed: 5.2, dash: 1, desc: "Heavier plate and a slower stride: 470 hull, one dash." }, lancer: { name: "Lancer", hull: 270, speed: 7.4, dash: 3, desc: "Stripped for speed: 270 hull, three dashes." } };
 B.hooks = { pilot: () => ({ ok: P.dead <= 0 && !P.titan && !P.seq, alive: P.dead <= 0, dead: P.dead, pos: V3(P.pos.x, P.pos.y + P.h * .6, P.pos.z), at: P.pos, speed: hs(), grounded: P.grounded, titan: !!P.titan }),
-  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), healPilot: (n) => { if (P.dead > 0 || P.hp >= 100) return false; P.hp = Math.min(100, P.hp + n); return true; }, hurtTitan: (t, n) => hurtTitan(t, n), blast: (at, r, o) => blast(at, r, o), onKill: (n) => { snd("kill"); P.meter = Math.min(100, P.meter + n); },
+  titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (n) => send("phit", [n, 0]),
+  rpilot: () => (RP.on ? { ok: !RP.dead, alive: !RP.dead, pos: V3(RP.pos.x, RP.pos.y + RP.h * .6, RP.pos.z), at: RP.pos, speed: RP.speed, grounded: RP.grounded } : null), healPilot: (n) => { if (P.dead > 0 || P.hp >= 100) return false; P.hp = Math.min(100, P.hp + n); return true; }, hurtTitan: (t, n) => hurtTitan(t, n), blast: (at, r, o) => blast(at, r, o), onKill: (n) => { snd("kill"); P.meter = Math.min(100, P.meter + n); },
   shotSnd: (q, atPilot, hit) => { snd("grunt_shot", { pos: [q.x / U, q.y / U + 1.4, q.z / U] }); if (atPilot && !hit && rnd() < .6) snd("flyby", { pos: [P.pos.x + (rnd() - .5) * 5, P.pos.y + 1.5, P.pos.z + (rnd() - .5) * 5], delay: .02 + rnd() * .05 }); }, say: (t, sec) => say(t, sec) };
 
 /* ---------- Titans ---------- */
@@ -224,6 +227,7 @@ function stepTitanAI(t, dt) {
 function callTitan(team, x, z, yaw) { const pod = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(3.2 * U, 5 * U, 3.2 * U), new THREE.MeshToonMaterial({ color: "#332a21" })), fire = new THREE.Mesh(new THREE.BoxGeometry(2.4 * U, 9 * U, 2.4 * U), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2, .7) }));
   fire.position.y = 7 * U; pod.add(body, fire); pod.position.set(x * U, 150 * U, z * U); scene.add(pod); DROPS.push({ team, x, z, yaw, t: 0, dur: 2.4, pod }); }
 function tryCallTitan() {
+  if (B.mp) { say("Titans are not in two-player matches yet.", 2.5); return; }
   if (P.mine || DROPS.some((D) => D.team === "you")) return; if (P.meter < 100) { say("Your Titan is not ready yet. The meter fills over time and with every grunt you put down.", 2.5); return; }
   cam.getWorldDirection(_d); _o.copy(P.pos).setY(P.pos.y + P.eye); const t = rayWorld(_o, _d, 60), at = _o.clone().addScaledVector(_d, t);
   if (t >= 60 || at.y > groundH(at.x, at.z) + .7 || !freeG(at.x, at.z, 5.9, 1.7, .55) || rayWorld(V3(at.x, groundH(at.x, at.z) + 6.5, at.z), V3(0, 1, 0), 100, false) < 100) { say("Your Titan needs open ground under open sky. Aim at a clear patch within 60 metres.", 3); return; }
@@ -298,19 +302,23 @@ function muzzleAt(side, down, fwd) { return _o.clone().addScaledVector(_r, side)
 function fireCarbine() {
   P.ammo--; snd("carbine", { layerGain: { mech: P.ammo < 6 ? 1 + (6 - P.ammo) * .5 : 1 }, pitch: LOAD.weapon === "longrifle" ? .82 : LOAD.weapon === "smg" ? 1.18 : 1 }); P.fireCd = pw().cd; P.kick = Math.min(1, P.kick + .35); flashT = .045; if (!runOn && !runDone) runOn = true;
   aimRay(pw().spread + P.spread * .02 + (P.grounded ? 0 : .006)); P.spread = Math.min(1, P.spread + .12); P.pitch += .004;
-  let best = rayWorld(_o, _d, 220); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best;
+  let best = rayWorld(_o, _d, 220); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
   const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .7); tracer(from, eu, "#ffd890", 9000, .5); flash(from, "#ffc477", 900, .06);
-  if (th.who) { hurtTitan(th.who, 3); snd("hitmarker", { gain: .7 }); hitT = .08; puff(eu, { n: 6, color: th.who.shield > 0 ? "#8fe0f0" : "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
+  netShot(end, 0);
+  if (rh.hit) { const head = end.y - RP.pos.y > RP.h * .82; send("phit", [pw().dmg * (head ? 2 : 1), head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
+  else if (th.who) { hurtTitan(th.who, 3); snd("hitmarker", { gain: .7 }); hitT = .08; puff(eu, { n: 6, color: th.who.shield > 0 ? "#8fe0f0" : "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
   else if (gh.who) { const g = gh.who, head = !g.veh && end.y - g.hitY > g.hitH * .8; snd(g.veh ? "impact_metal" : "impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); damage(g, pw().dmg * (head ? 2.5 : 1) * (g.veh ? .2 : 1), toU(P.pos), head ? "head" : "chest", true); hitT = .12; if (g.veh) puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
   else { snd(surface(end), { pos: xyz(end) }); puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, grav: -170, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); puff(eu, { n: 2, color: "#a09684", dark: true, opacity: .4, size: 4, life: .7, grow: 1.8, drag: 3, vel: () => V3((rnd() - .5) * 12, 8, (rnd() - .5) * 12) }); }
 }
 let chargeSnd = null;
 function fireCharge() {
   if (chargeSnd) { chargeSnd.stop(.03); chargeSnd = null; } snd("charge_fire"); snd("charge_cool"); P.charge = 0; P.fireCd = .9; P.kick = 1; flashT = .08; if (!runOn && !runDone) runOn = true; aimRay(0); P.pitch += .02; coolFx = .5;
-  let best = rayWorld(_o, _d, 260); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best;
+  let best = rayWorld(_o, _d, 260); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
   const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .8); tracer(from, eu, "#8fe0f0", 30000, 1.6); flash(from, "#8fe0f0", 2600, .14); flash(eu, "#8fe0f0", 2200, .2);
   puff(eu, { n: 18, color: "#d8f8ff", hot: 3, size: 4, life: .35, vel: () => V3((rnd() - .5) * 110, rnd() * 90, (rnd() - .5) * 110) }); ringFx(eu, "#8fe0f0", 30, .3);
-  if (th.who) { hurtTitan(th.who, 70); snd("hitmarker", { gain: .9 }); hitT = .15; } else if (!gh.who) snd("impact_metal", { pos: xyz(end), gain: 1.4, pitch: .8 }); else if (gh.who) { snd("hitmarker"); hitT = .15; damage(gh.who, gh.who.veh ? 130 : 9999, toU(P.pos), "chest", true); }
+  netShot(end, 1);
+  if (rh.hit) { const head = end.y - RP.pos.y > RP.h * .82; send("phit", [80, head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
+  else if (th.who) { hurtTitan(th.who, 70); snd("hitmarker", { gain: .9 }); hitT = .15; } else if (!gh.who) snd("impact_metal", { pos: xyz(end), gain: 1.4, pitch: .8 }); else if (gh.who) { snd("hitmarker"); hitT = .15; damage(gh.who, gh.who.veh ? 130 : 9999, toU(P.pos), "chest", true); }
 }
 function fireCannon(t) {
   t.ammo--; snd("cannon"); t.fireCd = .24; P.kick = 1; t.recoil = 1; flashT = .06; P.shake = Math.max(P.shake, .1); aimRay(.006);
@@ -353,9 +361,9 @@ function useKey() { if (P.seq) return; if (P.titan) { startExit(); return; } con
 addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.preventDefault(); if (e.repeat) return; if (started && ["Space", "Tab", "KeyC", "KeyR", "KeyE", "KeyV", "KeyQ", "KeyF"].includes(e.code)) e.preventDefault();
   if (e.code === "KeyP" && started && !MAP.on) { togglePanel(); return; }
   if (e.code === "Tab" && started && !panelOpen) { toggleMap(); return; }
-  if (MAP.on) { MAP.keys[e.code] = true; if (e.code === "KeyT") restart(); return; }
+  if (MAP.on) { MAP.keys[e.code] = true; if (e.code === "KeyT") again(); return; }
   if (!active()) return; const code = e.code === "ControlLeft" ? "KeyC" : e.code; K[code] = true;
-  if (code === "Space") P.jumpBuf = .14; if (code === "KeyT") restart(); if (code === "KeyE" && P.dead <= 0) useKey(); if (code === "KeyV" && P.dead <= 0 && !P.titan) tryCallTitan();
+  if (code === "Space") P.jumpBuf = .14; if (code === "KeyT") again(); if (code === "KeyE" && P.dead <= 0) useKey(); if (code === "KeyV" && P.dead <= 0 && !P.titan) tryCallTitan();
   if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") K._punch = !!P.titan;
   if (!P.titan && (code === "KeyQ" || code === "Digit1" || code === "Digit2")) { P.weapon = code === "KeyQ" ? 1 - P.weapon : code === "Digit2" ? 1 : 0; P.charge = 0; P.fireCd = Math.max(P.fireCd, .25); snd("swap"); }
   if (!runOn && !runDone && ["KeyW", "KeyA", "KeyS", "KeyD"].includes(code)) runOn = true; });
@@ -368,7 +376,8 @@ cv.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* ---------- screen furniture ---------- */
 const msg = $("msg"); function say(t, secs = 0) { msg.textContent = t; msg.style.display = t ? "block" : "none"; sayT = secs; }
-$("go").onclick = () => { if (SND) SND.start(); saveLoad(); started = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); wantLock(); };
+function begin(lock = true) { if (SND) SND.start(); saveLoad(); started = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); if (lock) wantLock(); }
+$("go").onclick = () => { if (NET.open) return; begin(); };
 const PAINTS = ["#c45a1e", "#3f6f9a", "#5c7f36", "#b0312a", "#c9a03a", "#e2d0ae"];
 function buildSetup() { const U2 = FACTIONS[LOAD.side].units, list = LOAD.list[LOAD.side] = LOAD.list[LOAD.side].filter((id) => U2[id]), used = list.reduce((a, id) => a + U2[id].pts, 0), btn = (attr, k, label, on, extra = "") => `<button data-${attr}="${k}" class="${on ? "on" : ""}" ${extra}>${label}</button>`;
   $("setup").innerHTML = `<h2>Your side</h2><div class="row">${Object.entries(FACTIONS).map(([k, f]) => btn("side", k, f.name, LOAD.side === k)).join("")}</div><p class="note">${FACTIONS[LOAD.side].blurb} The other side is run by the machine across the yard.</p>
@@ -457,7 +466,7 @@ function hud(dt) { el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { s
 /* ---------- frame ---------- */
 const H = 1 / 120; let acc = 0, last = performance.now(), menuSpin = 0;
 function advance(dt) {
-  if (active()) { acc += dt; while (acc >= H) { stepPilot(H); acc -= H; } stepGun(dt); stepBattle(dt); stepTitans(dt); if (!foeCalled && B.time > 100 && !B.over) callFoe(); if (!P.mine && !B.over) P.meter = Math.min(100, P.meter + .8 * dt); }
+  if (active() || (B.mp && started)) { acc += dt; while (acc >= H) { stepPilot(H); acc -= H; } stepGun(dt); stepBattle(dt); stepTitans(dt); if (!B.mp && !foeCalled && B.time > 100 && !B.over) callFoe(); if (!B.mp && !P.mine && !B.over) P.meter = Math.min(100, P.meter + .8 * dt); if (B.mp) netTick(dt); }
   try { SOL.update(dt); } catch (e) { if (!advance.w1) { advance.w1 = 1; console.error("[soldiers]", e); } }
 }
 function frame(now) {
@@ -481,6 +490,49 @@ function frame(now) {
   if (started) hud(dt);
 }
 buildPass(); respawn();
-window.__mf = { snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+
+/* ---------- two players ----------
+   Each player's own pilot runs on their own machine and is sent to the other about twenty times a second. A hit is
+   decided on the screen of the one who fired. The battle itself runs on the host (see mf/battle.js). */
+const RP = { on: false, pos: V3(), net: V3(), yaw: 0, pitch: 0, h: 1.8, dead: false, grounded: true, speed: 0, s: null, seen: 0, shown: false };
+const swap = (sd) => (sd === "you" ? "foe" : "you");
+function rpHit(o, d, best) { if (!B.mp || !RP.on || RP.dead) return { best, hit: false }; const p = RP.pos, t = rayBox(o, d, [p.x - .42, p.y, p.z - .42], [p.x + .42, p.y + RP.h, p.z + .42], best); return t < best ? { best: t, hit: true } : { best, hit: false }; }
+function netShot(end, kind) { if (B.mp) send("sh", [+P.pos.x.toFixed(1), +(P.pos.y + P.h * .8).toFixed(1), +P.pos.z.toFixed(1), +end.x.toFixed(1), +end.y.toFixed(1), +end.z.toFixed(1), kind], false); }
+function rpFigure() { if (RP.s) { try { RP.s.remove(); } catch (e) {} RP.s = null; } const fac = B.fac.foe, mil = fac === "militia";
+  const s = SOL.make({ x: RP.pos.x * U, z: RP.pos.z * U, y: RP.pos.y * U, yaw: 0, weapon: "rifle", role: "rifleman", camo: mil ? "ranger" : "urban", seed: 4242 });
+  if (!mil && window.CBMech) { try { window.CBMech.dress(s, "light", THREE, charMat, { scheme: "steel" }); } catch (e) {} }
+  const tag = new THREE.Mesh(new THREE.OctahedronGeometry(2.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, .5, .25) })); tag.position.y = 40; s.root.add(tag); RP.s = s; }
+function stepRemote(dt) { if (!RP.on) return; const k = 1 - Math.exp(-dt * 16); RP.pos.lerp(RP.net, RP.pos.distanceTo(RP.net) > 12 ? 1 : k);
+  if (!RP.s) rpFigure(); const s = RP.s; if (RP.dead) { if (s.dead < 0) s.die(V3((RP.pos.x + 2) * U, 0, RP.pos.z * U), { zone: "chest", force: 1 }); return; } if (s.dead >= 0) { rpFigure(); return; }
+  s.place(RP.pos.x * U, RP.pos.z * U, RP.pos.y * U); const cp = Math.cos(RP.pitch); s.aimAt(V3((RP.pos.x - Math.sin(RP.yaw) * cp * 30) * U, (RP.pos.y + 1.5 + Math.sin(RP.pitch) * 30) * U, (RP.pos.z - Math.cos(RP.yaw) * cp * 30) * U));
+  const cr = RP.h < 1.5; if (cr !== !!s.crouch) { try { s.setCrouch(cr); } catch (e) {} } }
+let netT = 0, snapT = 0, pingT = 0;
+function netTick(dt) { stepRemote(dt); if (!NET.open) return; netT += dt; snapT += dt; pingT += dt;
+  if (netT >= .05) { netT = 0; send("p", [+P.pos.x.toFixed(2), +P.pos.y.toFixed(2), +P.pos.z.toFixed(2), +P.yaw.toFixed(2), +P.pitch.toFixed(2), +P.h.toFixed(2), (P.dead > 0 ? 1 : 0) | (P.grounded ? 2 : 0), +hs().toFixed(1)], false); }
+  if (B.mp === "host" && snapT >= .1) { snapT = 0; send("snap", snapshot(), false); }
+  if (pingT >= 1) { pingT = 0; $("tr").textContent = (B.mp === "host" ? "Hosting " + NET.code : "Joined " + NET.code) + "  ·  ping " + NET.ping + " ms  ·  Esc: free the mouse"; } }
+onMsg("p", (a) => { RP.on = true; RP.net.set(a[0], a[1], a[2]); if (!RP.seen) RP.pos.copy(RP.net); RP.seen = performance.now(); RP.yaw = a[3]; RP.pitch = a[4]; RP.h = a[5]; RP.dead = !!(a[6] & 1); RP.grounded = !!(a[6] & 2); RP.speed = a[7]; });
+onMsg("phit", (a) => { hurtPilot(a[0] * (a[1] ? 1.25 : 1)); });
+onMsg("pdown", () => { snd("kill"); say("You put their pilot down.", 2.5); });
+onMsg("sh", (a) => { const from = V3(a[0] * U, a[1] * U, a[2] * U), to = V3(a[3] * U, a[4] * U, a[5] * U); tracer(from, to, a[6] ? "#8fe0f0" : "#ffb890", a[6] ? 30000 : 9000, a[6] ? 1.6 : .5); flash(from, a[6] ? "#8fe0f0" : "#ffc477", 900, .06); snd("grunt_shot", { pos: [a[0], a[1], a[2]] }); });
+onMsg("snap", (o) => { if (B.mp === "guest") applySnap(o); });
+onMsg("util", (a) => { if (B.mp === "guest") useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, swap(a[4]), true); else if (B.mp === "host") netIn.util(a); });
+for (const k of ["dep", "doc", "order", "act"]) onMsg(k, (a) => { if (B.mp === "host") netIn[k](a); });
+onMsg("hit", (a) => { if (B.mp === "host") netIn.hit(a, V3(RP.pos.x * U, RP.pos.y * U, RP.pos.z * U)); });
+// setting a match up: the guest says what it is bringing, the host answers with its own and both begin
+const myKit = () => ({ fac: LOAD.side, list: LOAD.list[LOAD.side].slice(), doctrine: LOAD.doctrine });
+const mpNote = (t) => { $("mp-status").textContent = t; };
+function mpBegin(role, peer) { B.mp = role; B.peer = peer; RP.on = false; RP.seen = 0; RP.dead = false; if (RP.s) { try { RP.s.remove(); } catch (e) {} RP.s = null; } begin(false); say(role === "host" ? "The other player has joined. The match is on." : "You are in. The match is on.", 3); }
+onMsg("hello", (kit) => { if (NET.role !== "host") return; send("start", myKit()); mpBegin("host", kit); });
+onMsg("start", (kit) => { if (NET.role !== "guest") return; mpBegin("guest", kit); });
+onMsg("again", (kit) => { if (B.mp === "guest") { B.peer = kit; restart(); say("The host has started the match again.", 3); } });
+onMsg("bye", () => { NET.open = false; ended("The other player has left the match."); });
+onMsg("_close", (why) => ended(why));
+function ended(why) { mpNote(why); if (B.mp && started) { say(why + " Press T to play on alone.", 0); B.over = B.over || "you"; } }
+function again() { if (B.mp === "guest" && NET.open) { say("Only the host can start the match again.", 2.5); return; } if (B.mp && !NET.open) { B.mp = null; B.peer = null; RP.on = false; if (RP.s) { try { RP.s.remove(); } catch (e) {} RP.s = null; } $("tr").textContent = "P: tuning   T: restart   Esc: free the mouse"; } if (B.mp === "host") send("again", myKit()); restart(); }
+$("mp-host").onclick = async () => { if (NET.role) return; mpNote("Asking for a code..."); try { const code = await host(); mpNote("Your code is " + code + ". Give it to the other player and wait here. The match starts when they join."); $("mp-code").value = code; } catch (e) { mpNote(e.message + " Try again."); NET.role = null; } };
+$("mp-join").onclick = async () => { if (NET.role) return; const code = $("mp-code").value.trim(); if (code.length < 3 && !/[?&]local/.test(location.search)) { mpNote("Type the host's code first."); return; } mpNote("Linking..."); try { await join(code); mpNote("Linked. Starting..."); send("hello", myKit()); } catch (e) { mpNote(e.message); NET.role = null; } };
+
+window.__mf = { NET, RP, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);

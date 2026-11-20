@@ -32,7 +32,7 @@ try { const s = JSON.parse(localStorage.getItem("mf-fps-load") || "null"); if (s
 export const saveLoad = () => { try { localStorage.setItem("mf-fps-load", JSON.stringify(LOAD)); } catch (e) {} };
 
 export const GRUNTS = [], ALLIES = [], VEH = [], SQUADS = [], POINTS = [];
-export const B = { fac: { you: "militia", foe: "machine" }, list: { you: [], foe: [] }, doctrine: { you: "mixed", foe: "mixed" }, score: { you: 0, foe: 0 }, supply: { you: 0, foe: 0 }, time: 0, over: null, hooks: {}, n: 0, ai: { you: 0, foe: 0 }, turn: { you: 0, foe: 0 } };
+export const B = { fac: { you: "militia", foe: "machine" }, list: { you: [], foe: [] }, doctrine: { you: "mixed", foe: "mixed" }, score: { you: 0, foe: 0 }, supply: { you: 0, foe: 0 }, time: 0, over: null, hooks: {}, mp: null, peer: null, n: 0, ai: { you: 0, foe: 0 }, turn: { you: 0, foe: 0 } };
 const arr = (side) => (side === "you" ? ALLIES : GRUNTS), other = (side) => (side === "you" ? "foe" : "you");
 const BASE = { you: [0, 128], foe: [0, -166] }, RALLY = { you: [0, 108], foe: [0, -148] };
 const COL = { you: [.5, 2.4, 3], foe: [3.2, .5, .3], none: [1.5, 1.4, 1.2] };
@@ -85,27 +85,31 @@ for (const [name, x, z, label] of [["A", 100, 14, "Town square"], ["B", -6, -4, 
 
 /* ---------- squads, soldiers and vehicles ---------- */
 function spotFree(x, z, r) { for (let i = 0; i < 12; i++) { const px = x + (rnd() - .5) * (2 + i), pz = z + (rnd() - .5) * (2 + i * .6); if (freeG(px, pz, 1.8, r)) return [px, pz]; } return [x, z]; }
+const mkSquad = (side, id, def, sqId, home, at) => { const manual = B.doctrine[side] === "manual"; return { id: sqId, side, def, defId: id, name: def.name, members: [], veh: null, auto: !manual, order: manual ? { type: "move", pos: V3(RALLY[side][0] + (rnd() - .5) * 10, 0, RALLY[side][1]) } : null, path: [], fresh: false, state: "Deploying", think: rnd(), eng: false, n: def.veh ? 1 : def.guns.length, arrived: false, c: V3(home[0], 0, home[1]), dest: at ? V3(at[0], 0, at[1]) : V3(RALLY[side][0], 0, RALLY[side][1]) }; };
+function mkVeh(sq, x, z) { const side = sq.side, def = sq.def, v = { veh: true, side, sq, def, pos: V3(x, 0, z), yaw: side === "you" ? 0 : Math.PI, hp: def.veh.hp, r: def.veh.r, alive: true, tgt: null, think: rnd(), cd: 1 + rnd(), flow: null, flowT: 0, dest: null };
+  if (def.veh.mach && MACH) { v.mid = "veh" + sq.id; v.group = placeMachine(v.mid, def.veh.model, x * U, z * U, v.yaw + Math.PI).group; } else { v.group = genModel(def.veh.model); scene.add(v.group); }
+  const tag = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL[side]) })); tag.position.y = 62; v.group.add(tag); sq.veh = v; VEH.push(v); return v; }
+function mkSoldier(sq, i, x, z, id) { const side = sq.side, def = sq.def, gun = def.guns[i], mil = B.fac[side] === "militia";
+  const s = SOL.make({ x: x * U, z: z * U, y: groundH(x, z) * U, yaw: side === "you" ? Math.PI : 0, weapon: gun, role: gun === "lmg" ? "gunner" : gun === "dmr" ? "marksman" : "rifleman", camo: mil ? (i % 2 ? "multicam" : "ranger") : "urban", seed: 100 + sq.id * 7 + i });
+  if (def.mech && window.CBMech) { try { window.CBMech.dress(s, def.mech, THREE, charMat, { scheme: side === "you" ? "worn" : "steel" }); } catch (e) { console.warn("[mech]", e); } }
+  if (side === "you") { const tag = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL.you) })); tag.position.y = 36; s.root.add(tag); }
+  const g = { id: id || ++B.n, s, side, sq, hp: def.hp, W: WPN[gun], tgt: null, think: rnd() * .4, cd: 1 + rnd(), moveT: rnd(), err: V3(), c: .3, slot: i, deadT: 0, gone: false, shots: 0 }; s.onShot = () => shot(g); sq.members.push(g); arr(side).push(g); return g; }
 export function deploy(side, id, paid = true, at = null) { const home = at || BASE[side];
+  if (B.mp === "guest") { B.hooks.net("dep", id); return null; }   // the guest asks; the host's battle decides
   const def = FACTIONS[B.fac[side]].units[id]; if (!def || B.over) return null; if (paid) { if (B.supply[side] < def.cost || !room(side, def)) return null; B.supply[side] -= def.cost; }
-  const manual = side === "you" && B.doctrine.you === "manual";
-  const sq = { id: ++B.n, side, def, name: def.name, members: [], veh: null, auto: !manual, order: manual ? { type: "move", pos: V3(RALLY.you[0] + (rnd() - .5) * 10, 0, RALLY.you[1]) } : null, path: [], fresh: false, state: "Deploying", think: rnd(), eng: false, n: def.veh ? 1 : def.guns.length, arrived: false, c: V3(home[0], 0, home[1]), dest: at ? V3(at[0], 0, at[1]) : V3(RALLY[side][0], 0, RALLY[side][1]) }; if (at) { sq.auto = false; sq.order = { type: "move", pos: V3(at[0], 0, at[1]) }; }
-  if (def.veh) { const [x, z] = spotFree(home[0] + (at ? 0 : 10), home[1], def.veh.r + .3), v = { veh: true, side, sq, def, pos: V3(x, 0, z), yaw: side === "you" ? 0 : Math.PI, hp: def.veh.hp, r: def.veh.r, alive: true, tgt: null, think: rnd(), cd: 1 + rnd(), flow: null, flowT: 0, dest: null };
-    if (def.veh.mach && MACH) { v.mid = "veh" + sq.id; v.group = placeMachine(v.mid, def.veh.model, x * U, z * U, v.yaw + Math.PI).group; } else { v.group = genModel(def.veh.model); scene.add(v.group); }
-    const tag = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL[side]) })); tag.position.y = 62; v.group.add(tag); sq.veh = v; VEH.push(v); }
-  else def.guns.forEach((gun, i) => { const [x, z] = spotFree(home[0] + (i - def.guns.length / 2) * 1.5, home[1], .5), mil = B.fac[side] === "militia";
-    const s = SOL.make({ x: x * U, z: z * U, y: groundH(x, z) * U, yaw: side === "you" ? Math.PI : 0, weapon: gun, role: gun === "lmg" ? "gunner" : gun === "dmr" ? "marksman" : "rifleman", camo: mil ? (i % 2 ? "multicam" : "ranger") : "urban", seed: 100 + B.n * 7 + i });
-    if (def.mech && window.CBMech) { try { window.CBMech.dress(s, def.mech, THREE, charMat, { scheme: side === "you" ? "worn" : "steel" }); } catch (e) { console.warn("[mech]", e); } }
-    if (side === "you") { const tag = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL.you) })); tag.position.y = 36; s.root.add(tag); }
-    const g = { s, side, sq, hp: def.hp, W: WPN[gun], tgt: null, think: rnd() * .4, cd: 1 + rnd(), moveT: rnd(), err: V3(), c: .3, slot: i, deadT: 0, gone: false }; s.onShot = () => shot(g); sq.members.push(g); arr(side).push(g); });
+  const sq = mkSquad(side, id, def, ++B.n, home, at); if (at) { sq.auto = false; sq.order = { type: "move", pos: V3(at[0], 0, at[1]) }; }
+  if (def.veh) { const [x, z] = spotFree(home[0] + (at ? 0 : 10), home[1], def.veh.r + .3); mkVeh(sq, x, z); }
+  else def.guns.forEach((gun, i) => { const [x, z] = spotFree(home[0] + (i - def.guns.length / 2) * 1.5, home[1], .5); mkSoldier(sq, i, x, z); });
   SQUADS.push(sq); return sq;
 }
 const aliveInf = (side) => arr(side).filter((g) => g.s.dead < 0).length, aliveVeh = (side) => VEH.filter((v) => v.side === side && v.alive).length;
 export const room = (side, def) => (def.veh ? aliveVeh(side) < 3 : aliveInf(side) + def.guns.length <= 18);
 const posOf = (u) => (u.veh ? V3(u.pos.x, groundH(u.pos.x, u.pos.z) + 1.2, u.pos.z) : V3(u.s.root.position.x / U, u.s.root.position.y / U + 1, u.s.root.position.z / U));
 
+const wreckVeh = (u) => { u.alive = false; const p = V3(u.pos.x, groundH(u.pos.x, u.pos.z) + 1, u.pos.z); if (B.hooks.blast) B.hooks.blast(p, 3.2, {}); if (u.mid) { mfx({ id: u.mid, act: "wreck" }); const id = u.mid; setTimeout(() => removeMachine(id), 1500); } else scene.remove(u.group); };
 export function damage(u, n, fromU, zone = "chest", byPlayer = false) {
-  if (!u) return; if (fromU && DOMES.length) { const ux = u.veh ? u.pos.x : u.s.root.position.x / U, uz = u.veh ? u.pos.z : u.s.root.position.z / U; if (domeAt(ux, uz, u.side) && !domeAt(fromU.x / U, fromU.z / U, u.side)) n *= .3; }   // under a shield dome, what comes from outside does much less
-  if (u.veh) { if (!u.alive) return; u.hp -= n; if (u.hp <= 0) { u.alive = false; const p = V3(u.pos.x, groundH(u.pos.x, u.pos.z) + 1, u.pos.z); if (B.hooks.blast) B.hooks.blast(p, 3.2, {}); if (u.mid) { mfx({ id: u.mid, act: "wreck" }); const id = u.mid; setTimeout(() => removeMachine(id), 1500); } else scene.remove(u.group); if (byPlayer && B.hooks.onKill) B.hooks.onKill(15); } return; }
+  if (!u) return; if (B.mp === "guest") { B.hooks.net("hit", [u.veh ? -u.sq.id : u.id, Math.round(n), zone]); if (fromU && !u.veh && u.s.dead < 0 && rnd() < .5) u.s.hit(fromU, 1); return; } if (fromU && DOMES.length) { const ux = u.veh ? u.pos.x : u.s.root.position.x / U, uz = u.veh ? u.pos.z : u.s.root.position.z / U; if (domeAt(ux, uz, u.side) && !domeAt(fromU.x / U, fromU.z / U, u.side)) n *= .3; }   // under a shield dome, what comes from outside does much less
+  if (u.veh) { if (!u.alive) return; u.hp -= n; if (u.hp <= 0) { wreckVeh(u); if (byPlayer && B.hooks.onKill) B.hooks.onKill(15); } return; }
   if (u.s.dead >= 0) return; u.hp -= n; if (u.hp <= 0) { u.s.die(fromU, { zone, force: zone === "blast" ? 2 : 1 }); if (byPlayer && B.hooks.onKill) B.hooks.onKill(9); } else if (rnd() < .5) u.s.hit(fromU, 1); }
 // the nearest thing on one side that a line from o along d strikes
 export function rayUnits(o, d, best, side) { let who = null;
@@ -118,21 +122,22 @@ export function blastUnits(at, radius, side, dInf, dVeh, byPlayer = false) { if 
 // what a unit at `from` on `side` would shoot at: the nearest enemy it can see
 export function nearestEnemy(side, from, maxD, wantTitan = false) { const foes = []; const add = (kind, ref, pos) => { const d = pos.distanceTo(from); if (d < maxD) foes.push({ kind, ref, pos, d }); };
   for (const g of arr(other(side))) if (g.s.dead < 0) add("inf", g, posOf(g)); for (const v of VEH) if (v.alive && v.side !== side) add("veh", v, posOf(v));
-  const pl = B.hooks.pilot ? B.hooks.pilot() : null; if (side === "foe" && pl && pl.ok) add("pilot", null, pl.pos);
+  const pl = B.hooks.pilot ? B.hooks.pilot() : null; if (side === "foe" && pl && pl.ok) add("pilot", null, pl.pos); const rp = B.hooks.rpilot ? B.hooks.rpilot() : null; if (side === "you" && rp && rp.ok) add("rpilot", null, rp.pos);
   for (const t of B.hooks.titans ? B.hooks.titans() : []) if (t.alive && t.doom <= 0 && t.team !== side) add("titan", t, V3(t.pos.x, t.pos.y + t.h * .55, t.pos.z));
   foes.sort((a, b) => (a.d - (wantTitan && (a.kind === "titan" || a.kind === "veh") ? 30 : a.kind === "titan" ? -25 : 0)) - (b.d - (wantTitan && (b.kind === "titan" || b.kind === "veh") ? 30 : b.kind === "titan" ? -25 : 0)));
   const dir = V3(); for (let i = 0; i < Math.min(5, foes.length); i++) { const f = foes[i]; dir.copy(f.pos).sub(from).divideScalar(f.d || 1); if (rayWorld(from, dir, f.d) >= f.d - .05) return f; } return null; }
-const tgtAlive = (t) => t && (t.kind === "inf" ? t.ref.s.dead < 0 : t.kind === "veh" ? t.ref.alive : t.kind === "titan" ? t.ref.alive && t.ref.doom <= 0 : B.hooks.pilot().ok);
-const tgtPos = (t) => (t.kind === "inf" || t.kind === "veh" ? posOf(t.ref) : t.kind === "titan" ? V3(t.ref.pos.x, t.ref.pos.y + t.ref.h * .55, t.ref.pos.z) : B.hooks.pilot().pos);
-function shot(g) { const t = g.tgt; if (!tgtAlive(t)) return; const from = g.s.root.position, hitP = t.kind === "pilot" && rnd() < g.c; if (B.hooks.shotSnd) B.hooks.shotSnd(from, t.kind === "pilot", hitP);   // sound hook: every soldier's shot
-  if (t.kind === "pilot") { if (hitP) B.hooks.hurtPilot(7 * g.W.dmg / 22); } else if (t.kind === "titan") { if (rnd() < .7) B.hooks.hurtTitan(t.ref, 1.5); } else if (rnd() < g.c) damage(t.ref, t.kind === "veh" ? g.W.dmg * .18 : g.W.dmg, from, "chest"); }
+const tgtAlive = (t) => t && (t.kind === "inf" ? t.ref.s.dead < 0 : t.kind === "veh" ? t.ref.alive : t.kind === "titan" ? t.ref.alive && t.ref.doom <= 0 : t.kind === "rpilot" ? !!(B.hooks.rpilot() || {}).ok : B.hooks.pilot().ok);
+const tgtPos = (t) => (t.kind === "inf" || t.kind === "veh" ? posOf(t.ref) : t.kind === "titan" ? V3(t.ref.pos.x, t.ref.pos.y + t.ref.h * .55, t.ref.pos.z) : t.kind === "rpilot" ? B.hooks.rpilot().pos : B.hooks.pilot().pos);
+const isP = (t) => t.kind === "pilot" || t.kind === "rpilot", pilotOf = (t) => (t.kind === "rpilot" ? B.hooks.rpilot() : B.hooks.pilot()), hurtP = (t, n) => (t.kind === "rpilot" ? B.hooks.hurtRemote(n) : B.hooks.hurtPilot(n));
+function shot(g) { if (B.mp === "guest") { if (B.hooks.shotSnd) B.hooks.shotSnd(g.s.root.position, false, true); return; } g.shots++; const t = g.tgt; if (!tgtAlive(t)) return; const from = g.s.root.position, hitP = isP(t) && rnd() < g.c; if (B.hooks.shotSnd) B.hooks.shotSnd(from, t.kind === "pilot", hitP);   // sound hook: every soldier's shot
+  if (isP(t)) { if (hitP) hurtP(t, 7 * g.W.dmg / 22); } else if (t.kind === "titan") { if (rnd() < .7) B.hooks.hurtTitan(t.ref, 1.5); } else if (rnd() < g.c) damage(t.ref, t.kind === "veh" ? g.W.dmg * .18 : g.W.dmg, from, "chest"); }
 function stepSoldier(g, dt) { const s = g.s, rp = s.root.position;
   if (s.dead >= 0) { if (g.cv) drop(g); g.deadT += dt; if (g.deadT > 9 && !g.gone) { g.gone = true; try { s.remove(); } catch (e) {} } return; }
   g.think -= dt; if (g.think <= 0) { g.think = .35 + rnd() * .2; g.tgt = nearestEnemy(g.side, V3(rp.x / U, rp.y / U + 1.5, rp.z / U), g.W.range); if (!g.tgt) s.aimAt(null); }
   const t = g.tgt;
   if (t && tgtAlive(t)) { const p = tgtPos(t); s.aimAt(V3(p.x * U + g.err.x, p.y * U + g.err.y, p.z * U + g.err.z)); g.cd -= dt;
-    if (g.cd <= 0 && !s.busy) { if (s.ammo <= 0) s.doReload(); else { const d = t.d, pl = t.kind === "pilot" ? B.hooks.pilot() : null;
-      g.c = t.kind === "pilot" ? .5 * clamp(1 - pl.speed / 16, .2, 1) * (pl.grounded ? 1 : .6) * clamp(1.25 - d / 60, .3, 1) : t.kind === "inf" ? g.W.acc * clamp(1.15 - d / g.W.range * .6, .3, 1) * (t.ref.s.crouch ? .7 : 1) * (t.ref.s.moving ? .75 : 1) : .8;
+    if (g.cd <= 0 && !s.busy) { if (s.ammo <= 0) s.doReload(); else { const d = t.d, pl = isP(t) ? pilotOf(t) : null;
+      g.c = isP(t) ? .5 * clamp(1 - pl.speed / 16, .2, 1) * (pl.grounded ? 1 : .6) * clamp(1.25 - d / 60, .3, 1) : t.kind === "inf" ? g.W.acc * clamp(1.15 - d / g.W.range * .6, .3, 1) * (t.ref.s.crouch ? .7 : 1) * (t.ref.s.moving ? .75 : 1) : .8;
       const miss = (1 - g.c) * 30; g.err.set((rnd() - .5) * miss, (rnd() - .3) * miss * .6, (rnd() - .5) * miss); if (s.cover) { const p2 = tgtPos(t); s.peekFire(V3(p2.x * U + g.err.x, p2.y * U + g.err.y, p2.z * U + g.err.z), g.W.burst); } else s.fire(g.W.burst); g.cd = lerp(g.W.cd[0], g.W.cd[1], rnd()); } } }
   // Going where the squad is going. Each member has its own place round the spot, but where there is something to get
   // behind, it takes that instead: at the end of the way, and on the way too once rounds are coming in (it runs from one
@@ -165,9 +170,9 @@ function stepVeh(v, dt) { if (!v.alive) return; const sq = v.sq, dest = sq.dest;
   v.cd -= dt; if (t && v.cd <= 0) { const p = tgtPos(t), from = V3(v.pos.x, groundH(v.pos.x, v.pos.z) + 2, v.pos.z), rocket = v.def.veh.gun === "rocket", fu = toU(from); v.cd = rocket ? 3.4 + rnd() : 1.8 + rnd() * .8;
     if (v.mid) mfx({ id: v.mid, act: "fire", shot: rocket && (t.kind === "titan" || t.kind === "veh") ? "rocket" : "gun", at: [p.x * U, p.y * U, p.z * U] });
     else { flash(fu, "#ffc477", 1800, .1); for (let i = 0; i < (rocket ? 1 : 4); i++) setTimeout(() => tracer(fu, toU(p).add(V3((rnd() - .5) * 20, (rnd() - .5) * 12, (rnd() - .5) * 20)), rocket ? "#ffb060" : "#ffd890", rocket ? 2600 : 9000, rocket ? 2.2 : .7), i * 90); }
-    setTimeout(() => { if (!v.alive || !tgtAlive(t)) return; const q = tgtPos(t), pl = t.kind === "pilot" ? B.hooks.pilot() : null;
-      if (rocket) { if (t.kind === "pilot") { if (B.hooks.blast) B.hooks.blast(V3(q.x + (rnd() - .5) * 5, Math.max(0, q.y - 1), q.z + (rnd() - .5) * 5), 2.2, { team: v.side, pilot: 30 }); } else { if (t.kind === "titan") B.hooks.hurtTitan(t.ref, 45); else if (t.kind === "veh") damage(t.ref, 80, fu, "blast"); if (B.hooks.blast) B.hooks.blast(V3(q.x, Math.max(0, q.y - .8), q.z), 2.2, { team: v.side }); } }
-      else if (t.kind === "pilot") { if (rnd() < .3 * clamp(1 - pl.speed / 15, .2, 1) * (pl.grounded ? 1 : .6)) B.hooks.hurtPilot(14); } else if (t.kind === "titan") B.hooks.hurtTitan(t.ref, 7); else if (t.kind === "veh") damage(t.ref, 16, fu); else if (rnd() < .6) damage(t.ref, 34, fu); }, rocket ? 600 : 300); }
+    setTimeout(() => { if (!v.alive || !tgtAlive(t)) return; const q = tgtPos(t), pl = isP(t) ? pilotOf(t) : null;
+      if (rocket) { if (isP(t)) { if (B.hooks.blast) B.hooks.blast(V3(q.x + (rnd() - .5) * 5, Math.max(0, q.y - 1), q.z + (rnd() - .5) * 5), 2.2, { team: v.side, pilot: 30 }); } else { if (t.kind === "titan") B.hooks.hurtTitan(t.ref, 45); else if (t.kind === "veh") damage(t.ref, 80, fu, "blast"); if (B.hooks.blast) B.hooks.blast(V3(q.x, Math.max(0, q.y - .8), q.z), 2.2, { team: v.side }); } }
+      else if (isP(t)) { if (rnd() < .3 * clamp(1 - pl.speed / 15, .2, 1) * (pl.grounded ? 1 : .6)) hurtP(t, 14); } else if (t.kind === "titan") B.hooks.hurtTitan(t.ref, 7); else if (t.kind === "veh") damage(t.ref, 16, fu); else if (rnd() < .6) damage(t.ref, 34, fu); }, rocket ? 600 : 300); }
 }
 const NAMES = { you: "your", foe: "their" };
 function stepSquad(sq, dt) {
@@ -188,11 +193,12 @@ function stepSquad(sq, dt) {
 function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null;
   for (const p of POINTS) { const n = { you: 0, foe: 0 }, near = (x, z) => Math.hypot(x - p.x, z - p.z) < 9;
     for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && near(g.s.root.position.x / U, g.s.root.position.z / U)) n[side]++; for (const v of VEH) if (v.alive && v.side === side && near(v.pos.x, v.pos.z)) n[side] += 2; }
-    if (pl && pl.alive && near(pl.at.x, pl.at.z)) n.you += pl.titan ? 3 : 2; for (const t of B.hooks.titans ? B.hooks.titans() : []) if (t.alive && !t.piloted && near(t.pos.x, t.pos.z)) n[t.team] += 3;
+    if (pl && pl.alive && near(pl.at.x, pl.at.z)) n.you += pl.titan ? 3 : 2; const rp = B.hooks.rpilot ? B.hooks.rpilot() : null; if (rp && rp.alive && near(rp.at.x, rp.at.z)) n.foe += 2; for (const t of B.hooks.titans ? B.hooks.titans() : []) if (t.alive && !t.piloted && near(t.pos.x, t.pos.z)) n[t.team] += 3;
     p.n = n; const diff = clamp(n.you - n.foe, -3, 3); if (diff) p.prog = clamp(p.prog + diff * .055 * dt, -1, 1); else if (!n.you && !n.foe && p.owner) p.prog = clamp(p.prog + (p.owner === "you" ? 1 : -1) * .03 * dt, -1, 1);
     const was = p.owner; if (p.prog >= 1) p.owner = "you"; else if (p.prog <= -1) p.owner = "foe"; else if ((p.owner === "you" && p.prog <= 0) || (p.owner === "foe" && p.prog >= 0)) p.owner = null;
-    if (was !== p.owner) { const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); } }
-}
+    if (was !== p.owner) ownerChanged(p); } }
+function ownerChanged(p) { const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
+
 // a commander that plays by a doctrine: what to bring in next, as supply allows
 function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[side] = 1.5; const doc = B.doctrine[side]; if (doc === "manual") return;
   const U2 = FACTIONS[B.fac[side]].units, ids = B.list[side].filter((id) => U2[id]), inf = ids.filter((id) => !U2[id].veh), veh = ids.filter((id) => U2[id].veh); if (!ids.length) return;
@@ -201,7 +207,7 @@ function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[
   if (!room(side, def)) { if (wantVeh || !inf.length) B.turn[side]++; return; } if (aliveInf(side) < 3 && !def.veh && B.supply[side] < def.cost * 2 + 10) return;   // with almost nobody left, wait until two squads can go in together
   if (B.supply[side] >= def.cost) { deploy(side, id); B.turn[side]++; B.ai[side] = .4; } }
 let tick = 0;
-export function stepBattle(dt) { if (B.over) return; B.time += dt;
+export function stepBattle(dt) { if (B.mp === "guest") return stepGuest(dt); if (B.over) return; B.time += dt;
   for (const g of GRUNTS) stepSoldier(g, dt); for (const g of ALLIES) stepSoldier(g, dt); for (const v of VEH) stepVeh(v, dt);
   for (const L of [GRUNTS, ALLIES]) for (let i = L.length - 1; i >= 0; i--) if (L[i].gone) L.splice(i, 1);
   for (let i = VEH.length - 1; i >= 0; i--) if (!VEH[i].alive) VEH.splice(i, 1);
@@ -214,10 +220,12 @@ export function stepBattle(dt) { if (B.over) return; B.time += dt;
 export function resetBattle() { for (const L of [GRUNTS, ALLIES]) { for (const g of L) if (!g.gone) { try { g.s.remove(); } catch (e) {} } L.length = 0; }
   for (const v of VEH) { if (v.mid) removeMachine(v.mid); else scene.remove(v.group); } VEH.length = 0; SQUADS.length = 0; MAP.sels = [];
   for (const p of POINTS) { p.prog = 0; p.owner = null; p.lamp.material.color.setRGB(...COL.none); p.light.color.setRGB(.5, .47, .4); }
-  B.fac.you = LOAD.side; B.fac.foe = LOAD.side === "militia" ? "machine" : "militia"; B.list.you = LOAD.list[B.fac.you].slice(); B.list.foe = Object.keys(FACTIONS[B.fac.foe].units).filter((id) => !["technical", "jumps"].includes(id));
-  B.doctrine.you = LOAD.doctrine; B.doctrine.foe = "mixed"; B.score.you = B.score.foe = 0; B.supply.you = B.supply.foe = 70; B.time = 0; B.over = null; B.turn.you = B.turn.foe = 0; B.ai.you = B.ai.foe = 2;
-  for (const side of ["you", "foe"]) { const inf = B.list[side].filter((id) => !FACTIONS[B.fac[side]].units[id].veh); for (let i = 0; i < 3 && inf.length; i++) deploy(side, inf[i % inf.length], false); }
-  for (const f of FALLS) scene.remove(f.mesh); FALLS.length = 0; for (const d of DOMES) scene.remove(d.mesh); DOMES.length = 0; for (const m of MEDS) scene.remove(m.mesh); MEDS.length = 0; for (const k in B.cd) B.cd[k] = 0; MAP.arm = null;
+  B.fac.you = LOAD.side; B.list.you = LOAD.list[B.fac.you].slice(); B.doctrine.you = LOAD.doctrine; GH.sq.clear(); GH.g.clear();
+  if (B.mp && B.peer) { B.fac.foe = FACTIONS[B.peer.fac] ? B.peer.fac : "machine"; B.list.foe = (B.peer.list || []).filter((id) => FACTIONS[B.fac.foe].units[id]); B.doctrine.foe = DOCTRINES[B.peer.doctrine] ? B.peer.doctrine : "mixed"; }   // the other side is the other player's
+  else { B.fac.foe = LOAD.side === "militia" ? "machine" : "militia"; B.list.foe = Object.keys(FACTIONS[B.fac.foe].units).filter((id) => !["technical", "jumps"].includes(id)); B.doctrine.foe = "mixed"; }
+  B.score.you = B.score.foe = 0; B.supply.you = B.supply.foe = 70; B.time = 0; B.over = null; B.turn.you = B.turn.foe = 0; B.ai.you = B.ai.foe = 2;
+  if (B.mp !== "guest") for (const side of ["you", "foe"]) { const inf = B.list[side].filter((id) => !FACTIONS[B.fac[side]].units[id].veh); for (let i = 0; i < 3 && inf.length; i++) deploy(side, inf[i % inf.length], false); }
+  for (const f of FALLS) scene.remove(f.mesh); FALLS.length = 0; for (const d of DOMES) { scene.remove(d.mesh); scene.remove(d.box); } DOMES.length = 0; for (const m of MEDS) scene.remove(m.box); MEDS.length = 0; for (const sd of ["you", "foe"]) for (const k in B.cd[sd]) B.cd[sd][k] = 0; MAP.arm = null;
 }
 
 /* ---------- the commander's cards that are not troops ----------
@@ -228,39 +236,92 @@ export const UTILS = {
   shield: { name: "Shield dome", icon: "◠", cost: 40, cd: 35, ask: "Click where the shield should fall.", desc: "A dome 16 metres across that stands for 25 seconds. Fire from outside does much less to your troops inside it." },
   med: { name: "Medical drop", icon: "✚", cost: 30, cd: 30, ask: "Click where the medical crate should fall.", desc: "A crate that mends you and your troops within 9 metres for 20 seconds." } };
 export const POD_EXTRA = 30;
-B.cd = { strike: 0, shield: 0, med: 0 };
+B.cd = { you: { strike: 0, shield: 0, med: 0 }, foe: { strike: 0, shield: 0, med: 0 } };
 const FALLS = [], DOMES = [], MEDS = [];
 export const domeAt = (x, z, side) => DOMES.some((d) => d.side === side && Math.hypot(x - d.x, z - d.z) < d.r);
+const baseOf = (side) => BASE[B.mp === "guest" ? other(side) : side];   // on the guest's screen "you" are the far base
 const slab = (w, h, d, color, glow) => { const g = new THREE.Group(), m = new THREE.Mesh(new THREE.BoxGeometry(w * U, h * U, d * U), new THREE.MeshToonMaterial({ color })); m.position.y = h * U / 2; m.castShadow = true; g.add(m);
   if (glow) { const l = new THREE.Mesh(new THREE.BoxGeometry(w * U * 1.04, h * U * .16, d * U * 1.04), new THREE.MeshBasicMaterial({ color: new THREE.Color(glow).multiplyScalar(2.6) })); l.position.y = h * U * .62; g.add(l); } scene.add(g); return g; };
-export function useUtil(kind, g, unit) { if (B.over) return false; let x = clamp(g.x, WORLD.x0 + 4, WORLD.x1 - 4), z = clamp(g.z, WORLD.z0 + 4, WORLD.z1 - 4);
-  if (kind === "pod") { const def = FACTIONS[B.fac.you].units[unit]; if (!def || def.veh || B.supply.you < def.cost + POD_EXTRA || !room("you", def)) return false; [x, z] = nearestWalk(x, z); B.supply.you -= def.cost + POD_EXTRA;
-    FALLS.push({ kind, x, z, t: 2.6, v: 90, unit, mesh: slab(2.1, 3.6, 2.1, "#3b4248", "#8fe0f0") }); ringFx(toU(V3(x, groundH(x, z) + .3, z)), "#8fe0f0", 4 * U, 2.6); if (B.hooks.say) B.hooks.say(def.name + " are coming down in a drop pod.", 2.5); return true; }
-  const u = UTILS[kind]; if (!u || B.cd[kind] > 0 || B.supply.you < u.cost) return false; B.supply.you -= u.cost; B.cd[kind] = u.cd;
-  if (kind === "strike") { const bx = x - BASE.you[0], bz = z - BASE.you[1], l = Math.hypot(bx, bz) || 1, px = -bz / l, pz = bx / l;   // the run crosses the line from your base to the spot
-    ringFx(toU(V3(x, groundH(x, z) + .3, z)), "#ff7a3a", 12 * U, 2.4);
-    for (let i = -2; i <= 2; i++) { const fx = x + px * i * 5.5, fz = z + pz * i * 5.5; FALLS.push({ kind: "bomb", x: fx, z: fz, t: 2.3 + (i + 2) * .17, v: 55, mesh: slab(.5, 1.3, .5, "#1c1b1a") }); }
+// side is whose card it is. ghost is the guest's copy of something the host has already decided: it is shown, and it
+// does what only this screen can know (shield or mend its own pilot), but it spends nothing and hurts nobody.
+export function useUtil(kind, g, unit, side = "you", ghost = false) { if (B.over) return false;
+  if (B.mp === "guest" && !ghost) { B.hooks.net("util", [kind, g.x, g.z, unit || ""]); return true; }
+  let x = clamp(g.x, WORLD.x0 + 4, WORLD.x1 - 4), z = clamp(g.z, WORLD.z0 + 4, WORLD.z1 - 4); const mine = side === "you", col = mine ? "#8fe0f0" : "#ff7a5a", tell = () => { if (!ghost && B.mp === "host") B.hooks.net("util", [kind, x, z, unit || "", side]); };
+  if (kind === "pod") { const def = FACTIONS[B.fac[side]].units[unit]; if (!def || def.veh) return false; if (!ghost) { if (B.supply[side] < def.cost + POD_EXTRA || !room(side, def)) return false; [x, z] = nearestWalk(x, z); B.supply[side] -= def.cost + POD_EXTRA; }
+    FALLS.push({ kind, side, ghost, x, z, t: 2.6, v: 90, unit, mesh: slab(2.1, 3.6, 2.1, "#3b4248", col) }); ringFx(toU(V3(x, groundH(x, z) + .3, z)), col, 4 * U, 2.6); if (B.hooks.say) B.hooks.say(mine ? def.name + " are coming down in a drop pod." : "An enemy drop pod is coming down.", 2.5); tell(); return true; }
+  const u = UTILS[kind]; if (!u) return false; if (!ghost) { if (B.cd[side][kind] > 0 || B.supply[side] < u.cost) return false; B.supply[side] -= u.cost; B.cd[side][kind] = u.cd; if (kind !== "strike") [x, z] = nearestWalk(x, z); }
+  if (kind === "strike") { const bs = baseOf(side), bx = x - bs[0], bz = z - bs[1], l = Math.hypot(bx, bz) || 1, px = -bz / l, pz = bx / l;   // the run crosses the line from that side's base to the spot
+    ringFx(toU(V3(x, groundH(x, z) + .3, z)), mine ? "#ff7a3a" : "#ff3a2a", 12 * U, 2.4);
+    for (let i = -2; i <= 2; i++) { const fx = x + px * i * 5.5, fz = z + pz * i * 5.5; FALLS.push({ kind: "bomb", side, ghost, x: fx, z: fz, t: 2.3 + (i + 2) * .17, v: 55, mesh: slab(.5, 1.3, .5, "#1c1b1a") }); }
     const pm = new THREE.Mesh(new THREE.ConeGeometry(2.6 * U, 11 * U, 4).rotateX(Math.PI / 2), new THREE.MeshToonMaterial({ color: "#23262a" })); pm.scale.set(2.4, .45, 1); pm.rotation.y = Math.atan2(px, pz); scene.add(pm);
-    FALLS.push({ kind: "plane", x, z, px, pz, t: 2.3, mesh: pm }); if (B.hooks.say) B.hooks.say("Air strike on the way. Keep your people clear.", 2.5); return true; }
-  [x, z] = nearestWalk(x, z); FALLS.push({ kind, x, z, t: 1.7, v: 70, mesh: kind === "shield" ? slab(1.1, 1.1, 1.1, "#3b4650", "#6fd8ff") : slab(1.5, 1, 1.1, "#d8d4c4", "#7dffa0") });
-  if (B.hooks.say) B.hooks.say(kind === "shield" ? "Shield on the way." : "Medical crate on the way.", 2); return true; }
-function landed(f) { const gy = groundH(f.x, f.z), at = V3(f.x, gy, f.z);
-  if (f.kind === "bomb") { scene.remove(f.mesh); if (B.hooks.blast) B.hooks.blast(at, 6, { team: "you", titan: 110 }); return false; }
-  if (f.kind === "pod") { if (B.hooks.blast) B.hooks.blast(at, 3, { team: "you", titan: 60 }); const sq = deploy("you", f.unit, false, [f.x, f.z]); if (sq && MAP.on) { MAP.sels = [sq]; } f.husk = 10; return true; }
-  if (f.kind === "shield") { const dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(8 * U, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#6fd8ff", transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
-    dome.position.set(f.x * U, (gy - 1) * U, f.z * U); scene.add(dome); DOMES.push({ x: f.x, z: f.z, r: 8, side: "you", t: 25, mesh: dome, box: f.mesh }); ringFx(toU(at).setY((gy + .3) * U), "#6fd8ff", 8 * U, .7); flash(toU(at).setY((gy + 3) * U), "#6fd8ff", 2600, .4); return false; }
-  MEDS.push({ x: f.x, z: f.z, r: 9, t: 20, tick: 0, box: f.mesh }); ringFx(toU(at).setY((gy + .3) * U), "#7dffa0", 9 * U, .7); return false; }
-function stepUtils(dt) { for (const k in B.cd) B.cd[k] = Math.max(0, B.cd[k] - dt);
+    FALLS.push({ kind: "plane", x, z, px, pz, t: 2.3, mesh: pm }); if (B.hooks.say) B.hooks.say(mine ? "Air strike on the way. Keep your people clear." : "Enemy air strike coming in.", 2.5); tell(); return true; }
+  FALLS.push({ kind, side, ghost, x, z, t: 1.7, v: 70, mesh: kind === "shield" ? slab(1.1, 1.1, 1.1, "#3b4650", mine ? "#6fd8ff" : "#ff8a6a") : slab(1.5, 1, 1.1, "#d8d4c4", mine ? "#7dffa0" : "#ffb070") });
+  if (mine && B.hooks.say) B.hooks.say(kind === "shield" ? "Shield on the way." : "Medical crate on the way.", 2); tell(); return true; }
+function landed(f) { const gy = groundH(f.x, f.z), at = V3(f.x, gy, f.z), mine = f.side === "you";
+  if (f.kind === "bomb") { scene.remove(f.mesh); if (B.hooks.blast) B.hooks.blast(at, 6, f.ghost ? {} : { team: f.side, titan: 110, pilot: 70 }); return false; }
+  if (f.kind === "pod") { if (B.hooks.blast) B.hooks.blast(at, 3, f.ghost ? {} : { team: f.side, titan: 60, pilot: 40 }); if (!f.ghost) { const sq = deploy(f.side, f.unit, false, [f.x, f.z]); if (sq && mine && MAP.on) MAP.sels = [sq]; } f.husk = 10; return true; }
+  if (f.kind === "shield") { const col = mine ? "#6fd8ff" : "#ff8a6a", dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(8 * U, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
+    dome.position.set(f.x * U, (gy - 1) * U, f.z * U); scene.add(dome); DOMES.push({ x: f.x, z: f.z, r: 8, side: f.side, t: 25, mesh: dome, box: f.mesh }); ringFx(toU(at).setY((gy + .3) * U), col, 8 * U, .7); flash(toU(at).setY((gy + 3) * U), col, 2600, .4); return false; }
+  MEDS.push({ x: f.x, z: f.z, r: 9, t: 20, tick: 0, box: f.mesh, side: f.side, ghost: f.ghost }); ringFx(toU(at).setY((gy + .3) * U), mine ? "#7dffa0" : "#ffb070", 9 * U, .7); return false; }
+function stepUtils(dt) { for (const sd of ["you", "foe"]) for (const k in B.cd[sd]) B.cd[sd][k] = Math.max(0, B.cd[sd][k] - dt);
   for (let i = FALLS.length - 1; i >= 0; i--) { const f = FALLS[i];
     if (f.husk) { f.husk -= dt; if (f.husk <= 0) { scene.remove(f.mesh); FALLS.splice(i, 1); } continue; }
     f.t -= dt; if (f.kind === "plane") { const s = (2.3 - f.t - 2.2) * 95; f.mesh.position.set((f.x + f.px * s) * U, (groundH(f.x, f.z) + 46) * U, (f.z + f.pz * s) * U); if (f.t < -2.4) { scene.remove(f.mesh); FALLS.splice(i, 1); } continue; }
     const gy = groundH(f.x, f.z); f.mesh.position.set(f.x * U, (gy + Math.max(0, f.t) * f.v) * U, f.z * U); if (f.t <= 0 && !landed(f)) FALLS.splice(i, 1); }
   for (let i = DOMES.length - 1; i >= 0; i--) { const d = DOMES[i]; d.t -= dt; d.mesh.material.opacity = (d.t < 3 ? .05 + .1 * (Math.sin(d.t * 14) * .5 + .5) : .13 + .04 * Math.sin(B.time * 3)); if (d.t <= 0) { scene.remove(d.mesh); scene.remove(d.box); DOMES.splice(i, 1); } }
   for (let i = MEDS.length - 1; i >= 0; i--) { const m = MEDS[i]; m.t -= dt; m.tick -= dt;
-    if (m.tick <= 0) { m.tick = .5; let any = false; for (const g of ALLIES) if (g.s.dead < 0 && g.hp < g.sq.def.hp && Math.hypot(g.s.root.position.x / U - m.x, g.s.root.position.z / U - m.z) < m.r) { g.hp = Math.min(g.sq.def.hp, g.hp + 9); any = true; }
-      const pl = B.hooks.pilot ? B.hooks.pilot() : null; if (pl && pl.alive && !pl.titan && Math.hypot(pl.at.x - m.x, pl.at.z - m.z) < m.r && B.hooks.healPilot && B.hooks.healPilot(7)) any = true;
-      if (any || (m.t % 2) < .5) ringFx(V3(m.x * U, (groundH(m.x, m.z) + .3) * U, m.z * U), "#7dffa0", (any ? m.r : 3) * U, .6); }
+    if (m.tick <= 0) { m.tick = .5; let any = false; if (!m.ghost) for (const g of arr(m.side)) if (g.s.dead < 0 && g.hp < g.sq.def.hp && Math.hypot(g.s.root.position.x / U - m.x, g.s.root.position.z / U - m.z) < m.r) { g.hp = Math.min(g.sq.def.hp, g.hp + 9); any = true; }
+      const pl = B.hooks.pilot ? B.hooks.pilot() : null; if (m.side === "you" && pl && pl.alive && !pl.titan && Math.hypot(pl.at.x - m.x, pl.at.z - m.z) < m.r && B.hooks.healPilot && B.hooks.healPilot(7)) any = true;
+      if (any || (m.t % 2) < .5) ringFx(V3(m.x * U, (groundH(m.x, m.z) + .3) * U, m.z * U), m.side === "you" ? "#7dffa0" : "#ffb070", (any ? m.r : 3) * U, .6); }
     if (m.t <= 0) { scene.remove(m.box); MEDS.splice(i, 1); } } }
+
+/* ---------- two players ----------
+   The host's browser runs the battle. Several times a second it sends the other player a picture of it: the score, the
+   points, every squad, soldier and vehicle. The guest's browser builds the same troops from that picture and walks them
+   to where the host says they are. On the guest's screen the sides are swapped, so "you" is always your own side.
+   What the guest does as a commander (deploy, orders, support cards) and what its pilot hits are sent to the host, which
+   applies them to the real battle. */
+const r1 = (v) => Math.round(v * 10) / 10, GH = { sq: new Map(), g: new Map() };
+export function snapshot() { const S = (sd) => (sd === "you" ? 0 : 1), cd = B.cd.foe;
+  return { t: r1(B.time), sc: [r1(B.score.you), r1(B.score.foe)], sup: Math.floor(B.supply.foe), cd: [Math.ceil(cd.strike), Math.ceil(cd.shield), Math.ceil(cd.med)], ov: B.over || 0,
+    p: POINTS.map((p) => [Math.round(p.prog * 100), p.owner ? S(p.owner) + 1 : 0, p.n.you, p.n.foe]),
+    q: SQUADS.map((q) => { const f = q.side === "foe", o = q.order, v = q.veh; return [q.id, S(q.side), q.defId, q.auto ? 1 : 0, q.state, f ? q.path.map((n) => [r1(n.x), r1(n.z), n.stop ? 1 : 0]) : 0, f && o ? [o.type === "point" ? o.i : -1, o.pos ? r1(o.pos.x) : 0, o.pos ? r1(o.pos.z) : 0, o.pos ? 1 : 0] : 0, v ? [r1(v.pos.x), r1(v.pos.z), r1(v.yaw), v.alive ? Math.ceil(v.hp) : 0] : 0]; }),
+    s: [...ALLIES, ...GRUNTS].filter((g) => !g.gone).map((g) => { const p = g.s.root.position, t = g.s.dead < 0 && g.tgt && tgtAlive(g.tgt) ? tgtPos(g.tgt) : null; return [g.id, g.sq.id, g.slot, r1(p.x / U), r1(p.z / U), (g.s.dead >= 0 ? 1 : 0) | (g.s.crouch ? 2 : 0), g.shots, t ? [r1(t.x), r1(t.y), r1(t.z)] : 0]; }) }; }
+export function applySnap(o) { const sd = (k) => (k ? "you" : "foe"), now = performance.now();
+  B.time = o.t; B.score.you = o.sc[1]; B.score.foe = o.sc[0]; B.supply.you = o.sup; B.cd.you.strike = o.cd[0]; B.cd.you.shield = o.cd[1]; B.cd.you.med = o.cd[2];
+  if (o.ov && !B.over) { B.over = o.ov === "you" ? "foe" : "you"; if (B.hooks.say) B.hooks.say(B.over === "you" ? "The field is yours. The host can press T to fight it again." : "The enemy holds the field. The host can press T to fight it again.", 0); }
+  o.p.forEach((a, i) => { const p = POINTS[i], ow = a[1] ? (a[1] === 1 ? "foe" : "you") : null; p.prog = -a[0] / 100; p.n = { you: a[3], foe: a[2] }; if (ow !== p.owner) { p.owner = ow; ownerChanged(p); } });
+  const seenQ = new Set(), seenG = new Set();
+  for (const a of o.q) { let q = GH.sq.get(a[0]); const side = sd(a[1]);
+    if (!q) { const def = FACTIONS[B.fac[side]].units[a[2]]; if (!def) continue; q = mkSquad(side, a[2], def, a[0], [0, 0], null); q.order = null; GH.sq.set(a[0], q); SQUADS.push(q); if (a[7]) { mkVeh(q, a[7][0], a[7][1]); q.c.set(a[7][0], 0, a[7][1]); } }
+    seenQ.add(a[0]); q.state = a[4]; if (side === "you" && !(q.holdT > now)) { q.auto = !!a[3]; q.path = a[5] ? a[5].map((n) => { const v = V3(n[0], 0, n[1]); if (n[2]) v.stop = true; return v; }) : []; q.order = a[6] ? { type: a[6][0] >= 0 ? "point" : "move", i: a[6][0], pos: a[6][3] ? V3(a[6][1], 0, a[6][2]) : null } : null; }
+    if (q.veh && a[7]) { q.veh.net = a[7]; q.veh.hp = a[7][3]; if (!a[7][3] && q.veh.alive) wreckVeh(q.veh); } }
+  for (const a of o.s) { let g = GH.g.get(a[0]); const q = GH.sq.get(a[1]); if (!q) continue; if (!g) { if (a[5] & 1) continue; g = mkSoldier(q, a[2], a[3], a[4], a[0]); GH.g.set(a[0], g); g.shots = a[6]; } seenG.add(a[0]); g.net = a; }
+  for (const [id, g] of GH.g) if (!seenG.has(id)) { g.gone = true; try { g.s.remove(); } catch (e) {} GH.g.delete(id); }
+  for (const [id, q] of GH.sq) if (!seenQ.has(id)) { if (q.veh && q.veh.alive) wreckVeh(q.veh); q.dead = true; GH.sq.delete(id); } }
+function stepGuest(dt) { B.time += dt;
+  for (const L of [ALLIES, GRUNTS]) for (let i = L.length - 1; i >= 0; i--) { const g = L[i], s = g.s, a = g.net; if (g.gone) { L.splice(i, 1); continue; } if (!a) continue; const p = s.root.position;
+    if (a[5] & 1) { if (s.dead < 0) s.die(V3(p.x + (rnd() - .5) * 200, p.y, p.z + (rnd() - .5) * 200), { zone: "chest", force: 1 }); continue; } if (s.dead >= 0) continue;
+    const d = Math.hypot(a[3] - p.x / U, a[4] - p.z / U); g.pt = (g.pt || 0) - dt;
+    if (d > 9) s.place(a[3] * U, a[4] * U, groundH(a[3], a[4]) * U);
+    else if (g.pt <= 0 && d > .9 && !s.busy) { g.pt = .3; if (s.cover) s.leaveCover(); if (s.crouch) s.setStance("stand"); s.autoCover = false; s.moveTo(V3(a[3] * U, 0, a[4] * U), a[7] ? "tacrun" : "run"); }
+    else if (g.pt <= 0 && d <= .9 && !s.moving) { g.pt = .5; if (!!(a[5] & 2) !== !!s.crouch) s.setCrouch(!!(a[5] & 2)); }
+    s.aimAt(a[7] ? V3(a[7][0] * U, a[7][1] * U, a[7][2] * U) : null);
+    if (a[6] > g.shots) { g.shots = a[6]; if (!s.busy) { if (s.ammo <= 0) s.doReload(); else s.fire(g.W.burst); } } }
+  for (let i = VEH.length - 1; i >= 0; i--) { const v = VEH[i], n = v.net; if (!v.alive) { VEH.splice(i, 1); continue; } if (!n) continue; const k = 1 - Math.exp(-dt * 8); v.pos.x += (n[0] - v.pos.x) * k; v.pos.z += (n[1] - v.pos.z) * k;
+    let dy = (n[2] - v.yaw) % (Math.PI * 2); if (dy > Math.PI) dy -= Math.PI * 2; if (dy < -Math.PI) dy += Math.PI * 2; v.yaw += dy * k; v.group.position.set(v.pos.x * U, groundH(v.pos.x, v.pos.z) * U, v.pos.z * U); v.group.rotation.y = v.yaw + Math.PI; }
+  for (let i = SQUADS.length - 1; i >= 0; i--) { const sq = SQUADS[i]; if (sq.dead) { const k = MAP.sels.indexOf(sq); if (k >= 0) MAP.sels.splice(k, 1); SQUADS.splice(i, 1); continue; }
+    const mem = sq.members.filter((g) => g.s.dead < 0 && !g.gone); if (sq.veh) sq.c.copy(sq.veh.pos); else if (mem.length) { sq.c.set(0, 0, 0); for (const g of mem) { sq.c.x += g.s.root.position.x / U; sq.c.z += g.s.root.position.z / U; } sq.c.divideScalar(mem.length); } sq.n = mem.length; }
+  stepUtils(dt); }
+// what the guest asked for, applied to the real battle on the host. The guest's troops are the host's "foe" side.
+const theirs = (ids) => SQUADS.filter((q) => q.side === "foe" && ids.includes(q.id));
+export const netIn = {
+  dep: (id) => { deploy("foe", id); },
+  doc: (k) => { if (DOCTRINES[k]) B.doctrine.foe = k; },
+  order: (a) => orderTo(V3(a[1], 0, a[2]), !!a[3], theirs(a[0]), true),
+  act: (a) => squadAct(a[0], theirs(a[1]), true),
+  util: (a) => { useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, "foe"); },
+  hit: (a, fromU) => { const u = a[0] < 0 ? (VEH.find((v) => v.sq.id === -a[0] && v.side === "you")) : ALLIES.find((g) => g.id === a[0]); if (u) damage(u, Math.min(a[1], 9999), fromU, a[2] || "chest"); } };
 
 /* ---------- small pictures of each kind of unit, for the cards ---------- */
 const THUMB = {}, tScene = new THREE.Scene(), tCam = new THREE.PerspectiveCamera(28, .8, 1, 4000), tRT = new THREE.WebGLRenderTarget(96, 120);
@@ -322,24 +383,27 @@ function drawDeck() { const side = B.fac.you, Un = FACTIONS[side].units, S = MAP
   $("map-top").innerHTML = `<b class="you">YOU ${Math.floor(B.score.you)}</b> ${POINTS.map((p) => `<i class="${p.owner || "none"}">${p.name}</i>`).join("")} <b class="foe">${Math.floor(B.score.foe)} THEM</b> <span>first to ${GOAL}</span>${pl.dead > 0 ? ` <span class="warn">You are down. Back in ${pl.dead.toFixed(1)} s</span>` : ""}`;
   $("sup-rate").textContent = "+" + income("you").toFixed(1) + " each second";
   const ticks = B.list.you.map((id) => `<s style="left:${Un[id].cost / 3}%" title="${Un[id].name}"><b>${Un[id].icon}</b></s>`).join(""); if ($("sup-ticks")._h !== ticks) { $("sup-ticks").innerHTML = ticks; $("sup-ticks")._h = ticks; }
-  const dk = B.doctrine.you + "|" + Object.keys(UTILS).map((k) => Math.ceil(B.cd[k]) + (B.supply.you >= UTILS[k].cost ? "y" : "n")).join("") + (MAP.arm ? MAP.arm.kind + (MAP.arm.unit || "") : "") + B.list.you.map((id) => (B.supply.you >= Un[id].cost + POD_EXTRA ? "p" : "")).join("") + B.list.you.map((id) => (B.supply.you >= Un[id].cost ? 1 : 0) + (room("you", Un[id]) ? "r" : "f")).join("") + (B.over || "");
+  const dk = B.doctrine.you + "|" + Object.keys(UTILS).map((k) => Math.ceil(B.cd.you[k]) + (B.supply.you >= UTILS[k].cost ? "y" : "n")).join("") + (MAP.arm ? MAP.arm.kind + (MAP.arm.unit || "") : "") + B.list.you.map((id) => (B.supply.you >= Un[id].cost + POD_EXTRA ? "p" : "")).join("") + B.list.you.map((id) => (B.supply.you >= Un[id].cost ? 1 : 0) + (room("you", Un[id]) ? "r" : "f")).join("") + (B.over || "");
   if (dk !== deckKey) { deckKey = dk; $("map-doc").innerHTML = Object.entries(DOCTRINES).map(([k, [n]]) => `<button data-doc="${k}" class="${B.doctrine.you === k ? "on" : ""}" title="${DOCTRINES[k][1]}">${n}</button>`).join("");
     $("map-deck").innerHTML = B.list.you.map((id) => { const d = Un[id], rm = room("you", d) && !B.over, ok = B.supply.you >= d.cost && rm, okP = !d.veh && B.supply.you >= d.cost + POD_EXTRA && rm, th = thumbOf(side, id, "you"), armed = MAP.arm && MAP.arm.kind === "pod" && MAP.arm.unit === id;
       return `<div class="dcard ${ok ? "" : "off"}${armed ? " arm" : ""}">${th ? `<img src="${th}">` : `<b>${d.icon}</b>`}<span><strong>${d.name}</strong><small>${d.veh ? "Vehicle" : d.guns.length + " troops"} · ${d.cost} supply</small><em>${ok ? "Ready" : !rm ? "The field is full" : "Not enough supply"}</em><span class="dbs"><button class="db ${ok ? "" : "off"}" data-dep="${id}" title="Bring them on at your base.">Deploy</button>${d.veh ? "" : `<button class="db pod ${okP ? "" : "off"}" data-pod="${id}" title="Drop this squad from above onto a spot you click. Costs ${POD_EXTRA} more supply.">Drop pod +${POD_EXTRA}</button>`}</span></span></div>`; }).join("");
-    $("map-util").innerHTML = Object.entries(UTILS).map(([k, u]) => { const cd = Math.ceil(B.cd[k]), ok = cd <= 0 && B.supply.you >= u.cost && !B.over; return `<button class="ucard ${ok ? "" : "off"}${MAP.arm && MAP.arm.kind === k ? " arm" : ""}" data-util="${k}" title="${u.desc}"><b>${u.icon}</b><span><strong>${u.name}</strong><small>${cd > 0 ? "Ready in " + cd + " s" : u.cost + " supply"}</small></span></button>`; }).join(""); }
+    $("map-util").innerHTML = Object.entries(UTILS).map(([k, u]) => { const cd = Math.ceil(B.cd.you[k]), ok = cd <= 0 && B.supply.you >= u.cost && !B.over; return `<button class="ucard ${ok ? "" : "off"}${MAP.arm && MAP.arm.kind === k ? " arm" : ""}" data-util="${k}" title="${u.desc}"><b>${u.icon}</b><span><strong>${u.name}</strong><small>${cd > 0 ? "Ready in " + cd + " s" : u.cost + " supply"}</small></span></button>`; }).join(""); }
   const selH = S.length === 1 ? `<strong>${S[0].name}${S[0].veh ? "" : " ×" + S[0].n}</strong><p>${S[0].state}.</p><p class="dim">${S[0].auto ? "This squad is choosing its own points." : "This squad is following your order."}</p>` : S.length ? `<strong>${S.length} squads picked</strong><p class="dim">${S.map((s) => s.name).join(", ")}</p>` :
     `<strong>No squad picked</strong><p class="dim">Left click a squad's card to pick it, or drag a box round several. Then left click where they should go. Hold Shift to add stops on the way.</p>`;
   const full = selH + (S.length ? `<div><button data-act="auto" class="${S.every((s) => s.auto) ? "on" : ""}">Choose their own</button><button data-act="hold">Hold here</button><button data-act="clear">Forget the stops</button><button data-act="none">Let go</button></div>` : ""); if ($("map-sel")._h !== full) { $("map-sel").innerHTML = full; $("map-sel")._h = full; }
 }
 // Send the picked squads to exactly where was clicked. With Shift each click is a stop on the way; the squads go from
 // node to node in straight lines, and only a line that is blocked gets corners added to take it round.
-function orderTo(g, way) { g.x = clamp(g.x, WORLD.x0 + 2, WORLD.x1 - 2); g.z = clamp(g.z, WORLD.z0 + 2, WORLD.z1 - 2); const i = POINTS.findIndex((p) => Math.hypot(p.x - g.x, p.z - g.z) < 8);
-  for (const s of MAP.sels) { s.auto = false; if (!s.fresh) s.path = []; const start = s.path.length ? s.path[s.path.length - 1] : s.c, nodes = legNodes(start, g, !!s.veh), end = nodes[nodes.length - 1]; if (way) end.stop = true; s.path.push(...nodes); s.fresh = way;
-    s.order = !way && i >= 0 ? { type: "point", i, pos: end.clone() } : { type: "move", pos: end.clone() }; for (const m of s.members) m.moveT = 0; } drawDeck(); }
+function orderTo(g, way, sels = MAP.sels, asked = false) { g.x = clamp(g.x, WORLD.x0 + 2, WORLD.x1 - 2); g.z = clamp(g.z, WORLD.z0 + 2, WORLD.z1 - 2); const i = POINTS.findIndex((p) => Math.hypot(p.x - g.x, p.z - g.z) < 8);
+  if (B.mp === "guest" && !asked) B.hooks.net("order", [sels.map((q) => q.id), r1(g.x), r1(g.z), way ? 1 : 0]);
+  for (const s of sels) { s.auto = false; if (!s.fresh) s.path = []; const start = s.path.length ? s.path[s.path.length - 1] : s.c, nodes = legNodes(start, g, !!s.veh), end = nodes[nodes.length - 1]; if (way) end.stop = true; s.path.push(...nodes); s.fresh = way; s.holdT = performance.now() + 700;
+    s.order = !way && i >= 0 ? { type: "point", i, pos: end.clone() } : { type: "move", pos: end.clone() }; for (const m of s.members) m.moveT = 0; } if (!asked) drawDeck(); }
+function squadAct(a, sels, asked = false) { if (B.mp === "guest" && !asked) B.hooks.net("act", [a, sels.map((q) => q.id)]);
+  for (const s of sels) { if (a === "auto") { s.auto = true; s.think = 0; s.path = []; } else if (a === "hold") { s.auto = false; s.order = { type: "move", pos: s.c.clone() }; s.path = []; } else s.path = []; s.fresh = false; s.holdT = performance.now() + 700; } }
 mapEl.addEventListener("contextmenu", (e) => e.preventDefault());
 mapEl.addEventListener("wheel", (e) => { MAP.dist = clamp(MAP.dist * Math.exp(e.deltaY * .0012), 24, 300); e.preventDefault(); }, { passive: false });
 mapEl.addEventListener("mousedown", (e) => { const b = e.target.closest("button");
-  if (b) { if (b.dataset.dep) { deploy("you", b.dataset.dep); deckKey = ""; } else if (b.dataset.pod) { MAP.arm = b.classList.contains("off") ? null : { kind: "pod", unit: b.dataset.pod }; deckKey = ""; } else if (b.dataset.util) { MAP.arm = b.classList.contains("off") ? null : { kind: b.dataset.util }; deckKey = ""; } else if (b.dataset.doc) { B.doctrine.you = LOAD.doctrine = b.dataset.doc; saveLoad(); deckKey = ""; } else if (b.dataset.act) { const a = b.dataset.act; if (a === "none") MAP.sels = []; for (const s of MAP.sels) { if (a === "auto") { s.auto = true; s.think = 0; s.path = []; } else if (a === "hold") { s.auto = false; s.order = { type: "move", pos: s.c.clone() }; s.path = []; } else s.path = []; s.rk = ""; } } drawDeck(); return; }
+  if (b) { if (b.dataset.dep) { deploy("you", b.dataset.dep); deckKey = ""; } else if (b.dataset.pod) { MAP.arm = b.classList.contains("off") ? null : { kind: "pod", unit: b.dataset.pod }; deckKey = ""; } else if (b.dataset.util) { MAP.arm = b.classList.contains("off") ? null : { kind: b.dataset.util }; deckKey = ""; } else if (b.dataset.doc) { B.doctrine.you = LOAD.doctrine = b.dataset.doc; saveLoad(); deckKey = ""; if (B.mp === "guest") B.hooks.net("doc", b.dataset.doc); } else if (b.dataset.act) { const a = b.dataset.act; if (a === "none") MAP.sels = []; else squadAct(a, MAP.sels); } drawDeck(); return; }
   if (e.target.closest("#map-top, #map-bottom, #map-sel, #map-supply")) return; e.preventDefault();
   MAP.drag = { b: e.button, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, moved: false }; });
 addEventListener("mousemove", (e) => { const d = MAP.drag; if (!MAP.on || !d) return; const dx = e.clientX - d.lx, dy = e.clientY - d.ly; d.lx = e.clientX; d.ly = e.clientY; if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) d.moved = true;
