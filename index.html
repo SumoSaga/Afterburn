@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Afterburn</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14110e; overflow: hidden; font: 13px/1.4 "Courier New", ui-monospace, monospace; color: #efe2c8; user-select: none; }
+  canvas { display: block; image-rendering: pixelated; }
+  .box { background: rgba(20,16,12,.86); border: 2px solid #5a4630; }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+  #cross i { position: absolute; background: #f4ead2; }
+  #cross i:nth-child(1) { left: 8px; top: 0; width: 2px; height: 5px; }
+  #cross i:nth-child(2) { left: 8px; bottom: 0; width: 2px; height: 5px; }
+  #cross i:nth-child(3) { top: 8px; left: 0; height: 2px; width: 5px; }
+  #cross i:nth-child(4) { top: 8px; right: 0; height: 2px; width: 5px; }
+  #cross.hit i { background: #f2a046; }
+  #bl { position: absolute; left: 16px; bottom: 16px; padding: 8px 12px; min-width: 200px; }
+  #br { position: absolute; right: 16px; bottom: 16px; padding: 8px 12px; text-align: right; min-width: 170px; }
+  #tl { position: absolute; left: 16px; top: 16px; padding: 8px 12px; }
+  #tr { position: absolute; right: 16px; top: 16px; padding: 6px 10px; color: #b9a582; font-size: 12px; }
+  #foe { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); padding: 6px 12px; width: 280px; display: none; }
+  .lab { color: #b9a582; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+  .big { font-size: 22px; color: #f2c46a; letter-spacing: .04em; }
+  .bar { height: 8px; background: #2d241b; border: 2px solid #6b5438; margin-top: 4px; }
+  .bar div { height: 100%; width: 100%; background: #e4a050; }
+  #shfill { background: #8fe0f0; } #foefill { background: #b0312a; } #meterfill { background: #8fe0f0; width: 0; }
+  #shrow { display: none; margin-top: 6px; }
+  #state { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); color: #8fe0f0; letter-spacing: .25em; font-size: 12px; white-space: nowrap; }
+  #msg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); padding: 10px 16px; display: none; text-align: center; max-width: 560px; }
+  /* the Titan's cockpit: three screens in a heavy frame, with the display drawn over them */
+  #cockpit { position: absolute; inset: 0; display: none; color: #8fe0f0; font-size: 12px; letter-spacing: .08em; text-shadow: 0 0 6px rgba(143,224,240,.55); }
+  .pane { position: absolute; top: 0; bottom: 0; background: #040506; }
+  #pn0 { left: 0; width: 21.6%; } #pn1 { left: 21.5%; width: 57%; } #pn2 { left: 78.4%; right: 0; }
+  #ck-frame { position: absolute; inset: 0; }
+  #ck-frame i { position: absolute; background: linear-gradient(#1b1815, #0c0b0a); }
+  #ck-frame .sl { left: 19.9%; top: 0; bottom: 0; width: 2.8%; transform: skewX(-3.5deg); border-left: 2px solid #5a4630; border-right: 2px solid #2d241b; }
+  #ck-frame .sr { right: 19.9%; top: 0; bottom: 0; width: 2.8%; transform: skewX(3.5deg); border-right: 2px solid #5a4630; border-left: 2px solid #2d241b; }
+  #ck-frame .ft { left: 0; right: 0; top: 0; height: 6%; clip-path: polygon(0 0, 100% 0, 100% 55%, 64% 55%, 61% 100%, 39% 100%, 36% 55%, 0 55%); }
+  #ck-frame .fd { left: 0; right: 0; bottom: 0; height: 17%; clip-path: polygon(0 42%, 13% 42%, 20% 0, 80% 0, 87% 42%, 100% 42%, 100% 100%, 0 100%); background: linear-gradient(#211c17, #0c0b0a); }
+  #ck-frame .fe { left: 20%; right: 20%; bottom: 16.6%; height: 2px; background: #c45a1e; box-shadow: 0 0 8px #c45a1e; }
+  #ck-frame .scan { inset: 0; background: repeating-linear-gradient(rgba(0,0,0,.16) 0 1px, rgba(143,224,240,.025) 1px 3px); }
+  #ck, #ck2 { position: absolute; inset: 0; }
+  #ck u { display: block; text-decoration: none; color: #f2c46a; text-shadow: 0 0 6px rgba(242,196,106,.5); margin: 8px 0 2px; border-bottom: 1px solid rgba(143,224,240,.4); padding-bottom: 2px; }
+  #ck i, #ck2 i { font-style: normal; opacity: .25; } #ck b, #ck2 b { font-weight: normal; }
+  #ck-compass { position: absolute; left: 50%; top: 7.5%; width: 360px; height: 20px; margin-left: -180px; overflow: hidden; border-bottom: 1px solid rgba(143,224,240,.5); }
+  #ck-strip { position: absolute; left: 180px; top: 0; height: 100%; } #ck-strip span { position: absolute; top: 2px; width: 40px; margin-left: -20px; text-align: center; font-size: 11px; }
+  #ck-compass:after { content: ""; position: absolute; left: 50%; bottom: 0; margin-left: -4px; border: 4px solid transparent; border-bottom-color: #f2c46a; }
+  #ck-ret { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px; overflow: visible; filter: drop-shadow(0 0 4px rgba(143,224,240,.6)); }
+  #ck-rng { position: absolute; left: 50%; top: 50%; margin-top: 62px; width: 160px; margin-left: -80px; text-align: center; }
+  #ck-lock { position: absolute; display: none; color: #f2c46a; }
+  #ck-lock s { position: absolute; width: 22%; height: 22%; border: 2px solid currentColor; }
+  #ck-lock s:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; } #ck-lock s:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+  #ck-lock s:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; } #ck-lock s:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+  #ck-lock.hot { color: #ff5a3a; text-shadow: 0 0 6px #ff5a3a; }
+  #ck-locklab { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); white-space: nowrap; margin-top: 4px; font-size: 11px; text-shadow: 0 0 6px currentColor; }
+  #ck-warn { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  #ck-warn div { display: flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid currentColor; background: rgba(4,5,6,.55); }
+  #ck-warn .amber { color: #f2c46a; text-shadow: 0 0 6px rgba(242,196,106,.6); } #ck-warn .red { color: #ff5a3a; text-shadow: 0 0 6px #ff5a3a; animation: ckb .5s steps(2) infinite; }
+  @keyframes ckb { 50% { opacity: .35; } }
+  #ck-sys { position: absolute; left: 2.2%; top: 12%; width: 15.5%; line-height: 1.7; }
+  #ck-radar { position: absolute; left: 2.6%; bottom: 20%; width: 14%; max-width: 170px; aspect-ratio: 1; }
+  #ck-wpn { position: absolute; right: 2.2%; top: 12%; width: 15.5%; }
+  #ck-wpn em { display: block; font-style: normal; font-size: 24px; color: #d8f8ff; } #ck-wpn em.dim { opacity: .45; } #ck-wpn .pips { display: block; font-size: 10px; letter-spacing: 0; word-break: break-all; line-height: 1.1; } #ck-wpn small { display: block; margin-top: 12px; opacity: .6; }
+  #ck-vit { position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); width: 440px; }
+  #ck-vit div { display: grid; grid-template-columns: 62px 1fr 44px; align-items: center; margin: 3px 0; } #ck-vit span { letter-spacing: 1px; white-space: nowrap; overflow: hidden; } #ck-vit .hu { color: #f2c46a; text-shadow: 0 0 6px rgba(242,196,106,.5); }
+  #ck-vit label:last-child { text-align: right; } #ck-vit .crit, #ck-vit .crit .hu { color: #ff5a3a; text-shadow: 0 0 6px #ff5a3a; }
+  #ck-boot { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); text-align: center; font-size: 15px; line-height: 2; display: none; color: #d8f8ff; }
+  /* the battle map */
+  #map { position: fixed; inset: 0; display: none; cursor: crosshair; }
+  #map-marks { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .mk { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font-size: 11px; display: flex; align-items: flex-start; gap: 5px; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+  .mk b { display: inline-block; min-width: 18px; height: 18px; line-height: 18px; text-align: center; border: 2px solid currentColor; background: rgba(20,16,12,.85); font-size: 12px; }
+  .mk em { font-style: normal; opacity: .85; } .mk.veh b { border-radius: 9px; }
+  .mk.you { color: #8fe0f0; } .mk.foe { color: #ff6a4a; } .mk.hero { color: #f2c46a; } .mk.sel b { background: #8fe0f0; color: #14110e; box-shadow: 0 0 10px #8fe0f0; }
+  .mk.pt { color: #efe2c8; flex-direction: column; align-items: center; gap: 2px; } .mk.pt b { min-width: 26px; height: 26px; line-height: 26px; font-size: 16px; } .mk.pt.you b { color: #8fe0f0; } .mk.pt.foe b { color: #ff6a4a; }
+  .mk.pt .pl { font-size: 10px; color: #d9c8a6; background: rgba(20,16,12,.7); padding: 0 4px; white-space: nowrap; }
+  .mk.pt i { display: block; width: 44px; height: 5px; background: #2d241b; border: 1px solid #6b5438; } .mk.pt u { display: block; height: 100%; }
+  #map-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #map-svg .way { fill: none; stroke: #8fe0f0; stroke-width: 3; stroke-dasharray: 10 6; stroke-linejoin: round; } #map-svg .way.under { stroke: rgba(10,8,6,.75); stroke-width: 7; stroke-dasharray: none; }
+  #map-svg .ring { fill: rgba(143,224,240,.14); stroke: #8fe0f0; stroke-width: 2; } #map-svg .stop { fill: #14110e; stroke: #8fe0f0; stroke-width: 2; } #map-svg .num { fill: #8fe0f0; font: bold 11px "Courier New", monospace; text-anchor: middle; } #map-svg .end { fill: #8fe0f0; stroke: #14110e; stroke-width: 2; }
+  #map-box { position: absolute; display: none; border: 2px dashed #8fe0f0; background: rgba(143,224,240,.08); pointer-events: none; }
+  #map-mode { position: absolute; left: 50%; top: 112px; transform: translateX(-50%); padding: 5px 12px; color: #8fe0f0; border-color: #8fe0f0; display: none; font-size: 12px; white-space: nowrap; }
+  /* a squad's card, standing over it on a stem */
+  .mk.card { transform: translate(-50%, -100%); padding: 0 0 14px; gap: 0; text-shadow: none; }
+  .mk.card:after { content: ""; position: absolute; left: 50%; bottom: 0; width: 2px; height: 14px; margin-left: -1px; background: currentColor; }
+  .mk.card img { width: 34px; height: 42px; image-rendering: pixelated; background: #1b1713; border: 2px solid currentColor; border-right: 0; display: block; }
+  .mk.card > b { width: 34px; height: 42px; line-height: 42px; font-size: 18px; border-right: 0; }
+  .mk.card span { display: block; min-width: 96px; height: 42px; box-sizing: content-box; padding: 0 8px; background: rgba(20,16,12,.92); border: 2px solid currentColor; line-height: 1.25; display: flex; flex-direction: column; justify-content: center; }
+  .mk.card strong { color: #efe2c8; font-size: 12px; } .mk.card q { quotes: none; color: currentColor; font-size: 9px; letter-spacing: 1px; } .mk.card em { color: #b9a582; font-size: 11px; }
+  .mk.card.foe span { min-width: 0; } .mk.card.foe { opacity: .92; }
+  .mk.card.sel { color: #f2c46a; z-index: 5; filter: drop-shadow(0 0 8px #f2c46a); } .mk.card.sel span { background: #4a3210; } .mk.card.sel strong { color: #fff3d0; } .mk.card.sel em { color: #f2c46a; }
+  /* supply: a bar that fills as supply comes in and drops when it is spent */
+  #map-supply { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); padding: 6px 12px 5px; width: min(520px, 60vw); }
+  .srow { display: flex; align-items: center; gap: 10px; margin: 2px 0; } #sup-n { font-size: 24px; color: #f2c46a; min-width: 52px; text-align: right; }
+  #sup-bar { position: relative; flex: 1; height: 16px; background: #2d241b; border: 2px solid #6b5438; } #sup-fill { height: 100%; width: 0; background: linear-gradient(#f2c46a, #c9733a); transition: width .25s linear; box-shadow: 0 0 8px rgba(242,196,106,.5); }
+  #sup-ticks s { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #14110e; text-decoration: none; } #sup-ticks b { position: absolute; top: 17px; left: -6px; font-size: 10px; color: #b9a582; font-weight: normal; }
+  #sup-rate { color: #8fe0f0; text-align: right; margin-top: 9px; }
+  .dcard { display: flex; gap: 8px; text-align: left; width: 214px; padding: 5px 8px 5px 5px; align-items: center; background: #2a221a; border: 2px solid #6b5438; } .dcard.arm, .ucard.arm { border-color: #f2c46a; box-shadow: 0 0 0 2px #f2c46a55; }
+  .dbs { flex-direction: row !important; gap: 4px; margin-top: 3px; } .db { font-size: 11px; padding: 2px 6px; } .db.off, .ucard.off { opacity: .45; } .db.pod { color: #8fe0f0; }
+  #map-util { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; } .ucard { display: flex; gap: 8px; align-items: center; text-align: left; padding: 4px 10px 4px 6px; } .ucard > b { font-size: 20px; color: #f2c46a; width: 26px; text-align: center; } .ucard span { display: flex; flex-direction: column; } .ucard small { color: #b9a582; } .dcard img { width: 38px; height: 48px; image-rendering: pixelated; background: #1b1713; border: 2px solid #6b5438; } .dcard > b { width: 38px; height: 48px; line-height: 48px; text-align: center; font-size: 18px; color: #f2c46a; border: 2px solid #6b5438; }
+  .dcard span { display: flex; flex-direction: column; } .dcard small { color: #b9a582; } .dcard em { font-style: normal; color: #8fe0f0; font-size: 12px; } .dcard.off { opacity: .55; } .dcard.off em { color: #b9a582; }
+  #map-top { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 8px 14px; font-size: 15px; white-space: nowrap; }
+  #map-top i, #kills i { font-style: normal; display: inline-block; width: 22px; text-align: center; border: 2px solid #6b5438; margin: 0 2px; color: #b9a582; }
+  #map-top i.you, #kills i.you { border-color: #8fe0f0; color: #8fe0f0; } #map-top i.foe, #kills i.foe { border-color: #e05a3a; color: #ff6a4a; }
+  .you { color: #8fe0f0; } .foe { color: #ff6a4a; } #map-top span { color: #b9a582; font-size: 12px; margin-left: 10px; }  #map-top .warn { color: #ff6a4a; }
+  #map-hint { position: absolute; right: 14px; top: 14px; padding: 6px 10px; font-size: 11px; color: #b9a582; max-width: 250px; }
+  #map-sel { position: absolute; left: 14px; top: 14px; width: 260px; padding: 10px 12px; } #map-sel p { margin: 5px 0; } #map-sel .dim { color: #b9a582; font-size: 12px; } #map-sel div { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; } #map-sel button { font-size: 12px; padding: 4px 8px; }
+  #map-bottom { position: absolute; left: 0; right: 0; margin: 0 auto; width: fit-content; bottom: 10px; padding: 6px 12px 8px; max-width: 97vw; } .mb-row { display: flex; gap: 22px; align-items: flex-end; flex-wrap: wrap; }
+  #map-doc button { font-size: 12px; padding: 4px 9px; } #map-doc { margin-top: 4px; }
+  #map-deck { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .card { display: grid; grid-template-columns: 26px 1fr; column-gap: 8px; text-align: left; width: 178px; padding: 7px 9px; } .card b { grid-row: span 3; font-size: 18px; color: #f2c46a; border: 2px solid #6b5438; width: 24px; height: 24px; line-height: 24px; text-align: center; }
+  .card small { color: #b9a582; } .card em { font-style: normal; color: #8fe0f0; font-size: 12px; } .card.off { opacity: .55; } .card.off em { color: #b9a582; }
+  #hud.mapon > :not(#msg) { display: none !important; }
+  /* the list builder */
+  #setup .note { color: #b9a582; font-size: 12px; margin: 6px 0 0; } #setup .row { margin-top: 4px; } #setup .pts { color: #8fe0f0; float: right; }
+  #setup .sw { width: 30px; height: 24px; padding: 0; } #setup .sw.on { box-shadow: 0 0 0 2px #f2c46a; }
+  .cat > div { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 6px 4px; border-top: 1px solid #3a2e22; font-size: 12px; color: #cdbb98; }
+  .cat > div.in { background: rgba(122,74,28,.25); } .cat b { font-size: 16px; color: #f2c46a; border: 2px solid #6b5438; width: 22px; height: 22px; line-height: 22px; text-align: center; } .cat strong { color: #efe2c8; font-size: 13px; } .cat em { font-style: normal; color: #8fe0f0; }
+  .cat button { font-size: 12px; padding: 4px 8px; white-space: nowrap; } button:disabled { opacity: .45; cursor: default; }
+  details { margin-top: 12px; } summary { cursor: pointer; color: #f2c46a; letter-spacing: .1em; text-transform: uppercase; font-size: 13px; }
+  #start, #panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 20px 26px; width: min(680px, 92vw); max-height: 92vh; overflow-y: auto; }
+  #panel { display: none; width: min(440px, 88vw); }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .12em; color: #f2c46a; }
+  h2 { font-size: 13px; margin: 14px 0 6px; letter-spacing: .1em; color: #f2c46a; text-transform: uppercase; }
+  p { margin: 8px 0; color: #e2d0ae; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: 2px 8px 2px 0; vertical-align: top; color: #e2d0ae; }
+  td:first-child { color: #f2c46a; white-space: nowrap; width: 1%; }
+  button { font: inherit; background: #2d241b; color: #efe2c8; border: 2px solid #6b5438; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: #f2c46a; }
+  button.go { background: #7a4a1c; border-color: #f2a046; font-size: 15px; margin-top: 12px; }
+  button.on { background: #7a4a1c; border-color: #f2a046; }
+  .sl { display: grid; grid-template-columns: 1fr 130px 44px; gap: 8px; align-items: center; margin: 3px 0; }
+  .sl span:last-child { text-align: right; color: #f2c46a; }
+  input[type=range] { width: 100%; accent-color: #e4a050; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="hud">
+  <div id="cockpit">
+    <div class="pane" id="pn0"></div><div class="pane" id="pn1"></div><div class="pane" id="pn2"></div>
+    <div id="ck">
+      <div id="ck-compass"><div id="ck-strip"></div></div>
+      <svg id="ck-ret" viewBox="-110 -110 220 220" fill="none" stroke="#8fe0f0" stroke-width="1.6">
+        <circle r="30" stroke-dasharray="34 13.1" transform="rotate(-36)"/><circle r="2" fill="#d8f8ff" stroke="none"/>
+        <path d="M0-52V-38M0 52V38M-52 0H-38M52 0H38"/><path d="M-12-12-6-6M12-12 6-6M-12 12-6 6M12 12 6 6" stroke-width="1"/>
+        <circle r="70" stroke="rgba(143,224,240,.25)" stroke-dasharray="88 400" transform="rotate(-36)"/><circle id="ck-ammoarc" r="70" stroke="#f2c46a" stroke-width="3" stroke-dasharray="88 400" transform="rotate(-36)"/>
+        <circle r="70" stroke="rgba(143,224,240,.25)" stroke-dasharray="88 400" transform="rotate(144)"/><circle id="ck-sharc" r="70" stroke-width="3" stroke-dasharray="88 400" transform="rotate(144)"/>
+        <text id="ck-ammo" x="84" y="6" fill="#f2c46a" stroke="none" font-size="20" font-family="Courier New, monospace">18</text>
+        <text x="-104" y="5" fill="#8fe0f0" stroke="none" font-size="10" font-family="Courier New, monospace">SH</text>
+      </svg>
+      <div id="ck-rng">RNG ---</div>
+      <div id="ck-lock"><s></s><s></s><s></s><s></s><span id="ck-locklab"></span></div>
+      <div id="ck-warn"></div>
+      <div id="ck-sys"></div><canvas id="ck-radar" width="160" height="160"></canvas>
+      <div id="ck-wpn"></div>
+      <div id="ck-boot"></div>
+    </div>
+    <div id="ck-frame"><i class="scan"></i><i class="sl"></i><i class="sr"></i><i class="ft"></i><i class="fd"></i><i class="fe"></i></div>
+    <div id="ck2"><div id="ck-vit"></div></div>
+  </div>
+  <div id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="state"></div>
+  <div id="tl" class="box"><div class="lab">Score, first to 400</div><div class="big" id="kills"></div><div class="lab" id="timer"></div>
+    <div class="lab" id="meterlab" style="margin-top:8px">Titan 0%</div><div class="bar" style="width:150px"><div id="meterfill"></div></div></div>
+  <div id="foe" class="box"><div class="lab">Opposition Titan</div><div class="bar"><div id="foefill"></div></div></div>
+  <div id="tr" class="box">P: tuning &nbsp; T: restart &nbsp; Esc: free the mouse</div>
+  <div id="bl" class="box"><div class="lab" id="lab1">Pilot</div><div class="bar"><div id="hpfill"></div></div><div class="lab" style="margin-top:6px">Speed</div><div class="big" id="speed">0.0</div></div>
+  <div id="br" class="box"><div class="lab" id="wname">Carbine</div><div class="big" id="ammo">24</div></div>
+  <div id="msg" class="box"></div>
+</div>
+
+<div id="map">
+  <svg id="map-svg"></svg>
+  <div id="map-marks"></div>
+  <div id="map-box"></div>
+  <div id="map-mode" class="box">Stops: each click adds a stop on the way. Let go of Shift and click where they should end up.</div>
+  <div id="map-top" class="box"></div>
+  <div id="map-supply" class="box"><div class="lab">Supply to spend</div><div class="srow"><b id="sup-n">0</b><div id="sup-bar"><div id="sup-fill"></div><div id="sup-ticks"></div></div></div><div class="lab" id="sup-rate"></div></div>
+  <div id="map-hint" class="box">Tab: back to the fight<br>Left click: pick a squad, then send it<br>Left drag: pick several<br>Shift + click: add stops on the way<br>Support card, then click: use it there<br>Right drag: move the map<br>Middle drag: turn and tilt it<br>Wheel: closer or further<br>Esc: let go of the squads</div>
+  <div id="map-sel" class="box"></div>
+  <div id="map-bottom" class="box"><div class="mb-row"><div><div class="lab">How your troops arrive</div><div id="map-doc" class="row"></div></div><div><div class="lab">Support: pick one, then click the map</div><div id="map-util"></div></div></div><div class="lab" style="margin-top:6px">Your army list</div><div id="map-deck"></div></div>
+</div>
+
+<div id="start" class="box">
+  <h1>AFTERBURN</h1>
+  <p><i>Prototype 5. You command one side of a fight across a town, a refinery and the hills above them, and you are also in it.</i></p>
+  <p>Two sides fight over five points: the town square, the refinery, the lodge in the pines, the relay up on the ridge and the depot. Every second, each point you hold adds to your score, and the first side to 400 takes the field. You are the commander: you spend supply to bring squads and vehicles onto the field, you tell them exactly where to go, and you can call an air strike, a shield dome, a medical crate or a drop pod onto any spot on the map. You are also a pilot on the ground with a jumpkit, and your Titan is yours to call down.</p>
+  <p>Press <b>Tab</b> at any time to open the battle map. It also opens while you are down and waiting to come back. On the map you can see every squad and what it is doing, bring in new ones, and give orders.</p>
+  <div id="setup"></div>
+  <details><summary>Controls</summary>
+  <table>
+    <tr><td>Tab</td><td>The battle map: deploy, pick squads, give orders</td></tr>
+    <tr><td>W A S D</td><td>Move</td></tr>
+    <tr><td>Shift</td><td>Sprint. In a Titan, Shift is a dash.</td></tr>
+    <tr><td>Space</td><td>Jump. Press it again in the air for a second jump.</td></tr>
+    <tr><td>Left Ctrl</td><td>Slide while you are sprinting, crouch while you are slow (C works too)</td></tr>
+    <tr><td>Mouse</td><td>Look, and hold the left button to fire</td></tr>
+    <tr><td>Q</td><td>Swap between your primary and the charge rifle</td></tr>
+    <tr><td>R</td><td>Reload</td></tr>
+    <tr><td>V</td><td>Call your Titan down where you are looking</td></tr>
+    <tr><td>E</td><td>Climb into your Titan, or climb out of it</td></tr>
+    <tr><td>In a Titan</td><td>Left button fires the 40 mm cannon, right button fires the rocket pod, F throws a punch</td></tr>
+    <tr><td>On the map</td><td>Left click a squad's card to pick it, or drag a box round several. Left click the ground or a point to send them there. Hold Shift and click to add stops on the way, then let go of Shift and click where they should end up. Right drag moves the map, middle drag turns it.</td></tr>
+  </table></details>
+  <div class="row"><button class="go" id="go" style="margin-top:0">Drop in</button><button id="lab">Open the sound lab</button></div>
+  <p class="lab" style="margin-top:12px">Sound effects generated with ElevenLabs.</p>
+</div>
+
+<div id="panel" class="box">
+  <h1 style="font-size:16px">TUNING</h1>
+  <p><i>Change a number, close the panel and feel the difference. These save on this browser.</i></p>
+  <div id="sliders"></div>
+  <h2>Look</h2>
+  <div class="row"><button id="t-outline">Outlines</button><button id="t-block">Figure blocks</button><button id="t-pal">Strict palette</button></div>
+  <h2>Sound</h2>
+  <label class="sl"><span>Volume</span><input type="range" id="t-vol" min="0" max="1.2" step="0.01"><span id="t-volv"></span></label>
+  <div class="row" style="margin-top:4px"><button id="t-snd">Sound is on</button><button id="t-lab">Open the sound lab</button></div>
+  <h2>Weather</h2>
+  <div class="row" id="skies"></div>
+  <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
+  <p id="t-note" class="lab"></p>
+</div>
+<script src="punch/punch.js"></script>
+<script src="punch/punch-lab.js"></script>
+<script src="cb/genbuild.js"></script>
+<script src="cb/machines.js"></script>
+<script src="cb/soldiers.js"></script>
+<script src="cb/cbmechdata.js"></script>
+<script src="cb/cbmech.js"></script>
+<script src="cb/cbnature.js"></script>
+<script src="cb/cbweather.js"></script>
+<script type="module" src="mf/game.js"></script>
+</body>
+</html>
