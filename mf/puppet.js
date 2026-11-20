@@ -35,6 +35,7 @@ export function puppet(M, o) {
   const side = (n) => { const L = bone("Left" + n), R = bone("Right" + n); return root.worldToLocal(L.getWorldPosition(V())).x > 0 ? [R, L] : [L, R]; };   // [the one on -x, the one on +x]
   const hipsB = bone("Hips"), rHips = rest(hipsB), FULL = o.full.map(([n, j]) => [rest(bone(n)), j]);
   const up = side("UpLeg"), lo = side("Leg"), ft = side("Foot"), ar = side("Arm"), fa = side("ForeArm"), ha = side("Hand");
+  if (o.armScale && o.armScale !== 1) { for (const b of ar) b.scale.setScalar(o.armScale); root.updateWorldMatrix(true, true); }   // longer, heavier arms, for a model that has to reach round a big rifle
   const LEG = [0, 1].map((i) => ({ up: rest(up[i], lo[i]), lo: rest(lo[i], ft[i]), ft: rest(ft[i]) })), ARM = [0, 1].map((i) => ({ up: rest(ar[i], fa[i]), lo: rest(fa[i], ha[i]) }));
   const hipLift = root.worldToLocal(hipsB.getWorldPosition(V())).y - o.hipY, ankLift = root.worldToLocal(ft[0].getWorldPosition(V())).y - o.ankle;
   // turn a bone so it sits as the skeleton's joint does (full), or so it points along a line (aim)

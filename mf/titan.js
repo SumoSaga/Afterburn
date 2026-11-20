@@ -17,6 +17,18 @@ const SCHEMES = {
 const L1 = 1.3, L2 = 1.35, ANK = .27, HIP_Y = 2.85, HIP_X = .66, KNEEL = 1.25, SH_X = 1.5, SH_Y = 1.74, A1 = 1.5, A2 = 1.45;
 // The mech's body is a rigged model (models/mech.glb) worn over this walker: see mf/puppet.js. The walker is the fallback.
 const MODEL = await loadModel("mech.glb", "mfMech");
+/* The mech's rifle is a model too (models/titan-rifle.glb). It is one solid mesh lying corner to corner in its file, so it
+   is turned here to point along -z from the butt of its stock, and its drum is cut away by where it sits (under the
+   receiver, ahead of the grip) so it can come off in a reload. About 3.1 m long. */
+const TRIFLE = await loadModel("titan-rifle.glb", "mfTRifle"), TS = 2.4, R2 = Math.SQRT1_2;
+function modelGun(team) { let src = null; TRIFLE.scene.traverse((o) => { if (o.isMesh) src = o; }); const pos = src.geometry.attributes.position, idx = src.geometry.index.array, body = [], drum = [];
+  for (let i = 0; i < idx.length; i += 3) { let ul = 9, uh = -9, zm = 0, zh = -9; for (let k = 0; k < 3; k++) { const v = idx[i + k], u = (pos.getX(v) + pos.getY(v)) * R2, z = pos.getZ(v); ul = Math.min(ul, u); uh = Math.max(uh, u); zm += z / 3; zh = Math.max(zh, z); }
+    (ul > -.335 && uh < -.03 && zm < -.065 && zh < -.035 ? drum : body).push(idx[i], idx[i + 1], idx[i + 2]); }
+  const M = new THREE.Matrix4().set(TS * R2, -TS * R2, 0, 0, 0, 0, TS, -.03 * TS, -TS * R2, -TS * R2, 0, -.68 * TS, 0, 0, 0, 1), mat = TRIFLE.mats[team] || TRIFLE.mats.you;
+  const part = (ix) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", pos.clone()); g.setAttribute("normal", src.geometry.attributes.normal.clone()); g.setAttribute("uv", src.geometry.attributes.uv.clone()); g.setIndex(ix); g.applyMatrix4(M); const m = new THREE.Mesh(g, mat); m.castShadow = true; m.frustumCulled = false; return m; };
+  const g = new THREE.Group(), mag = new THREE.Group(), dm = part(drum); g.add(part(body)); mag.add(dm); g.add(mag);
+  const at = (u, z) => new THREE.Vector3(0, (z - .03) * TS, -(u + .68) * TS);
+  return { g, mag, drum: dm, grip: at(-.4, -.1), fore: at(.05, -.1), well: at(-.18, -.15), muzzle: at(.675, .03) }; }
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeRig(team, o = {}) {
@@ -95,8 +107,9 @@ export function makeRig(team, o = {}) {
     const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)); v2.set(px, py, pz).addScaledVector(v1, -(px * v1.x + py * v1.y + pz * v1.z)); if (v2.lengthSq() < 1e-6) v2.set(0, -1, 0); v2.normalize();
     v3.copy(v1).multiplyScalar(a).addScaledVector(v2, h);   // the elbow, from the shoulder
     q1.setFromUnitVectors(DOWN, v2.copy(v3).normalize()); A.up.quaternion.copy(q1); v2.copy(v1).multiplyScalar(d).sub(v3).normalize(); q2.setFromUnitVectors(DOWN, v2); A.fore.quaternion.copy(q1).invert().multiply(q2); }
-  const GRIP = new THREE.Vector3(0, -.5, -.62), FORE = new THREE.Vector3(0, -.42, -2.15), tR = new THREE.Vector3(), tL = new THREE.Vector3(), hang = new THREE.Vector3(), swing = new THREE.Vector3(), BLADE = .62;
-  const rig = { root, hips, torso, hatch, muzzle, pod, flash, gun, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
+  const HOLD = { x: 1.34, y: 1.5, z: -.72, blade: .62, grip: new THREE.Vector3(0, -.5, -.62), fore: new THREE.Vector3(0, -.42, -2.15), well: null, mag: null }, hipL = new THREE.Vector3(-1.5, -.3, .5), drops = [], key = (u, K) => { if (u <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (u <= K[i][0]) { const a = K[i - 1], b = K[i], k = (u - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * (k * k * (3 - 2 * k)); } return K[K.length - 1][1]; }; let reWas = -1;
+  const tR = new THREE.Vector3(), tL = new THREE.Vector3(), hang = new THREE.Vector3(), swing = new THREE.Vector3();
+  const rig = { root, hips, torso, hatch, muzzle, pod, flash, gun, hold: HOLD, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
     pose(dt, s) {
       const sp = Math.abs(s.speed || 0), sg = (s.speed || 0) < 0 ? -1 : 1, amt = clamp(sp / 1.4, 0, 1), kn = clamp(s.kneel || 0, 0, 1), limp = s.limp ? 1 : 0;
       rig.phase = (rig.phase + sp * dt / 3.6) % 1;
@@ -110,12 +123,21 @@ export function makeRig(team, o = {}) {
         L.thigh.rotation.x = dir + k1; L.thigh.rotation.z = L.sd * .05; L.shin.rotation.x = -(Math.PI - k2); L.foot.rotation.x = -(L.thigh.rotation.x + L.shin.rotation.x) + (lift > 0 ? -.25 * Math.sin(Math.PI * clamp((p - .62) / .38, 0, 1)) : 0) - (i ? 0 : kn * .5); });
       // it turns to its aim heavily, a little behind the pilot's hand
       const kY = 1 - Math.exp(-dt * 6.5); rig.aimYaw += ((s.aimYaw || 0) - rig.aimYaw) * kY; rig.aimPitch += ((s.aimPitch || 0) - rig.aimPitch) * kY;
-      const rec = s.recoil || 0, pu = s.punch || 0, lowTo = Math.max(limp, kn * .85); rig.low += (lowTo - rig.low) * (1 - Math.exp(-dt * 5)); const low = rig.low, up = 1 - low;
+      const H = rig.hold, BLADE = H.blade, re = H.mag && s.reload >= 0 && !limp ? s.reload : -1, rec = s.recoil || 0, pu = s.punch || 0, lowTo = Math.max(limp, kn * .85); rig.low += (lowTo - rig.low) * (1 - Math.exp(-dt * 5)); const low = rig.low, up = 1 - low;
       // a rifleman's stance: the body turned off the line of fire, left shoulder forward, the rifle across it and pointing where it looks
       torso.rotation.set(-kn * .2 - limp * .45 + rec * .03 + .05 * up, (rig.aimYaw - BLADE * up) * (1 - limp) + pu * .7 - hips.rotation.y, -hips.rotation.z * .6, "YXZ");
       hatch.rotation.x = clamp(s.hatch || 0, 0, 1) * 1.95;
-      gun.position.set(1.34 - low * .1, 1.5 - low * .5 + w * .03 * amt, -.72 + low * .1); gun.rotation.set(rig.aimPitch * up - low * .95 + rec * .05, BLADE * up + low * .15, w * .03 * amt - low * .2, "YXZ"); gun.translateZ(rec * .24); gun.updateMatrix();
-      tR.copy(GRIP).applyMatrix4(gun.matrix); tL.copy(FORE).applyMatrix4(gun.matrix);
+      /* A reload, the way a big walker does it: the rifle is swung up and rolled over so the drum faces out, the left hand
+         leaves the handguard, takes the drum and pulls it down and off (it falls), goes to the hip for a fresh one, pushes
+         it up into the well, and goes back to the handguard as the rifle comes down. re runs 0 to 1. */
+      const rUp = re < 0 ? 0 : key(re, [[0, 0], [.12, 1], [.8, 1], [1, 0]]), hk = re < 0 ? 0 : key(re, [[0, 0], [.08, 0], [.2, 1], [.32, 1], [.42, 2], [.5, 2], [.6, 1], [.7, 1], [.84, 0], [1, 0]]), mOff = re < 0 ? 0 : re < .33 ? key(re, [[0, 0], [.22, 0], [.32, -.9]]) : key(re, [[.33, -1.4], [.58, -1.4], [.68, 0]]), seat = re < 0 ? 0 : key(re, [[.66, 0], [.685, 1], [.76, 0]]);
+      gun.position.set(H.x - low * .1 - rUp * .1, H.y - low * .5 + w * .03 * amt + rUp * .12 + seat * .07, H.z + low * .1); gun.rotation.set(rig.aimPitch * up * (1 - rUp) - low * .95 + rec * .05 + rUp * .3, BLADE * up + low * .15 + rUp * .1, w * .03 * amt - low * .2 - rUp * .45, "YXZ"); gun.translateZ(rec * .24); gun.updateMatrix();
+      tR.copy(H.grip).applyMatrix4(gun.matrix); tL.copy(H.fore).applyMatrix4(gun.matrix);
+      if (H.mag) { H.mag.position.y = mOff; H.mag.visible = re < 0 || re < .33 || re > .52;
+        if (re >= 0) { hang.copy(H.well); hang.y += mOff - .1; hang.applyMatrix4(gun.matrix); if (hk <= 1) tL.lerp(hang, hk); else tL.copy(hang).lerp(hipL, hk - 1); }
+        if (re >= .33 && reWas < .33 && reWas >= 0 && root.parent) { const d = H.drum.clone(); H.mag.updateWorldMatrix(true, false); d.applyMatrix4(H.mag.matrixWorld); d.matrixAutoUpdate = true; d.matrix.decompose(d.position, d.quaternion, d.scale); root.parent.add(d); drops.push({ m: d, vy: 0, t: 0, floor: root.position.y + 4 }); }   // the spent drum goes to the ground
+        reWas = re; }
+      for (let i = drops.length - 1; i >= 0; i--) { const d = drops[i]; d.t += dt; d.vy -= 9.8 * U * dt; d.m.position.y = Math.max(d.floor, d.m.position.y + d.vy * dt); if (d.m.position.y > d.floor) d.m.rotation.x += dt * 2; if (d.t > 6) { d.m.removeFromParent(); drops.splice(i, 1); } }
       if (pu > 0) { swing.set(.3 - pu * 1.2, 2.3 - pu * 1.2, -2.3); tL.lerp(swing, Math.min(1, pu * 2.2)); }   // the left hand lets go of the rifle and brings the blade across
       if (limp) { hang.set(-SH_X - .2, SH_Y - 2.6, .3); tL.lerp(hang, .9); }
       reach(armR, tR, .9, -1, .5); reach(armL, tL, -.8, -1, .2 - pu);
@@ -133,8 +155,11 @@ export const TITAN = { HIP_Y, KNEEL, CHEST: HIP_Y + .35 + 1.45 };
 
 /* hang the model on a walker and make the walker drive it */
 function puppet(rig, P) {
-  P.gun.scale.setScalar(.82);
-  const W = wear(MODEL, { root: rig.root, height: 5.8, turn: Math.PI, team: P.team, hips: rig.hips, hipY: HIP_Y - .06, ankle: ANK, fwd: [0, 0, -1], full: [["Spine", rig.torso]], keep: [P.gun],
+  const keep = [P.gun];
+  if (TRIFLE) { const G = modelGun(P.team); P.gun.traverse((o) => { if (o.isMesh && o !== rig.flash) o.visible = false; }); P.gun.add(G.g); rig.muzzle.position.copy(G.muzzle);
+    Object.assign(rig.hold, { x: 1.2, y: .95, z: -.05, blade: .55, grip: G.grip, fore: G.fore, well: G.well, mag: G.mag, drum: G.drum }); }   // carried low at the hip, both hands on it, the body turned a little off the line
+  else P.gun.scale.setScalar(.82);
+  const W = wear(MODEL, { root: rig.root, height: 5.8, turn: Math.PI, team: P.team, hips: rig.hips, hipY: HIP_Y - .06, ankle: ANK, fwd: [0, 0, -1], full: [["Spine", rig.torso]], keep, armScale: TRIFLE ? 1.2 : 1,
     legs: P.legs.map((L) => ({ foot: L.foot, sd: L.sd })), arms: [P.armR, P.armL].map((A) => ({ hand: A.hand, sd: A.sd, pole: [A.sd * .9, -1, .6], poleIn: rig.torso })) });
   const pose0 = rig.pose; rig.model = W.box;
   rig.pose = (dt, s) => { pose0(dt, s); P.bladeBack.visible = P.bladeHand.visible = false; W.update(); };   // no blade with the model on: the melee is a swing of the left arm
