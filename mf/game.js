@@ -14,7 +14,8 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
 /* SOUND HOOKS (keep these when editing this file): the Punch package in punch/punch.js makes every sound. Each snd(...) call below is one hook.
    They are safe when sound is missing or still loading. The list of hooks is in punch/HOOKS.md. */
-const SND = window.PUNCH || null, xyz = (v) => [v.x, v.y, v.z];
+const SND = window.PUNCH || null; try { if (SND && !localStorage.getItem("ab-snd-off-1")) { localStorage.setItem("ab-snd-off-1", "1"); SND.enable(false); } } catch (e) {}   // sound starts off until it has been reworked; after that the choice in Settings is kept
+const xyz = (v) => [v.x, v.y, v.z];
 const snd = (name, o) => { try { return SND ? SND.play(name, o) : null; } catch (e) { return null; } };
 const surface = (p) => p.y < .12 ? "impact_dirt" : (Math.floor(p.x / 6) + Math.floor(p.z / 6)) & 1 ? "impact_metal" : "impact_concrete";
 const angD = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
@@ -445,7 +446,7 @@ function restart() { for (const rp of RPS.values()) rp.titan = null; for (const 
 /* ---------- input ---------- */
 const cv = renderer.domElement;
 function wantLock() { try { const r = cv.requestPointerLock(); if (r && r.catch) r.catch(() => { noLock = true; }); } catch (e) { noLock = true; } }
-document.addEventListener("pointerlockchange", () => { locked = document.pointerLockElement === cv; if (!locked) { mouseDown = false; for (const k in K) K[k] = false; } });
+document.addEventListener("pointerlockchange", () => { const was = locked; locked = document.pointerLockElement === cv; if (!locked) { mouseDown = false; for (const k in K) K[k] = false; if (was && started && !panelOpen && !MAP.on) openSettings(); } });   // Escape frees the mouse, and that is the way into Settings
 document.addEventListener("pointerlockerror", () => { noLock = true; });
 const active = () => started && !panelOpen && (locked || noLock || MAP.on);
 function toggleMap() { if (MAP.on) { setMap(false); wantLock(); } else { setMap(true); for (const k in K) K[k] = false; mouseDown = false; if (document.pointerLockElement) document.exitPointerLock(); } }
@@ -487,7 +488,23 @@ $("setup").addEventListener("click", (e) => { const b = e.target.closest("button
 buildSetup();
 $("m-nav").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return; { const bay = b.dataset.tab === "pilot" || b.dataset.tab === "titan"; if (bay !== GARAGE.on) { const f = $("m-fade"); f.style.transition = "none"; f.style.opacity = 1; requestAnimationFrame(() => requestAnimationFrame(() => { f.style.transition = "opacity .5s"; f.style.opacity = 0; })); } GARAGE.setTab(b.dataset.tab); } $("m-main").className = "tab-" + b.dataset.tab; for (const q of $("m-nav").querySelectorAll("button")) q.classList.toggle("on", q === b); snd("selector"); });
 for (const b of document.querySelectorAll("#m-modes button[data-role]")) { b.classList.toggle("on", (MAPKEY.split("-")[2] || "sa")[1] === b.dataset.role); b.onclick = () => { if ((MAPKEY.split("-")[2] || "sa")[1] === b.dataset.role) return; $("map-role").value = b.dataset.role; $("map-go").click(); }; }
-function togglePanel() { panelOpen = !panelOpen; $("panel").style.display = panelOpen ? "block" : "none"; if (panelOpen) { if (document.pointerLockElement) document.exitPointerLock(); } else wantLock(); }
+/* Settings: Escape opens it in a match (the browser frees the mouse on Escape, so losing the mouse is the cue), and the
+   menu has a button for it. It holds what a player would look for: sound on or off and its levels, mouse speed, view. */
+let setOpen = false, setAt = 0;
+function slRow(host, label, mn, mx, st, get, set, show = (v) => v) { const row = document.createElement("label"); row.className = "sl"; const a = document.createElement("span"); a.textContent = label; const r = document.createElement("input"); r.type = "range"; r.min = mn; r.max = mx; r.step = st; r.value = get(); const v = document.createElement("span"); v.textContent = show(+r.value);
+  r.oninput = () => { set(+r.value); v.textContent = show(+r.value); }; row.append(a, r, v); host.append(row); }
+function buildSettings() { const sb = $("s-snd"), mix = $("s-mix"), view = $("s-view"), pc = (v) => Math.round(v * 100) + "%"; mix.innerHTML = view.innerHTML = "";
+  if (SND) { const on = !!SND.SET.on; sb.textContent = on ? "Sound is on" : "Sound is off"; sb.className = on ? "on" : ""; mix.style.opacity = on ? 1 : .45; const lv = (k, label, mx = 1.2) => slRow(mix, label, 0, mx, .01, () => SND.SET[k], (v) => { SND.SET[k] = v; SND.applyMix(); SND.saveMix(); }, pc);
+    lv("master", "Overall volume"); lv("weapons", "Weapons", 1.5); lv("impacts", "Hits and blasts", 1.5); lv("world", "Troops and machines", 1.5); lv("voice", "Voices", 1.5); lv("ambience", "Wind and weather", 1.5); lv("ui", "Menus and markers", 1.5); }
+  else { sb.textContent = "No sound on this browser"; sb.disabled = true; }
+  slRow(view, "Mouse speed", .3, 2.5, .05, () => CFG.sens, (v) => { CFG.sens = v; saveCfg(); }); slRow(view, "Field of view", 70, 115, 1, () => CFG.fov, (v) => { CFG.fov = v; saveCfg(); }); slRow(view, "Pixel size", 1, 6, 1, () => CFG.px, (v) => { CFG.px = v; saveCfg(); makeRTs(); }); }
+function openSettings() { if (setOpen) return; if (panelOpen) togglePanel(); setOpen = true; setAt = performance.now(); panelOpen = true; buildSettings(); $("s-tune").style.display = started ? "" : "none"; $("settings").style.display = "block"; if (document.pointerLockElement) document.exitPointerLock(); }
+function closeSettings(lock) { if (!setOpen) return; setOpen = false; panelOpen = false; $("settings").style.display = "none"; buildPanel(); if (lock && started) wantLock(); }
+$("s-snd").onclick = () => { if (!SND) return; SND.enable(!SND.SET.on); if (SND.SET.on && SND.ctx && SND.ctx.state === "suspended") SND.ctx.resume(); buildSettings(); };
+$("s-close").onclick = () => closeSettings(true); $("s-tune").onclick = () => { closeSettings(false); if (started) togglePanel(); }; $("s-lab").onclick = () => { if (SND && SND.lab) { closeSettings(false); SND.lab.open(); } };
+$("m-settings").onclick = openSettings;
+addEventListener("keydown", (e) => { if (e.code !== "Escape" || e.repeat) return; if (setOpen) { if (performance.now() - setAt > 300) closeSettings(false); } else if (!document.pointerLockElement && (!started || noLock) && !MAP.on) openSettings(); });   // closing with Escape leaves the mouse free: click the field to take it back
+function togglePanel() { if (setOpen) return; panelOpen = !panelOpen; $("panel").style.display = panelOpen ? "block" : "none"; if (panelOpen) { if (document.pointerLockElement) document.exitPointerLock(); } else wantLock(); }
 const SLIDERS = [["px", "Pixel size", 1, 6, 1], ["fov", "Field of view", 70, 115, 1], ["sens", "Mouse speed", .3, 2.5, .05], ["sprint", "Sprint speed", 6, 14, .5], ["jump", "Jump power", 5, 11, .2],
   ["gravity", "Gravity", 12, 34, 1], ["air", "Air control", .5, 6, .25], ["wallTime", "Wall run time", .6, 4, .05], ["wallSpeed", "Wall run speed", 7, 16, .5], ["wallKick", "Wall kick", 3, 11, .5], ["slideBoost", "Slide boost", 0, 7, .5]];
 const SKIES = [["clear", "Clear"], ["overcast", "Overcast"], ["rain", "Rain"], ["storm", "Storm"], ["snow", "Snow"], ["fog", "Fog"]];

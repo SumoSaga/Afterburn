@@ -141,6 +141,7 @@
   @media (max-width: 820px) { #m-side { width: 190px; padding-left: 20px; } #m-side h1 { font-size: 28px; } #m-nav button { font-size: 18px; } #m-main { padding: 30px 16px; } .tiles { grid-template-columns: 1fr; } }
 
   #panel { display: none; width: min(440px, 88vw); }
+  #settings { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 20px 26px; width: min(460px, 90vw); max-height: 92vh; overflow-y: auto; z-index: 40; background: rgba(20,16,12,.96); }
   h1 { font-size: 22px; margin: 0; letter-spacing: .12em; color: #f2c46a; }
   h2 { font-size: 13px; margin: 14px 0 6px; letter-spacing: .1em; color: #f2c46a; text-transform: uppercase; }
   p { margin: 8px 0; color: #e2d0ae; }
@@ -158,7 +159,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "21";
+  window.AB_BUILD = "22";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "engine", "figure", "game", "garage", "hands", "mapgen", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -193,7 +194,7 @@
   <div id="tl" class="box"><div class="lab">The operation</div><div class="big" id="kills"></div><div class="lab" id="timer"></div>
     <div class="lab" id="meterlab" style="margin-top:8px">Titan 0%</div><div class="bar" style="width:150px"><div id="meterfill"></div></div></div>
   <div id="foe" class="box"><div class="lab">Opposition Titan</div><div class="bar"><div id="foefill"></div></div></div>
-  <div id="tr" class="box">P: tuning &nbsp; T: restart &nbsp; Esc: free the mouse</div>
+  <div id="tr" class="box">Esc: settings &nbsp; P: tuning &nbsp; T: restart</div>
   <div id="bl" class="box"><div class="lab" id="lab1">Pilot</div><div class="bar"><div id="hpfill"></div></div><div class="lab" style="margin-top:6px">Speed</div><div class="big" id="speed">0.0</div></div>
   <div id="br" class="box"><div class="lab" id="wname">Carbine</div><div class="big" id="ammo">24</div></div>
   <div id="msg" class="box"></div>
@@ -216,7 +217,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 21 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 22 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -225,6 +226,7 @@
       <button data-tab="group">Battlegroup</button>
       <button data-tab="field">Field</button>
       <button data-tab="controls">Controls</button>
+      <button id="m-settings">Settings</button>
     </nav>
     <div class="m-foot"><button id="lab">Sound lab</button><br>Sound effects generated with ElevenLabs.</div>
   </div>
@@ -279,6 +281,17 @@
  </div>
 </div>
 
+<div id="settings" class="box">
+  <h1 style="font-size:16px">SETTINGS</h1>
+  <h2>Sound</h2>
+  <p id="s-sndnote"><i>Sound is off to start with, because it is due to be reworked. Turn it on here if you want to hear it as it stands.</i></p>
+  <div class="row"><button id="s-snd">Sound is off</button></div>
+  <div id="s-mix"></div>
+  <h2>Mouse and view</h2>
+  <div id="s-view"></div>
+  <div class="row" style="margin-top:14px"><button id="s-close" class="on">Back</button><button id="s-tune">Tuning</button><button id="s-lab">Sound lab</button></div>
+  <p class="lab">Escape opens and closes this page. These save on this browser.</p>
+</div>
 <div id="panel" class="box">
   <h1 style="font-size:16px">TUNING</h1>
   <p><i>Change a number, close the panel and feel the difference. These save on this browser.</i></p>
@@ -293,15 +306,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=21"></script>
-<script src="punch/punch-lab.js?v=21"></script>
-<script src="cb/genbuild.js?v=21"></script>
-<script src="cb/machines.js?v=21"></script>
-<script src="cb/soldiers.js?v=21"></script>
-<script src="cb/cbmechdata.js?v=21"></script>
-<script src="cb/cbmech.js?v=21"></script>
-<script src="cb/cbnature.js?v=21"></script>
-<script src="cb/cbweather.js?v=21"></script>
+<script src="punch/punch.js?v=22"></script>
+<script src="punch/punch-lab.js?v=22"></script>
+<script src="cb/genbuild.js?v=22"></script>
+<script src="cb/machines.js?v=22"></script>
+<script src="cb/soldiers.js?v=22"></script>
+<script src="cb/cbmechdata.js?v=22"></script>
+<script src="cb/cbmech.js?v=22"></script>
+<script src="cb/cbnature.js?v=22"></script>
+<script src="cb/cbweather.js?v=22"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
