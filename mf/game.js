@@ -37,7 +37,7 @@ function friction(B, f, dt) { const s = Math.hypot(B.vel.x, B.vel.z); if (s < .0
 /* ---------- the pilot ---------- */
 const SPAWN = [0, .1, 126];
 const P = { pos: V3(), vel: V3(), h: 1.8, r: .35, eye: 1.68, yaw: 0, pitch: 0, roll: 0, grounded: false, canDouble: true, jumpBuf: 0, coyote: 0, sliding: false, slideCd: 0, crouchLatch: false,
-  wall: null, lastWall: null, wallCd: 0, mantle: null, hp: 100, hurtT: 9, dead: 0, dip: 0, bob: 0, shake: 0, weapon: 0, ammo: 24, reload: 0, swapT: -1, swapFrom: "carbine", swapTo: 0, nadeT: -1, meleeT: -1, nades: 2, fireCd: 0, kick: 0, spread: 0, charge: 0,
+  wall: null, lastWall: null, wallCd: 0, mantle: null, hp: 125, hurtT: 9, dead: 0, dip: 0, bob: 0, shake: 0, weapon: 0, ammo: 24, reload: 0, swapT: -1, swapFrom: "carbine", swapTo: 0, nadeT: -1, meleeT: -1, nades: 2, fireCd: 0, kick: 0, spread: 0, charge: 0,
   meter: 0, titan: null, mine: null, onLand(v) { P.dip = clamp(v * .012, 0, .25); } };
 const CK = { mode: "off", t: 0, glitch: 0 };   // the cockpit screens: off, dark, boot, on, shut
 const K = {}; let mouseDown = false, started = false, panelOpen = false, locked = false, noLock = false;
@@ -48,12 +48,25 @@ function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .3 : 0), z
 const _down = V3(0, -1, 0);
 function groundBelow() { const t = rayWorld(P.pos.clone().setY(P.pos.y + .1), _down, 50); return P.pos.y + .1 - t; }
 function endWall(cd) { const w = P.wall; P.lastWall = { ax: w.ax, n: w.n, c: P.pos.getComponent(w.ax) }; P.wall = null; P.wallCd = cd; }
-function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; const north = B.mp && !MY.south, hm = homeOf(north ? "foe" : "you"), tz = north ? -400 : 400, pt0 = POINTS.find((p) => p.sector === Math.min(OP.sector, SECN - 1)) || { x: hm[0], z: hm[1] - tz }; P.pos.set(hm[0] + ox, groundH(hm[0] + ox, hm[1]) + .1, hm[1]); P.vel.set(0, 0, 0); P.yaw = Math.atan2(-(pt0.x - hm[0]), -(pt0.z - hm[1])); P.pitch = 0; P.hp = 100; P.dead = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
+function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; const north = B.mp && !MY.south, hm = homeOf(north ? "foe" : "you"), tz = north ? -400 : 400, pt0 = POINTS.find((p) => p.sector === Math.min(OP.sector, SECN - 1)) || { x: hm[0], z: hm[1] - tz }; P.pos.set(hm[0] + ox, groundH(hm[0] + ox, hm[1]) + .1, hm[1]); P.vel.set(0, 0, 0); P.yaw = Math.atan2(-(pt0.x - hm[0]), -(pt0.z - hm[1])); P.pitch = 0; P.hp = HP; P.dead = 0; P.mags = { 0: PW[LOAD.weapon] ? PW[LOAD.weapon].mag : 28, 2: PW.pistol.mag }; P.weapon = 0; P.ads = 0; P.adsHeld = false; P.grap = null; P.stimT = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; }
 
+function useKit() { if (P.dead > 0 || P.seq || !started || MAP.on) return; if (P.grap) { endGrapple(); return; } if (P.kitCd > 0) { snd("dry"); return; }
+  if (LOAD.kit === "stim") { P.stimT = 3.5; P.kitCd = 18; P.hurtT = 99; snd("raise", { pitch: 1.4, gain: 1.3 }); say("Stim.", 1); return; }
+  aimRay(0); const d = rayWorld(_o, _d, 28); if (d >= 28) { snd("dry"); say("Nothing within 28 metres for the line to bite.", 1.5); return; }
+  P.grap = { at: _o.clone().addScaledVector(_d, d - .2), t: 0 }; P.reload = 0; P.charge = 0; snd("swap", { pitch: 1.6, gain: 1.4 }); if (!ROPE.parent) scene.add(ROPE); }
+function endGrapple() { if (!P.grap) return; P.kitCd = 6 + 8 * clamp(P.grap.t / 2.4, 0, 1); P.grap = null; ROPE.visible = false; P.canDouble = true; snd("swap", { pitch: .9 }); }
+const ROPE = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V3(), V3()]), new THREE.LineBasicMaterial({ color: "#d8d2c0" })); ROPE.frustumCulled = false; ROPE.visible = false;
+function stepKit(dt) { P.kitCd = Math.max(0, (P.kitCd || 0) - dt); P.stimT = Math.max(0, (P.stimT || 0) - dt); if (P.stimT > 0) P.hurtT = Math.max(P.hurtT, 5);
+  const s = hs(); if (s > 13.5) { const ns = Math.min(18, s - (s - 13.5) * .9 * dt); P.vel.x *= ns / s; P.vel.z *= ns / s; }   // above 13.5 the air takes a little back; 18 is the most there is
+  const gp = P.grap; if (!gp) return; gp.t += dt; const cx = P.pos.x, cy = P.pos.y + P.h * .6, cz = P.pos.z, dx = gp.at.x - cx, dy = gp.at.y - cy, dz = gp.at.z - cz, d = Math.hypot(dx, dy, dz);
+  if (d < 2.3 || gp.t > 2.4 || P.titan || P.dead > 0 || P.jumpBuf > 0) { if (P.jumpBuf > 0) { P.jumpBuf = 0; P.vel.y = Math.max(P.vel.y, 3) + 2.5; } endGrapple(); return; }
+  if (P.grounded && dy > .5) { P.grounded = false; P.pos.y += .06; P.vel.y = Math.max(P.vel.y, 3.5); } P.sliding = false; if (P.wall) { P.wall = null; }
+  const pull = 44 * dt; P.vel.x += dx / d * pull; P.vel.y += dy / d * pull + CFG.gravity * .75 * dt; P.vel.z += dz / d * pull; const sp = Math.hypot(P.vel.x, P.vel.y, P.vel.z); if (sp > 18) P.vel.multiplyScalar(18 / sp);
+  const hand = V3(cx, cy - .15, cz).addScaledVector(_r, -.25); ROPE.geometry.setFromPoints([toU(hand), toU(gp.at)]); ROPE.visible = true; }
 function stepPilot(dt) {
-  P.jumpBuf -= dt; P.coyote -= dt; P.slideCd -= dt; P.wallCd -= dt; P.hurtT += dt;
+  P.jumpBuf -= dt; P.coyote -= dt; P.slideCd -= dt; P.wallCd -= dt; P.hurtT += dt; if (P.dead <= 0) stepKit(dt);
   if (P.dead > 0) { P.dead -= dt; if (P.dead <= 0) { respawn(); if (B.mp === "guest") relay("back", 1); else spend(B.mp && !MY.south ? "foe" : "you", 1); say("You are back at your drop point. Click to take the mouse back.", 3); if (MAP.auto) setMap(false); } return; }
-  if (P.hurtT > 4 && P.hp < 100) P.hp = Math.min(100, P.hp + 25 * dt);
+  if (P.hurtT > 4.5 && P.hp < HP) P.hp = Math.min(HP, P.hp + 45 * dt);
   if (P.seq) { stepSeq(dt); if (!P.titan) return; }
   if (P.titan) return stepRide(dt);
   if (P.mantle) { const m = P.mantle; m.t += dt / m.dur; const k = Math.min(1, m.t);
@@ -66,7 +79,7 @@ function stepPilot(dt) {
 
   if (P.wall) {
     const w = P.wall; w.t += dt; P.canDouble = true;
-    w.sp = Math.min(Math.max(w.sp, CFG.wallSpeed * .8) + 6 * dt, Math.max(w.sp, CFG.wallSpeed));
+    w.sp = Math.min(Math.max(w.sp, CFG.wallSpeed * .8) + 6 * dt, Math.max(w.sp, CFG.wallSpeed * (P.stimT > 0 ? 1.4 : 1)));
     P.vel.x = w.tx * w.sp; P.vel.z = w.tz * w.sp;
     const late = w.t > CFG.wallTime * .7; P.vel.y = late ? P.vel.y - CFG.gravity * .45 * dt : Math.max(P.vel.y - 9 * dt, 0);
     const b = nearWall(w.ax, w.n);
@@ -74,11 +87,11 @@ function stepPilot(dt) {
     else if (!b || w.t > CFG.wallTime || P.grounded || (mz < 0)) endWall(.25);
   } else if (P.grounded) {
     P.canDouble = true; P.lastWall = null; P.coyote = .1;
-    if (crouchKey && !P.sliding && !P.crouchLatch) { if (hs() > 6.5) { P.sliding = true; if (P.slideCd <= 0) { const s = hs(), k = (s + CFG.slideBoost) / s; P.vel.x *= k; P.vel.z *= k; P.slideCd = 1.8; } } else P.crouchLatch = true; }
+    if (crouchKey && !P.sliding && !P.crouchLatch) { if (hs() > 5.6) { P.sliding = true; if (P.slideCd <= 0) { const s = hs(), k = (s + CFG.slideBoost) / s; P.vel.x *= k; P.vel.z *= k; P.slideCd = 1.8; } } else P.crouchLatch = true; }
     if (P.sliding && (!crouchKey || hs() < 3.5)) { P.sliding = false; if (crouchKey) P.crouchLatch = true; }
     if (P.jumpBuf > 0) { P.jumpBuf = 0; P.coyote = 0; P.vel.y = CFG.jump; P.grounded = false; P.sliding = false; }
     else if (P.sliding) { friction(P, .5, dt); accelerate(P, wx, wz, 1.5, 6, dt); if (rnd() < dt * 30) puff(toU(P.pos).setY(P.pos.y * U + 2), { n: 2, color: "#ad9677", dark: true, opacity: .4, size: 4, life: .5, grow: 1.5, drag: 2, vel: () => V3((rnd() - .5) * 20, 8, (rnd() - .5) * 20) }); }
-    else { friction(P, 7, dt); accelerate(P, wx, wz, P.crouchLatch && crouchKey ? 3 : (K.ShiftLeft || K.ShiftRight) && mz > 0 ? CFG.sprint : CFG.walk, 11, dt); }
+    else { friction(P, 7, dt); accelerate(P, wx, wz, P.crouchLatch && crouchKey ? 3 : (P.ads > .5 ? 3.2 : (K.ShiftLeft || K.ShiftRight) && mz > 0 ? CFG.sprint : CFG.walk) * (P.stimT > 0 ? 1.4 : 1), 11, dt); }
   } else {
     P.sliding = false;
     accelerate(P, wx, wz, CFG.air, 14, dt);
@@ -124,12 +137,21 @@ function blast(at, radius, o = {}) {   // at in metres
 const _o = V3(), _d = V3();
 const gruntHit = (o, d, best) => rayUnits(o, d, best, "foe");
 const victims = (team) => (team === "you" ? "foe" : team === "foe" ? "you" : null);
-const PW = { carbine: { name: "Carbine", mag: 24, cd: .095, dmg: 25, spread: .004, reload: 1.35, desc: "Automatic, steady, good at most ranges." }, longrifle: { name: "Longrifle", mag: 8, cd: .38, dmg: 70, spread: .0008, reload: 1.7, desc: "One heavy round at a time. A head shot ends it." }, smg: { name: "Scatter SMG", mag: 36, cd: .06, dmg: 15, spread: .012, reload: 1.2, desc: "A lot of small rounds very quickly. Best while you are moving." } };
-const pw = () => PW[LOAD.weapon] || PW.carbine;
+/* The pilot's guns, from the outline. dmg is [close, far] and rng is [where it starts to fall, where it reaches the far
+   number]. hs multiplies a head shot. spread is from the hip, ads is down the sights. zoom is how far the view closes in. */
+const HP = 125;
+const PW = { carbine: { name: "Assault Rifle", snd: "carbine", mag: 28, cd: 60 / 650, dmg: [25, 18], rng: [35, 65], hs: 1.5, spread: .011, ads: .0007, zoom: .25, reload: 1.5, kick: 1, desc: "Automatic. Fair from the hip and dead straight down the sights, for holding a lane." },
+  smg: { name: "SMG", snd: "smg", mag: 36, cd: 60 / 850, dmg: [22, 12], rng: [18, 38], hs: 1.4, spread: .005, ads: .004, zoom: .14, reload: 1.3, kick: .7, desc: "Fast and close. It shoots straight from the hip, even on a wall." },
+  shotgun: { name: "Shotgun", snd: "shotgun", mag: 6, cd: 60 / 85, dmg: [18.75, 3], rng: [8, 18], max: 18, pellets: 8, hs: 1.2, spread: .055, ads: .05, zoom: .1, reload: 2.2, kick: 3.2, desc: "Eight pellets. One shot inside 8 metres, nothing past 18. Made for the halls." },
+  longrifle: { name: "Marksman Rifle", snd: "sniper", mag: 12, cd: 60 / 240, dmg: [45, 35], rng: [55, 90], hs: 1.8, spread: .022, ads: .0003, zoom: .5, reload: 1.8, kick: 2.2, desc: "Three to the body or one to the head and one more. Wide from the hip, crisp down the sights." },
+  pistol: { name: "Sidearm", snd: "pistol", mag: 12, cd: 60 / 360, dmg: [30, 18], rng: [15, 40], hs: 1.5, spread: .006, ads: .002, zoom: .14, reload: 1.1, kick: 1.3, side: true, desc: "Every pilot carries one." } };
+const KITS = { grapple: ["Grapple Hook", "A 28 metre line that pulls you to what it bites. Let go with Q or by jumping and you keep the speed. 14 seconds to come back, less if you let go early. You cannot fire while it reels."], stim: ["Stim Boost", "40 percent faster for 3.5 seconds, and your health starts coming back at once. 18 seconds to come back."] };
+const dmgAt = (w, d) => (w.max && d > w.max ? 0 : lerp(w.dmg[0], w.dmg[1], clamp((d - w.rng[0]) / (w.rng[1] - w.rng[0]), 0, 1)));
+const pw = () => (P.weapon === 2 ? PW.pistol : PW[LOAD.weapon] && !PW[LOAD.weapon].side ? PW[LOAD.weapon] : PW.carbine);
 const CHASSIS = { vanguard: { name: "Vanguard", hull: 350, speed: 6.2, dash: 2, desc: "The all-round frame: 350 hull, two dashes." }, bastion: { name: "Bastion", hull: 470, speed: 5.2, dash: 1, desc: "Heavier plate and a slower stride: 470 hull, one dash." }, lancer: { name: "Lancer", hull: 270, speed: 7.4, dash: 3, desc: "Stripped for speed: 270 hull, three dashes." } };
 B.hooks = { pilot: () => ({ ok: P.dead <= 0 && !P.titan && !P.seq, alive: P.dead <= 0, dead: P.dead, pos: V3(P.pos.x, P.pos.y + P.h * .6, P.pos.z), at: P.pos, speed: hs(), grounded: P.grounded, titan: !!P.titan }),
   titans: () => { for (const t of TITANS) t.piloted = t === P.titan; return TITANS; }, hurtPilot: (n) => hurtPilot(n), net: (k, d) => send(k, d), hurtRemote: (slot, n) => relay("phit", [slot, Math.round(n), 0]), rpilots: () => (B.mp ? [...RPS.values()] : []), pilots: () => { const L = P.dead <= 0 ? [{ key: "you", side: "you", x: P.pos.x, z: P.pos.z }] : []; if (B.mp) for (const rp of RPS.values()) if (rp.ok || rp.inTitan) L.push({ key: keyOf(rp.slot), side: rp.side, x: rp.pos.x, z: rp.pos.z }); return L; }, attackers: () => (B.mp ? Math.max(1, Math.ceil((1 + RPS.size) / 2)) : 1),
-  healPilot: (n) => { if (P.dead > 0 || P.hp >= 100) return false; P.hp = Math.min(100, P.hp + n); return true; }, hurtTitan: (t, n) => hurtTitan(t, n), blast: (at, r, o) => blast(at, r, o), onKill: (n) => { snd("kill"); P.meter = Math.min(100, P.meter + n); },
+  healPilot: (n) => { if (P.dead > 0 || P.hp >= HP) return false; P.hp = Math.min(HP, P.hp + n); return true; }, hurtTitan: (t, n) => hurtTitan(t, n), blast: (at, r, o) => blast(at, r, o), onKill: (n) => { snd("kill"); P.meter = Math.min(100, P.meter + n); },
   shotSnd: (q, atPilot, hit) => { snd("grunt_shot", { pos: [q.x / U, q.y / U + 1.4, q.z / U] }); if (atPilot && !hit && rnd() < .6) snd("flyby", { pos: [P.pos.x + (rnd() - .5) * 5, P.pos.y + 1.5, P.pos.z + (rnd() - .5) * 5], delay: .02 + rnd() * .05 }); }, say: (t, sec) => say(t, sec) };
 
 /* ---------- Titans ---------- */
@@ -295,16 +317,17 @@ const _f = V3(), _r = V3(), _u = V3();
 function aimRay(spread) { cam.getWorldDirection(_f); _r.set(1, 0, 0).applyQuaternion(cam.quaternion); _u.set(0, 1, 0).applyQuaternion(cam.quaternion); _d.copy(_f).addScaledVector(_r, (rnd() - .5) * spread * 2).addScaledVector(_u, (rnd() - .5) * spread * 2).normalize(); _o.copy(cam.position).divideScalar(U); }
 function titanHit(o, d, best, team) { let who = null; for (const t of TITANS) { if (!t.alive || t.team === team) continue; const tt = rayBox(o, d, [t.pos.x - t.r, t.pos.y, t.pos.z - t.r], [t.pos.x + t.r, t.pos.y + t.h, t.pos.z + t.r], best); if (tt < best) { best = tt; who = t; } } return { best, who }; }
 function muzzleAt(side, down, fwd) { return _o.clone().addScaledVector(_r, side).addScaledVector(_u, -down).addScaledVector(_f, fwd).multiplyScalar(U); }
-function fireCarbine() {
-  P.ammo--; snd("carbine", { layerGain: { mech: P.ammo < 6 ? 1 + (6 - P.ammo) * .5 : 1 }, pitch: LOAD.weapon === "longrifle" ? .82 : LOAD.weapon === "smg" ? 1.18 : 1 }); P.fireCd = pw().cd; P.kick = Math.min(1, P.kick + .35); VM.kick(LOAD.weapon === "longrifle" ? 2.4 : LOAD.weapon === "smg" ? .7 : 1); flashT = .045; if (!runOn && !runDone) runOn = true;
-  aimRay(pw().spread + P.spread * .02 + (P.grounded ? 0 : .006)); P.spread = Math.min(1, P.spread + .12); P.pitch += .004;
-  let best = rayWorld(_o, _d, 220); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
-  const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .7); tracer(from, eu, "#ffd890", 9000, .5); flash(from, "#ffc477", 900, .06);
-  netShot(end, 0);
-  if (rh.hit) { const head = end.y - rh.rp.pos.y > rh.rp.h * .82; relay("phit", [rh.rp.slot, pw().dmg * (head ? 2 : 1), head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
-  else if (th.who) { hurtTitan(th.who, 3); snd("hitmarker", { gain: .7 }); hitT = .08; puff(eu, { n: 6, color: th.who.shield > 0 ? "#8fe0f0" : "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
-  else if (gh.who) { const g = gh.who, head = !g.veh && end.y - g.hitY > g.hitH * .8; snd(g.veh ? "impact_metal" : "impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); damage(g, pw().dmg * (head ? 2.5 : 1) * (g.veh ? .2 : 1), toU(P.pos), head ? "head" : "chest", true); hitT = .12; if (g.veh) puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
-  else { snd(surface(end), { pos: xyz(end) }); puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, grav: -170, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); puff(eu, { n: 2, color: "#a09684", dark: true, opacity: .4, size: 4, life: .7, grow: 1.8, drag: 3, vel: () => V3((rnd() - .5) * 12, 8, (rnd() - .5) * 12) }); }
+function fireCarbine() { const w = pw();
+  P.ammo--; snd(w.snd, { layerGain: { mech: P.ammo < 6 ? 1 + (6 - P.ammo) * .5 : 1 } }); P.fireCd = w.cd; P.kick = Math.min(1, P.kick + .35); VM.kick(w.kick * (1 - P.ads * .35)); flashT = .045; if (!runOn && !runDone) runOn = true;
+  const sp = lerp(w.spread, w.ads, P.ads) + P.spread * .02 * (1 - P.ads * .7) + (P.grounded || w === PW.smg ? 0 : .006); P.spread = Math.min(1, P.spread + .12); P.pitch += .004 * w.kick * (1 - P.ads * .4); const from = muzzleAt(.2, .16, .7); flash(from, "#ffc477", 900, .06); let marked = false, shown = 0;
+  for (let k = 0; k < (w.pellets || 1); k++) { aimRay(sp);
+    let best = rayWorld(_o, _d, 220); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
+    const end = _o.clone().addScaledVector(_d, best), eu = toU(end), dm = dmgAt(w, best); if (shown++ < 3) tracer(from, eu, "#ffd890", 9000, .5); if (k === 0) netShot(end, 0);
+    const mark = (head) => { if (!marked) { marked = true; snd("hitmarker", { pitch: head ? 1.25 : 1 }); } hitT = .12; };
+    if (rh.hit) { if (dm > 0) { const head = end.y - rh.rp.pos.y > rh.rp.h * .82; relay("phit", [rh.rp.slot, Math.round(dm * (head ? w.hs : 1)), head ? 1 : 0]); if (k < 2) snd("impact_body", { pos: xyz(end) }); mark(head); } }
+    else if (th.who) { hurtTitan(th.who, w.pellets ? .8 : 3); if (!marked) { marked = true; snd("hitmarker", { gain: .7 }); } hitT = .08; if (k < 3) puff(eu, { n: 6, color: th.who.shield > 0 ? "#8fe0f0" : "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); }
+    else if (gh.who) { if (dm > 0) { const g2 = gh.who, head = !g2.veh && end.y - g2.hitY > g2.hitH * .8; if (k < 2) snd(g2.veh ? "impact_metal" : "impact_body", { pos: xyz(end) }); mark(head); damage(g2, dm * (head ? w.hs : 1) * (g2.veh ? (g2.def.veh.static && w.pellets ? .5 : .4) : 1), toU(P.pos), head ? "head" : "chest", true); if (g2.veh) puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); } }
+    else if (k < 3) { snd(surface(end), { pos: xyz(end) }); puff(eu, { n: 6, color: "#ffe9b0", hot: 3, size: 2, life: .2, grav: -170, vel: () => V3((rnd() - .5) * 70, rnd() * 50, (rnd() - .5) * 70) }); puff(eu, { n: 2, color: "#a09684", dark: true, opacity: .4, size: 4, life: .7, grow: 1.8, drag: 3, vel: () => V3((rnd() - .5) * 12, 8, (rnd() - .5) * 12) }); } }
 }
 let chargeSnd = null;
 function fireCharge() {
@@ -313,7 +336,7 @@ function fireCharge() {
   const end = _o.clone().addScaledVector(_d, best), eu = toU(end), from = muzzleAt(.2, .16, .8); tracer(from, eu, "#8fe0f0", 30000, 1.6); flash(from, "#8fe0f0", 2600, .14); flash(eu, "#8fe0f0", 2200, .2);
   puff(eu, { n: 18, color: "#d8f8ff", hot: 3, size: 4, life: .35, vel: () => V3((rnd() - .5) * 110, rnd() * 90, (rnd() - .5) * 110) }); ringFx(eu, "#8fe0f0", 30, .3);
   netShot(end, 1);
-  if (rh.hit) { const head = end.y - rh.rp.pos.y > rh.rp.h * .82; relay("phit", [rh.rp.slot, 80, head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
+  if (rh.hit) { const head = end.y - rh.rp.pos.y > rh.rp.h * .82; relay("phit", [rh.rp.slot, 125, head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
   else if (th.who) { hurtTitan(th.who, 70); snd("hitmarker", { gain: .9 }); hitT = .15; } else if (!gh.who) snd("impact_metal", { pos: xyz(end), gain: 1.4, pitch: .8 }); else if (gh.who) { snd("hitmarker"); hitT = .15; damage(gh.who, gh.who.veh ? 130 : 9999, toU(P.pos), "chest", true); }
 }
 function fireCannon(t) {
@@ -337,7 +360,7 @@ function ping(which, force) { if (!started || P.dead > 0 || MAP.on) return; aimR
   if (!mine.length) { say(which === "fa" || which === "fb" ? "No squads in " + WEDGE[which] + " are on the field. Tag cards in your battlegroup to put them in a fireteam." : which === "near" ? "None of your squads are within 35 metres. Hold G for the wheel to call the others." : "You have no squads of that kind on the field.", 3); snd("dry"); return; }
   pingTo(V3(x, 0, z), mine, !!force); snd("selector"); const pt = POINTS.find((p) => Math.hypot(p.x - x, p.z - z) < 8); say(WEDGE[which] + ", " + (mine.length === 1 ? "one squad" : mine.length + " squads") + (pt ? ": take point " + pt.name + "." : ": move there.") + (force ? " Locked squads come too." : " Locked squads stay where they are."), 2.5); }
 addEventListener("keyup", (e) => { if (e.code === "KeyG" && gDownT) { const pk = WHEEL.on ? wheelPick() : "near", f = pk === "all" && WHEEL.dbl; WHEEL.on = false; wheelDraw(); gDownT = 0; ping(pk, f); } });
-const SWAP = .5, NADE = .8, KNIFE = .5, gunKind = () => P.weapon === 1 ? "charge" : PW[LOAD.weapon] ? LOAD.weapon : "carbine", handsBusy = () => P.swapT >= 0 || P.nadeT >= 0 || P.meleeT >= 0;
+const SWAP = .5, NADE = .8, KNIFE = .5, gunKind = () => P.weapon === 1 ? "charge" : P.weapon === 2 ? "pistol" : PW[LOAD.weapon] && !PW[LOAD.weapon].side ? LOAD.weapon : "carbine", handsBusy = () => P.swapT >= 0 || P.nadeT >= 0 || P.meleeT >= 0 || !!P.grap;
 const NADES = [];
 function startSwap(to) { if (P.titan || handsBusy() || to === P.weapon) return; P.swapFrom = gunKind(); P.swapTo = to; P.swapT = 0; P.reload = 0; P.charge = 0; snd("swap"); }
 function startNade() { if (P.titan || P.seq || P.dead > 0 || handsBusy() || P.nades <= 0) return; P.nadeT = 0; P.nadeOut = false; P.reload = 0; P.charge = 0; snd("frag_pin"); }
@@ -350,18 +373,20 @@ function stepNades(dt) { for (let i = NADES.length - 1; i >= 0; i--) { const n =
     const ny = p.y + v.y * dt, g = groundH(p.x, p.z) + .08; if (ny <= g) { p.y = g; if (v.y < -3) hit = true; v.y *= -.35; v.x *= .7; v.z *= .7; } else if (!free(p.x, ny, p.z, .15, .12)) { if (v.y < -3) hit = true; v.y *= -.35; v.x *= .7; v.z *= .7; } else p.y = ny;
     if (hit && v.length() > 2.5) snd("frag_bounce", { pos: xyz(p) }); n.spin += dt * 9; n.mesh.position.set(p.x * U, p.y * U, p.z * U); n.mesh.rotation.set(n.spin, n.spin * .7, 0);
     if (n.t <= 0) { scene.remove(n.mesh); NADES.splice(i, 1); snd("frag_blast", { pos: xyz(p) }); blast(p.clone(), 4.2, n.team ? { team: n.team } : {}); } } }
-function knifeHit() { aimRay(0); let best = Math.min(2.7, rayWorld(_o, _d, 2.7)); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best), end = _o.clone().addScaledVector(_d, rh.best);
-  if (rh.hit) { relay("phit", [rh.rp.slot, 100, 0]); snd("melee_hit", { pos: xyz(end) }); snd("hitmarker"); hitT = .15; P.shake = Math.max(P.shake, .12); }
+function knifeHit() { aimRay(0); const fast = Math.hypot(P.vel.x, P.vel.y, P.vel.z) > 11; let best = Math.min(2.7, rayWorld(_o, _d, 2.7)); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best), end = _o.clone().addScaledVector(_d, rh.best);
+  const behind = (yaw) => Math.sin(yaw) * _d.x + Math.cos(yaw) * _d.z > .3;   // they are facing the way the blade is travelling
+  if (rh.hit) { const kill = fast || behind(rh.rp.yaw + Math.PI); relay("phit", [rh.rp.slot, kill ? 999 : 65, 0]); snd("melee_hit", { pos: xyz(end) }); snd("hitmarker", { pitch: kill ? 1.25 : 1 }); hitT = .15; P.shake = Math.max(P.shake, .12); }
   else if (th.who) { hurtTitan(th.who, 2); snd("impact_metal", { pos: xyz(end) }); P.shake = Math.max(P.shake, .08); }
-  else if (gh.who) { snd(gh.who.veh ? "impact_metal" : "melee_hit", { pos: xyz(end) }); snd("hitmarker"); hitT = .15; P.shake = Math.max(P.shake, .12); damage(gh.who, gh.who.veh ? 10 : 9999, toU(P.pos), "chest", true); } }
+  else if (gh.who) { const u = gh.who, kill = !u.veh && (fast || behind(u.s.root.rotation.y)); snd(u.veh ? "impact_metal" : "melee_hit", { pos: xyz(end) }); snd("hitmarker", { pitch: kill ? 1.25 : 1 }); hitT = .15; P.shake = Math.max(P.shake, .12); damage(u, u.veh ? 20 : kill ? 9999 : 65, toU(P.pos), "chest", true); } }
 const VS = { visible: false };
 function stepGun(dt) {
   P.fireCd -= dt; P.kick = Math.max(0, P.kick - dt * 5); P.spread = Math.max(0, P.spread - dt * 1.6); flashT -= dt; hitT -= dt; stepNades(dt);
   const t = P.titan, out = t || P.dead > 0 || P.seq; if (out) { P.swapT = P.nadeT = P.meleeT = -1; }
   // the moves the hands make: each has its own clock, and the thing it does happens part way through
-  if (P.swapT >= 0) { const was = P.swapT; P.swapT += dt; if (was < SWAP * .42 && P.swapT >= SWAP * .42) { P.weapon = P.swapTo; snd("raise"); } if (P.swapT >= SWAP) { P.swapT = -1; VM.bump(-1.2); } }
+  if (P.swapT >= 0) { const was = P.swapT; P.swapT += dt; if (was < SWAP * .42 && P.swapT >= SWAP * .42) { if (P.weapon !== 1) P.mags[P.weapon] = P.ammo; P.weapon = P.swapTo; if (P.weapon !== 1) P.ammo = P.mags[P.weapon]; snd("raise"); } if (P.swapT >= SWAP) { P.swapT = -1; VM.bump(-1.2); } }
   if (P.nadeT >= 0) { P.nadeT += dt; if (!P.nadeOut && P.nadeT >= NADE * .5) { P.nadeOut = true; throwNade(); VM.bump(1.6); } if (P.nadeT >= NADE) P.nadeT = -1; }
   if (P.meleeT >= 0) { P.meleeT += dt; if (!P.meleeHit && P.meleeT >= KNIFE * .36) { P.meleeHit = true; knifeHit(); VM.bump(1); } if (P.meleeT >= KNIFE) P.meleeT = -1; }
+  P.ads += ((P.adsHeld && !t && !handsBusy() && P.reload <= 0 && P.dead <= 0 && !P.wall ? 1 : 0) - P.ads) * (1 - Math.exp(-dt * 12));
   const busy = handsBusy(), canFire = mouseDown && P.dead <= 0 && !P.mantle && !P.seq && !busy;
   if (chargeSnd && (t || P.weapon !== 1 || P.dead > 0 || busy)) { chargeSnd.stop(.05); chargeSnd = null; }
   if (t) { if ((K.KeyR && t.ammo < 18 && t.reload <= 0) || (t.ammo <= 0 && t.reload <= 0)) { t.reload = 2.2; snd("reload", { pitch: .6, gain: 1.2 }); } else if (mouseDown && P.dead <= 0 && !P.seq && t.fireCd <= 0 && t.reload <= 0) fireCannon(t); }
@@ -370,7 +395,7 @@ function stepGun(dt) {
   else { if (P.reload > 0) { const R = pw().reload, u0 = 1 - P.reload / R; P.reload -= dt; const u1 = 1 - P.reload / R; if (u0 < .27 && u1 >= .27) VM.bump(-.8); if (u0 < .655 && u1 >= .655) { VM.bump(2.2); snd("selector", { gain: .8, pitch: .8 }); } if (u0 < .87 && u1 >= .87) VM.bump(-1.6); if (P.reload <= 0) P.ammo = pw().mag; }
     else if ((K.KeyR && P.ammo < pw().mag) || P.ammo <= 0) { P.reload = pw().reload; snd("reload"); } else if (canFire && P.fireCd <= 0) fireCarbine(); }
   const s = hs(), moving = P.grounded && !P.sliding && !t ? Math.min(1, s / 9) : 0; P.bob += dt * (5 + s * .9) * (moving > 0 ? 1 : 0);
-  VS.visible = !t && P.dead <= 0 && !P.seq && !MAP.on && started; VS.kind = gunKind(); VS.charge = P.weapon === 1 ? P.charge : 0; VS.reload = P.weapon === 0 && P.reload > 0 ? clamp(1 - P.reload / pw().reload, 0, 1) : -1; VS.swap = P.swapT >= 0 ? P.swapT / SWAP : -1; VS.swapFrom = P.swapFrom; VS.nade = P.nadeT >= 0 ? P.nadeT / NADE : -1; VS.melee = P.meleeT >= 0 ? P.meleeT / KNIFE : -1;
+  VS.visible = !t && P.dead <= 0 && !P.seq && !MAP.on && started; VS.kind = gunKind(); VS.charge = P.weapon === 1 ? P.charge : 0; VS.ads = P.ads; VS.reload = P.weapon !== 1 && P.reload > 0 ? clamp(1 - P.reload / pw().reload, 0, 1) : -1; VS.swap = P.swapT >= 0 ? P.swapT / SWAP : -1; VS.swapFrom = P.swapFrom; VS.nade = P.nadeT >= 0 ? P.nadeT / NADE : -1; VS.melee = P.meleeT >= 0 ? P.meleeT / KNIFE : -1;
   VS.speed = s; VS.grounded = P.grounded; VS.vy = P.vel.y; VS.vy0 = P.vyWas || 0; P.vyWas = P.vel.y; VS.sliding = P.sliding; VS.mantle = !!P.mantle; VS.roll = P.roll; VS.dip = P.dip; VS.yaw = P.yaw; VS.pitch = P.pitch; VS.firing = mouseDown || P.fireCd > -.25; VM.step(dt, VS);
   gun.visible = !!t; cannon.visible = !!t && CK.mode === "on"; fist.visible = cannon.visible && t.punch > 0; if (fist.visible) { const u = Math.sin(clamp(1 - t.punch / .45, 0, 1) * Math.PI); fist.position.set(-.5 + u * .3, -.75 + u * .35, -.6 - u * .9); }
   if (t) { const tr = t.reload > 0 ? Math.sin(Math.min(1, (2.2 - t.reload) / 2.2) * Math.PI) : 0, wb = Math.sin(t.walk * 1.1); cannon.position.set(.66, -.6 - tr * .4 + Math.abs(wb) * .02, -.5 + P.kick * .1); cannon.rotation.set(P.kick * .03 + tr * .5, .04, 0); }
@@ -390,20 +415,20 @@ document.addEventListener("pointerlockerror", () => { noLock = true; });
 const active = () => started && !panelOpen && (locked || noLock || MAP.on);
 function toggleMap() { if (MAP.on) { setMap(false); wantLock(); } else { setMap(true); for (const k in K) K[k] = false; mouseDown = false; if (document.pointerLockElement) document.exitPointerLock(); } }
 function useKey() { if (P.seq) return; if (P.titan) { startExit(); return; } const m = P.mine; if (m && m.alive && m.doom <= 0 && Math.hypot(m.pos.x - P.pos.x, m.pos.z - P.pos.z) < 7 && Math.abs(m.pos.y - P.pos.y) < 6) startEnter(m); }
-addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.preventDefault(); if (e.repeat) return; if (started && ["Space", "Tab", "KeyC", "KeyR", "KeyE", "KeyV", "KeyQ", "KeyF", "KeyG", "KeyX"].includes(e.code)) e.preventDefault();
+addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.preventDefault(); if (e.repeat) return; if (started && ["Space", "Tab", "KeyC", "KeyR", "KeyE", "KeyV", "KeyQ", "KeyF", "KeyG", "KeyX", "Digit1", "Digit2", "Digit3"].includes(e.code)) e.preventDefault();
   if (e.code === "KeyP" && started && !MAP.on) { togglePanel(); return; }
   if (e.code === "Tab" && started && !panelOpen) { toggleMap(); return; }
   if (MAP.on) { MAP.keys[e.code] = true; if (e.code === "KeyT") again(); return; }
   if (!active()) return; const code = e.code === "ControlLeft" ? "KeyC" : e.code; K[code] = true;
   if (code === "Space") P.jumpBuf = .14; if (code === "KeyT") again(); if (code === "KeyE" && P.dead <= 0) useKey(); if (code === "KeyV" && P.dead <= 0 && !P.titan) tryCallTitan();
   if (code === "ShiftLeft" || code === "ShiftRight" || code === "Space") K._dash = !!P.titan; if (code === "KeyF") { if (P.titan) K._punch = true; else startKnife(); } if (code === "KeyZ" && !e.repeat) ping("fa"); if (code === "KeyB" && !e.repeat) ping("fb"); if (code === "KeyX" && !P.titan) startNade(); if (code === "KeyG" && !e.repeat) { gDownT = performance.now(); WHEEL.x = WHEEL.y = 0; WHEEL.was = WHEEL.armed = WHEEL.dbl = false; setTimeout(() => { if (gDownT && performance.now() - gDownT >= 190) { WHEEL.on = true; wheelDraw(); } }, 200); }
-  if (!P.titan && (code === "KeyQ" || code === "Digit1" || code === "Digit2")) startSwap(code === "KeyQ" ? 1 - P.weapon : code === "Digit2" ? 1 : 0);
+  if (!P.titan && (code === "Digit1" || code === "Digit2" || code === "Digit3")) startSwap(code === "Digit1" ? 0 : code === "Digit2" ? 1 : 2); if (code === "KeyQ" && !P.titan && !e.repeat) useKit();
   if (!runOn && !runDone && ["KeyW", "KeyA", "KeyS", "KeyD"].includes(code)) runOn = true; });
 addEventListener("keyup", (e) => { K[e.code === "ControlLeft" ? "KeyC" : e.code] = false; MAP.keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in K) K[k] = false; mouseDown = false; });
-cv.addEventListener("mousedown", (e) => { if (!started || panelOpen) return; if (!locked && !noLock) { wantLock(); return; } if (e.button === 1) { e.preventDefault(); ping("near"); } if (e.button === 0) mouseDown = true; if (e.button === 2 && P.titan) K._rockets = true; });
-addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; });
-addEventListener("mousemove", (e) => { if (WHEEL.on) { WHEEL.x = clamp(WHEEL.x + e.movementX, -90, 90); WHEEL.y = clamp(WHEEL.y + e.movementY, -90, 90); if (WHEEL.y > 55) { if (WHEEL.armed) WHEEL.dbl = true; WHEEL.was = true; } else if (WHEEL.was && WHEEL.y < 20) WHEEL.armed = true; wheelDraw(); return; } if (!active() || MAP.on || P.dead > 0 || P.seq) return; const k = .0022 * CFG.sens * (P.titan ? .8 : 1); P.yaw -= e.movementX * k; P.pitch = clamp(P.pitch - e.movementY * k, -1.5, 1.5); });
+cv.addEventListener("mousedown", (e) => { if (!started || panelOpen) return; if (!locked && !noLock) { wantLock(); return; } if (e.button === 1) { e.preventDefault(); ping("near"); } if (e.button === 0) mouseDown = true; if (e.button === 2 && P.titan) K._rockets = true; if (e.button === 2 && !P.titan) P.adsHeld = true; });
+addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; if (e.button === 2) P.adsHeld = false; });
+addEventListener("mousemove", (e) => { if (WHEEL.on) { WHEEL.x = clamp(WHEEL.x + e.movementX, -90, 90); WHEEL.y = clamp(WHEEL.y + e.movementY, -90, 90); if (WHEEL.y > 55) { if (WHEEL.armed) WHEEL.dbl = true; WHEEL.was = true; } else if (WHEEL.was && WHEEL.y < 20) WHEEL.armed = true; wheelDraw(); return; } if (!active() || MAP.on || P.dead > 0 || P.seq) return; const k = .0022 * CFG.sens * (P.titan ? .8 : 1) * (1 - (P.ads || 0) * pw().zoom * 1.2); P.yaw -= e.movementX * k; P.pitch = clamp(P.pitch - e.movementY * k, -1.5, 1.5); });
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* ---------- screen furniture ---------- */
@@ -414,7 +439,7 @@ const PAINTS = ["#c45a1e", "#3f6f9a", "#5c7f36", "#b0312a", "#c9a03a", "#e2d0ae"
 function buildSetup() { const U2 = FACTIONS[LOAD.side].units, list = LOAD.list[LOAD.side] = LOAD.list[LOAD.side].filter((id) => U2[id]), used = list.reduce((a, id) => a + U2[id].pts, 0), btn = (attr, k, label, on, extra = "") => `<button data-${attr}="${k}" class="${on ? "on" : ""}" ${extra}>${label}</button>`;
   const tags = LOAD.tags[LOAD.side] || (LOAD.tags[LOAD.side] = {}), can = (d) => used + d.pts <= LIST_PTS && list.length < LIST_MAX;
   $("setup").innerHTML = `<section data-pane="faction"><h2>Your faction</h2><div class="tiles">${Object.entries(FACTIONS).map(([k, f]) => `<button data-side="${k}" class="tile ${LOAD.side === k ? "on" : ""}"><b>${f.name}</b><span>${f.blurb}</span></button>`).join("")}</div><p class="note">Each faction has its own battlegroup, kept separately. Alone, the other faction is run by the machine. In a match, players on the same side may bring different factions for now.</p></section>
-    <section data-pane="pilot"><h2>Primary weapon</h2><div class="row">${Object.entries(PW).map(([k, w]) => btn("wpn", k, w.name, LOAD.weapon === k)).join("")}</div><p class="note">${pw().desc} Every pilot also carries the charge rifle for Titans and vehicles, two grenades and a knife.</p></section>
+    <section data-pane="pilot"><h2>Primary weapon</h2><div class="row">${Object.entries(PW).filter(([, w]) => !w.side).map(([k, w]) => btn("wpn", k, w.name, LOAD.weapon === k)).join("")}</div><p class="note">${(PW[LOAD.weapon] || PW.carbine).desc} Hold the right mouse button to aim down the sights: you walk at 3.2 metres a second and the gun tightens up.</p><h2>Tactical kit</h2><div class="row">${Object.entries(KITS).map(([k, d]) => btn("kit", k, d[0], LOAD.kit === k)).join("")}</div><p class="note">${KITS[LOAD.kit][1]}</p><h2>Also carried</h2><p class="note">A sidearm (key 3), the rail-charge rifle for Titans and vehicles (key 2), two grenades (X) and a knife (F). The knife does 65, or finishes it outright from behind or when you are moving faster than 11 metres a second. You have 125 health, and it starts coming back 4.5 seconds after you were last hit.</p></section>
     <section data-pane="titan"><h2>Chassis</h2><div class="row">${Object.entries(CHASSIS).map(([k, c]) => btn("ch", k, c.name, LOAD.chassis === k)).join("")}</div><p class="note">${(CHASSIS[LOAD.chassis] || CHASSIS.vanguard).desc}</p><h2>Paint</h2><div class="row">${PAINTS.map((c) => `<button data-paint="${c}" class="sw ${LOAD.paint === c ? "on" : ""}" style="background:${c}" title="Paint"></button>`).join("")}</div></section>
     <section data-pane="group"><h2>${FACTIONS[LOAD.side].name} battlegroup <span class="pts">${used} of ${LIST_PTS} points · ${list.length} of ${LIST_MAX} cards</span></h2><p class="note">These are the cards you bring. Each has a price here, out of ${LIST_PTS}, and a price in Command Points during the fight. While a squad lives it holds some of your ${SUPCAP} supply. You may bring the same card twice. A card in a fireteam answers its own key in the fight: Z calls Alpha, B calls Beta.</p>
     <div class="cat">${Object.entries(U2).map(([k, d]) => { const cnt = list.filter((x) => x === k).length, ok = can(d), tg = tags[k]; return `<div class="${cnt ? "in" : ""}"><b>${d.icon}</b><span><strong>${d.name}${cnt > 1 ? " ×" + cnt : ""}</strong> <em>${d.pts} points · ${d.cost} CP · ${d.sup} supply</em><br>${d.desc}</span><span class="cbtns"><button data-unit="${k}" ${ok ? "" : "disabled"} class="${cnt ? "on" : ""}">${cnt ? (ok ? "Add another" : "In the group") : ok ? "Add" : "No room"}</button>${cnt ? `<button data-drop="${k}">Remove</button><button data-tag="${k}" class="${tg ? "on" : ""}">${tg === "a" ? "Fireteam Alpha" : tg === "b" ? "Fireteam Beta" : "No fireteam"}</button>` : ""}</span></div>`; }).join("")}</div>
@@ -422,7 +447,7 @@ function buildSetup() { const U2 = FACTIONS[LOAD.side].units, list = LOAD.list[L
     <h2>How your troops arrive</h2><div class="row">${Object.entries(DOCTRINES).map(([k, d]) => btn("doc", k, d[0], LOAD.doctrine === k)).join("")}</div><p class="note">${DOCTRINES[LOAD.doctrine][1]} You can change this on the battle map at any time.</p></section>`;
   $("go").disabled = !list.length; }
 $("setup").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const d = b.dataset;
-  if (d.side) LOAD.side = d.side; else if (d.wpn) LOAD.weapon = d.wpn; else if (d.ch) LOAD.chassis = d.ch; else if (d.paint) LOAD.paint = d.paint; else if (d.doc) LOAD.doctrine = d.doc; else if (d.pas) LOAD.passive = d.pas; else if (d.unit) { const l = LOAD.list[LOAD.side], U3 = FACTIONS[LOAD.side].units, used = l.reduce((a, id) => a + (U3[id] ? U3[id].pts : 0), 0); if (U3[d.unit] && used + U3[d.unit].pts <= LIST_PTS && l.length < LIST_MAX) l.push(d.unit); } else if (d.drop) { const l = LOAD.list[LOAD.side], i = l.lastIndexOf(d.drop); if (i >= 0) l.splice(i, 1); } else if (d.tag) { const t = LOAD.tags[LOAD.side] || (LOAD.tags[LOAD.side] = {}); t[d.tag] = t[d.tag] === "a" ? "b" : t[d.tag] === "b" ? "" : "a"; }
+  if (d.side) LOAD.side = d.side; else if (d.wpn) LOAD.weapon = d.wpn; else if (d.kit) LOAD.kit = d.kit; else if (d.ch) LOAD.chassis = d.ch; else if (d.paint) LOAD.paint = d.paint; else if (d.doc) LOAD.doctrine = d.doc; else if (d.pas) LOAD.passive = d.pas; else if (d.unit) { const l = LOAD.list[LOAD.side], U3 = FACTIONS[LOAD.side].units, used = l.reduce((a, id) => a + (U3[id] ? U3[id].pts : 0), 0); if (U3[d.unit] && used + U3[d.unit].pts <= LIST_PTS && l.length < LIST_MAX) l.push(d.unit); } else if (d.drop) { const l = LOAD.list[LOAD.side], i = l.lastIndexOf(d.drop); if (i >= 0) l.splice(i, 1); } else if (d.tag) { const t = LOAD.tags[LOAD.side] || (LOAD.tags[LOAD.side] = {}); t[d.tag] = t[d.tag] === "a" ? "b" : t[d.tag] === "b" ? "" : "a"; }
   saveLoad(); buildSetup(); });
 buildSetup();
 $("m-nav").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return; $("m-main").className = "tab-" + b.dataset.tab; for (const q of $("m-nav").querySelectorAll("button")) q.classList.toggle("on", q === b); snd("selector"); });
@@ -492,7 +517,7 @@ function cockpit(dt) {
 }
 function hud(dt) { el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
   hudT -= dt; if (hudT > 0) return; hudT = .08; const m = P.mine;
-  el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp + "%"; el.speed.textContent = hs().toFixed(1); el.wname.textContent = (P.weapon ? "Charge rifle (Q)" : pw().name + " (Q)") + "  ·  Grenades " + P.nades + " (X)"; el.ammo.textContent = P.weapon ? (P.charge > 0 ? "charging" : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : P.ammo + " / " + pw().mag;
+  el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp / HP * 100 + "%"; el.speed.textContent = hs().toFixed(1); el.wname.textContent = (P.weapon === 1 ? "Rail-charge rifle" : pw().name) + " · 1 2 3 · Grenades " + P.nades + " (X) · " + KITS[LOAD.kit][0] + (P.kitCd > 0 ? " " + Math.ceil(P.kitCd) + " s" : " ready") + " (Q)"; el.ammo.textContent = P.weapon === 1 ? (P.charge > 0 ? "charging" : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : P.ammo + " / " + pw().mag;
   el.kills.innerHTML = opLine(); el.timer.textContent = "CP " + Math.floor(B.supply.you) + " · supply " + supUsed("you") + "/" + SUPCAP + " · G: ping · Tab: command";
   el.meterfill.style.width = (m ? 100 : P.meter) + "%"; el.meterlab.textContent = m ? "Titan: standing by" : DROPS.some((D) => D.team === "you") ? "Titan: on its way" : P.meter >= 100 ? "Titan ready: press V" : "Titan " + Math.floor(P.meter) + "%";
   const foe = TITANS.find((o) => o.team === "foe"); el.foe.style.display = foe ? "block" : "none"; if (foe) el.foefill.style.width = (foe.hull + foe.shield) / 5 + "%"; 
@@ -519,9 +544,9 @@ function frame(now) {
     P.eye = t ? t.eye - TITAN.KNEEL * Math.max(t.kneel, ease(t.land) * .7) : lerp(Math.min(P.eye, 1.8), P.h - .12 - (P.dead > 0 ? .9 : 0), 1 - Math.exp(-dt * 14));
     const moving = P.grounded && !P.sliding && !t ? Math.min(1, hs() / 9) : 0, bob = t ? Math.abs(Math.sin(t.walk * 1.1)) * .09 : Math.abs(Math.sin(P.bob)) * .035 * moving;
     cam.position.set(P.pos.x * U, (P.pos.y + P.eye - P.dip + bob) * U, P.pos.z * U); cam.rotation.set(P.pitch + VM.cam.pitch + (rnd() - .5) * sh, P.yaw + (rnd() - .5) * sh, P.roll + VM.cam.roll + (P.dead > 0 ? .5 : 0) + (rnd() - .5) * sh);
-    const fov = (t ? 88 : CFG.fov) + clamp((hs() - 9) / 8, 0, 1) * 9; if (Math.abs(cam.fov - fov) > .05) { cam.fov = lerp(cam.fov, fov, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
+    const fov = (t ? 88 : CFG.fov * (1 - (P.ads || 0) * (P.weapon === 1 ? .3 : pw().zoom))) + clamp((hs() - 9) / 8, 0, 1) * 9 * (1 - (P.ads || 0)) + (P.stimT > 0 ? 6 : 0); if (Math.abs(cam.fov - fov) > .05) { cam.fov = lerp(cam.fov, fov, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
   const t = P.titan;
-  render(clock, dt, Math.max(MAP.on ? 0 : hurtFx, P.dead > 0 && !MAP.on ? .8 : 0, t ? (1 - t.hull / t.hullMax) * .4 : (1 - P.hp / 100) * .5), Math.max(coolFx, P.charge * .6), MAP.on);
+  render(clock, dt, Math.max(MAP.on ? 0 : hurtFx, P.dead > 0 && !MAP.on ? .8 : 0, t ? (1 - t.hull / t.hullMax) * .4 : (1 - P.hp / HP) * .5), Math.max(coolFx, P.charge * .6), MAP.on);
   if (SND) { cam.getWorldDirection(_f); SND.listener(cam.position.x / U, cam.position.y / U, cam.position.z / U, _f.x, _f.y, _f.z); }
   if (started) hud(dt);
 }

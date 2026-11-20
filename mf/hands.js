@@ -24,16 +24,17 @@ function rifle(o) { const g = new THREE.Group(), bl = o.barrel, body = [B(.05, .
     C(.012, bl, 0, .028, -.1 - o.guard - bl / 2, "dark", "z", 8), C(.019, .05, 0, .028, -.1 - o.guard - bl, "gun", "z", 8), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.012, .012, .07, 0, -.022, -.01, "dark"),
     B(.042, .07, .2, 0, .004, .2, "gun2"), B(.046, .09, .03, 0, 0, .31, "dark"), B(.03, .02, .06, 0, .083, -.06, "dark"), B(.012, .03, .012, 0, .08, -.1 - o.guard + .02, "dark"), B(.04, .012, .3, 0, -.012, -.2, "accent")];
   if (o.scope) body.push(C(.021, .19, 0, .118, -.04, "dark", "z", 10), C(.027, .04, 0, .118, -.15, "gun", "z", 10), C(.024, .03, 0, .118, .06, "gun", "z", 10), B(.02, .03, .03, 0, .092, -.08, "dark"), B(.02, .03, .03, 0, .092, .01, "dark"));
-  else body.push(B(.042, .044, .052, 0, .108, -.06, "dark"), B(.012, .012, .004, 0, .108, -.032, "glow"));
+  if (o.pistol) body.splice(7, 2);
+  if (!o.scope) body.push(B(.042, .008, .052, 0, .088, -.06, "dark"), B(.005, .04, .03, -.02, .108, -.06, "dark"), B(.005, .04, .03, .02, .108, -.06, "dark"), B(.044, .005, .03, 0, .129, -.06, "dark"), B(.004, .004, .002, 0, .108, -.06, "glow"));   // an open frame with a dot in it, so there is something to look through
   build(g, body, S, glow, gunMat);
   const mag = new THREE.Group(); mag.position.set(0, -.018, -.075); mag.rotation.x = -.12; g.add(mag); build(mag, [B(.03, o.mag, .052, 0, -o.mag / 2, 0, "mag"), B(.034, .014, .056, 0, -o.mag + .004, 0, "dark"), B(.032, .01, .054, 0, -.03, 0, "steel")], S, glow, gunMat);
   const bolt = new THREE.Group(); bolt.position.set(.03, .05, .04); g.add(bolt); build(bolt, [B(.03, .014, .03, 0, 0, 0, "steel")], S, glow, gunMat);
-  g.userData = { mag, bolt, fore: new THREE.Vector3(0, -.008, -.12 - o.guard * .55), well: new THREE.Vector3(0, -.09, -.07), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .028, -.13 - o.guard - bl), magLen: o.mag }; return g; }
+  g.userData = { sightY: o.scope ? .152 : .108, mag, bolt, fore: new THREE.Vector3(0, -.008, -.12 - o.guard * .55), well: new THREE.Vector3(0, -.09, -.07), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .028, -.13 - o.guard - bl), magLen: o.mag }; return g; }
 function charger() { const g = new THREE.Group(); build(g, [B(.06, .09, .34, 0, .022, -.1, "gun"), Lf([[.1, .075, .085], [.4, .06, .07]], 0, .025, 0, "gun2", 8, .5, -X), C(.016, .3, 0, .03, -.55, "dark", "z", 8), ...[0, 1, 2, 3].map((i) => B(.085, .085, .012, 0, .03, -.3 - i * .045, "dark")),
     C(.03, .08, 0, .03, -.7, "gun", "z", 10), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.044, .075, .2, 0, .004, .2, "gun2"), B(.048, .095, .03, 0, 0, .31, "dark"), B(.05, .05, .09, 0, .1, -.04, "dark"), B(.045, .1, .07, 0, -.05, -.1, "accent")], S, glow, gunMat);
   const coil = new THREE.Mesh(new THREE.BoxGeometry(.045, .045, .11), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.4, 3) })); coil.position.set(0, .03, -.62); g.add(coil);
   g.userData = { coil, fore: new THREE.Vector3(0, -.01, -.3), well: new THREE.Vector3(0, -.09, -.1), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .03, -.75) }; return g; }
-const GUNS = { carbine: rifle({ barrel: .2, guard: .26, mag: .12 }), longrifle: rifle({ barrel: .36, guard: .3, mag: .09, scope: true }), smg: rifle({ barrel: .08, guard: .16, mag: .17 }), charge: charger() };
+const GUNS = { shotgun: rifle({ barrel: .14, guard: .34, mag: .035 }), pistol: rifle({ barrel: .03, guard: .09, mag: .1, pistol: true }), carbine: rifle({ barrel: .2, guard: .26, mag: .12 }), longrifle: rifle({ barrel: .36, guard: .3, mag: .09, scope: true }), smg: rifle({ barrel: .08, guard: .16, mag: .17 }), charge: charger() };
 for (const k in GUNS) { GUNS[k].visible = false; rig.add(GUNS[k]); }
 
 /* ---------- arms: the hand is at the arm's origin and the forearm runs back along +z toward the elbow ---------- */
@@ -85,8 +86,9 @@ export const VM = { cam: { pitch: 0, roll: 0 }, muzzle: new THREE.Vector3(),
       gp[0] = key(u, [[0, 0], [.18, .13], [.6, .12], [1, 0, back]]); gr[1] = key(u, [[0, 0], [.18, -.55], [.6, -.5], [1, 0, back]]); gr[2] = key(u, [[0, 0], [.18, -.2], [1, 0]]); gp[2] = key(u, [[0, 0], [.2, .05], [.42, -.03, inn], [1, 0]]); }
     // where the rifle is
     const bx = Math.cos(bobT) * .011 * run, by = Math.abs(Math.sin(bobT)) * .013 * run, ch = st.charge || 0;
-    rig.position.set(.155 + bx + st.roll * .22 + gp[0] - carry * .04 + sway.x.x * .012 + (ch ? (rnd() - .5) * .004 * ch : 0), -.165 + by - st.dip * .3 - (st.sliding ? .03 : 0) + gp[1] - carry * .05 + land.x + rec.up.x * .012 - sway.y.x * .01 + jolt.x * .012, -.4 + rec.z.x * .06 + gp[2] + carry * .02);
-    e.set(rec.p.x * .09 + gr[0] + (st.mantle ? .6 : 0) + carry * .22 - sway.y.x * .05 - land.x * 1.2 + jolt.x * .05, .03 + gr[1] + rec.y.x * .03 + carry * .55 + sway.x.x * .06, st.roll * .6 + (st.sliding ? -.2 : 0) + gr[2] + rec.r.x * .05 + carry * .25 + sway.x.x * .05, "YXZ"); rig.quaternion.setFromEuler(e);
+    const A = st.ads || 0, sy = D.sightY || .1;
+    rig.position.set((.155 + bx + st.roll * .22 - carry * .04) * (1 - A) + gp[0] + sway.x.x * .012 * (1 - A * .7) + (ch ? (rnd() - .5) * .004 * ch : 0), A * (-sy + .165 - by) + -.165 + by - st.dip * .3 - (st.sliding ? .03 : 0) + gp[1] - carry * .05 + land.x + rec.up.x * .012 - sway.y.x * .01 + jolt.x * .012, -.4 + A * .12 + rec.z.x * .06 * (1 - A * .4) + gp[2] + carry * .02);
+    e.set(rec.p.x * .09 * (1 - A * .5) + gr[0] + (st.mantle ? .6 : 0) + carry * .22 - sway.y.x * .05 - land.x * 1.2 + jolt.x * .05, .03 * (1 - A) + gr[1] + rec.y.x * .03 + carry * .55 + sway.x.x * .06, st.roll * .6 + (st.sliding ? -.2 : 0) + gr[2] + rec.r.x * .05 + carry * .25 + sway.x.x * .05, "YXZ"); rig.quaternion.setFromEuler(e);
     if (D.mag) { D.mag.position.y = -.018 + magOff; D.mag.visible = magShow; D.bolt.position.z = .04 + boltZ; } if (D.coil) { D.coil.scale.setScalar(.6 + ch * 1.6); D.coil.material.color.setRGB(.5 + ch * 2, 2.4 + ch * 3, 3 + ch * 4); }
     rig.updateMatrix(); VM.muzzle.copy(D.muzzle).applyMatrix4(rig.matrix);
     // the right hand on the grip; the left on the foregrip, or wherever the move has sent it

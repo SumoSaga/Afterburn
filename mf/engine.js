@@ -31,10 +31,10 @@ const hash2 = (x, y) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
 function noise2(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); return lerp(lerp(hash2(xi, yi), hash2(xi + 1, yi), u), lerp(hash2(xi, yi + 1), hash2(xi + 1, yi + 1), u), v); }
 
 /* ---------- settings ---------- */
-export const DEF = { px: 3, fov: 95, sens: 1, walk: 6, sprint: 9.5, jump: 7.4, gravity: 22, air: 2, wallTime: 1.75, wallSpeed: 10.5, wallKick: 6.5, slideBoost: 3, outlines: 1, palette: 0, blocks: 1, weather: "clear" };
+export const DEF = { px: 3, fov: 95, sens: 1, walk: 4.5, sprint: 6.5, jump: 7.4, gravity: 22, air: 2, wallTime: 3, wallSpeed: 9.5, wallKick: 2, slideBoost: 3, outlines: 1, palette: 0, blocks: 1, weather: "clear" };
 export const CFG = { ...DEF };
-try { Object.assign(CFG, JSON.parse(localStorage.getItem("mf-fps-cfg") || "{}")); } catch (e) {}
-export const saveCfg = () => { try { localStorage.setItem("mf-fps-cfg", JSON.stringify(CFG)); } catch (e) {} };
+try { Object.assign(CFG, JSON.parse(localStorage.getItem("mf-fps-cfg3") || "{}")); } catch (e) {}
+export const saveCfg = () => { try { localStorage.setItem("mf-fps-cfg3", JSON.stringify(CFG)); } catch (e) {} };
 
 /* ---------- renderer, cameras, materials ---------- */
 export const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
