@@ -22,12 +22,19 @@ export const drum = (r, len, x, y, z, key, axis = "y", n = 8, r2 = r, tilt = [0,
 export const loft = (rings, x, y, z, key, n = 10, sq = 0, rx = 0, rz = 0, ry = 0) => ({ t: "loft", rings, x, y, z, key, n, sq, rx, ry, rz });
 // o: { half: true } the top half only; { face, wide, from, to } a patch facing the angle `face` (0 is +z, PI is -z), `wide` radians across, between two heights given as angles down from the top
 export const ball = (w, h, d, x, y, z, key, o = {}, rx = 0, rz = 0, ry = 0) => ({ t: "ball", w, h, d, x, y, z, key, o, rx, ry, rz });
-function loftGeo(p) { const n = p.n, R = p.rings, pos = [], idx = [], e = 1 - .62 * p.sq;
+function loftGeo(p) { const n = p.n, R0 = p.rings, R = []; for (let i = 0; i < R0.length; i++) { const a = R0[i], b = R0[i + 1]; R.push(a); if (b && b[0] - a[0] > .08) for (const k of [1 / 3, 2 / 3]) R.push([0, 1, 2, 3, 4].map((j) => (a[j] || 0) + ((b[j] || 0) - (a[j] || 0)) * k)); }
+  const pos = [], idx = [], e = 1 - .62 * p.sq;
   for (const [y, w, d, ox = 0, oz = 0] of R) for (let i = 0; i < n; i++) { const a = (i + .5) / n * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); pos.push(ox + Math.sign(c) * Math.pow(Math.abs(c), e) * w / 2, y, oz + Math.sign(s) * Math.pow(Math.abs(s), e) * d / 2); }
   for (let r = 0; r < R.length - 1; r++) for (let i = 0; i < n; i++) { const a = r * n + i, b = r * n + (i + 1) % n, c = a + n, d = b + n; idx.push(a, c, b, b, c, d); }
   const b0 = pos.length / 3; pos.push(R[0][3] || 0, R[0][0], R[0][4] || 0); for (let i = 0; i < n; i++) idx.push(b0, i, (i + 1) % n);
   const t0 = pos.length / 3, L = R.length - 1; pos.push(R[L][3] || 0, R[L][0], R[L][4] || 0); for (let i = 0; i < n; i++) idx.push(t0, L * n + (i + 1) % n, L * n + i);
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; }
+// grit: a smooth noise over the surface darkens it in patches (grime), bites dark chips out of painted plate, and
+// fades the low parts of anything marked muddy toward the colour of the ground
+const hsh = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
+function noise(x, y, z) { const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z), u = x - i, v = y - j, w = z - k, f = (t) => t * t * (3 - 2 * t), a = f(u), b = f(v), c = f(w), L = (p, q, t) => p + (q - p) * t;
+  return L(L(L(hsh(i, j, k), hsh(i + 1, j, k), a), L(hsh(i, j + 1, k), hsh(i + 1, j + 1, k), a), b), L(L(hsh(i, j, k + 1), hsh(i + 1, j, k + 1), a), L(hsh(i, j + 1, k + 1), hsh(i + 1, j + 1, k + 1), a), b), c); }
+const PAINTED = { plate: 1, plate2: 1, shell: 1, accent: 1, cream: 1, vest: 1 }, _chip = new THREE.Color(), _mud = new THREE.Color();
 const _c = new THREE.Color();
 export function build(parent, list, S, glowMat) {
   const solid = [], glow = [];
@@ -44,7 +51,12 @@ export function build(parent, list, S, glowMat) {
     if (isGlow) { glow.push(g); continue; }
     g.computeBoundingBox(); const y0 = g.boundingBox.min.y, h = g.boundingBox.max.y - y0 || 1;
     _c.set(S[p.key] || p.key); const P = g.attributes.position, a = new Float32Array(P.count * 3), j = .94 + Math.random() * .12;
-    for (let i = 0; i < P.count; i++) { const k = j * lerp(.8, 1.07, clamp((P.getY(i) - y0) / h, 0, 1)); a[i * 3] = _c.r * k; a[i * 3 + 1] = _c.g * k; a[i * 3 + 2] = _c.b * k; }
+    const grit = S.grit ?? .7, fq = S.gritScale || 2.2, mud = S.mud || 0, chips = PAINTED[p.key] ? grit : 0; _chip.set(S.chip || "#2b2622"); _mud.set(S.mudColor || "#5a4a36");
+    for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i), z = P.getZ(i), yn = clamp((y - y0) / h, 0, 1); let k = j * lerp(.8, 1.07, yn), r = _c.r, gg = _c.g, b = _c.b;
+      if (grit) { const n1 = noise(x * fq, y * fq, z * fq), n2 = noise(x * fq * 3.1 + 9, y * fq * 3.1, z * fq * 3.1 + 4); k *= 1 - grit * .34 * n1 * n1 - grit * .1 * n2;
+        if (chips && n2 > .7 - chips * .08) { const m = Math.min(1, (n2 - (.7 - chips * .08)) * 6) * .8; r += (_chip.r - r) * m; gg += (_chip.g - gg) * m; b += (_chip.b - b) * m; } }
+      if (mud) { const m = clamp(mud * (1 - yn) * (.6 + .6 * noise(x * fq * 2, 3, z * fq * 2)), 0, .85); r += (_mud.r - r) * m; gg += (_mud.g - gg) * m; b += (_mud.b - b) * m; }
+      a[i * 3] = r * k; a[i * 3 + 1] = gg * k; a[i * 3 + 2] = b * k; }
     g.setAttribute("color", new THREE.BufferAttribute(a, 3)); solid.push(g);
   }
   if (solid.length) { const m = new THREE.Mesh(mergeGeometries(solid), charMat); m.castShadow = m.receiveShadow = true; parent.add(m); }

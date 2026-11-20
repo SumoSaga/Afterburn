@@ -17,23 +17,23 @@ const L1 = 1.3, L2 = 1.35, ANK = .27, HIP_Y = 2.85, HIP_X = .66, KNEEL = 1.25, S
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeRig(team, o = {}) {
-  const S = { ...(SCHEMES[team] || SCHEMES.you), ...o }, glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) }), hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.9, .7) });
+  const S = { ...(SCHEMES[team] || SCHEMES.you), grit: .85, gritScale: 1.9, ...o }, Sm = { ...S, mud: .75 }, glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) }), hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.9, .7) });
   const root = new THREE.Group(); root.scale.setScalar(U);
   // hips: a pelvis girdle with ball joints, a plate in front, guards at the sides, a bedroll slung behind
   const hips = joint(root, 0, HIP_Y, 0);
   build(hips, [Lf([[-.46, .6, .66], [-.12, 1.36, 1.0], [.26, 1.2, .92]], 0, 0, 0, "frame", 10, .45), C(.5, .3, 0, .36, 0, "dark", "y", 12),
     ...[-1, 1].flatMap((sd) => [Bl(.64, .64, .66, sd * HIP_X, 0, 0, "dark"), Bl(.34, .86, .9, sd * (HIP_X + .34), -.08, 0, "plate2"), B(.1, .1, .5, sd * (HIP_X + .5), -.3, 0, "accent")]),
     Lf([[-.52, .26, .14], [-.14, .56, .22], [.16, .5, .2]], 0, 0, -.5, "plate", 8, .3), B(.24, .07, .05, -.085, -.16, -.63, "accent", 0, .55), B(.24, .07, .05, .085, -.16, -.63, "accent", 0, -.55),
-    C(.2, 1.0, 0, 0, .68, "canvas", "x", 10), B(.07, .44, .44, -.28, 0, .68, "dark"), B(.07, .44, .44, .28, 0, .68, "dark")], S, glowMat);
+    C(.2, 1.0, 0, 0, .68, "canvas", "x", 10), B(.07, .44, .44, -.28, 0, .68, "dark"), B(.07, .44, .44, .28, 0, .68, "dark"), C(.3, .09, 1.06, .05, .3, "steel", "x", 12), C(.17, .1, 1.07, .05, .3, "dark", "x", 12), ...[-.4, .4].map((x) => C(.04, .05, x, .12, -.52, "steel", "z", 6))], S, glowMat);
   // legs: a thigh that swells and tapers, a knee cap, a calf with its bulge behind, a foot with a toe cap and a heel
   const legs = [-1, 1].map((sd) => {
     const thigh = joint(hips, sd * HIP_X, 0, 0), shin = joint(thigh, 0, -L1, 0), foot = joint(shin, 0, -L2, 0);
     build(thigh, [Lf([[-1.3, .44, .5], [-.92, .6, .68, 0, .03], [-.4, .76, .84, 0, .02], [.06, .62, .7]], 0, 0, 0, "frame"),
       Lf([[-1.08, .46, .2, 0, -.3], [-.62, .64, .28, 0, -.38], [-.14, .6, .26, 0, -.36]], 0, 0, 0, "plate", 8, .35), Lf([[-1.0, .2, .5], [-.55, .26, .66], [-.12, .24, .6]], sd * .38, 0, 0, "plate2", 8, .35), B(.4, .08, .04, 0, -.3, -.52, "accent"),
-      B(.18, .44, .4, sd * .5, -.62, .1, "canvas"), B(.2, .06, .43, sd * .5, -.62, .1, "dark"), C(.09, .8, 0, -.5, .42, "dark", "y", 8), C(.05, .6, 0, -1.0, .42, "steel", "y", 8)], S, glowMat);
+      B(.18, .44, .4, sd * .5, -.62, .1, "canvas"), B(.2, .06, .43, sd * .5, -.62, .1, "dark"), C(.09, .8, 0, -.5, .42, "dark", "y", 8), C(.05, .6, 0, -1.0, .42, "steel", "y", 8), Lf([[-.9, .5, .16, 0, -.42], [-.55, .56, .18, 0, -.47], [-.3, .5, .16, 0, -.44]], 0, 0, 0, "plate2", 8, .4), ...[-.2, .2].flatMap((x) => [C(.035, .05, x, -.38, -.56, "steel", "z", 6), C(.035, .05, x, -.84, -.52, "steel", "z", 6)]), C(.04, .9, -sd * .24, -.6, .32, "dark", "y", 6, .04, [0, sd * .08])], S, glowMat);
     build(shin, [Bl(.58, .58, .62, 0, 0, -.02, "dark"), Bl(.5, .6, .36, 0, .02, -.3, "plate2"), Lf([[-1.35, .34, .4], [-1.02, .44, .52, 0, .05], [-.5, .6, .74, 0, .12], [-.08, .5, .56]], 0, 0, 0, "frame"),
-      Lf([[-1.27, .38, .2, 0, -.2], [-.72, .52, .28, 0, -.3], [-.22, .44, .24, 0, -.3]], 0, 0, 0, "plate", 8, .35), B(.3, .08, .04, 0, -.4, -.44, "accent"), C(.06, .9, sd * .22, -.66, .3, "dark", "y", 8), C(.035, .5, sd * .22, -1.08, .3, "steel", "y", 8)], S, glowMat);
-    build(foot, [Bl(.5, .5, .52, 0, 0, 0, "dark"), B(.74, .2, 1.3, 0, -.17, -.2, "frame"), Bl(.84, .42, 1.0, 0, -.06, -.55, "plate"), Bl(.64, .44, .6, 0, -.06, .42, "plate2"), Bl(.5, .34, .5, 0, .14, -.22, "plate2", { half: true })], S, glowMat);
+      Lf([[-1.27, .38, .2, 0, -.2], [-.72, .52, .28, 0, -.3], [-.22, .44, .24, 0, -.3]], 0, 0, 0, "plate", 8, .35), B(.3, .08, .04, 0, -.4, -.44, "accent"), C(.06, .9, sd * .22, -.66, .3, "dark", "y", 8), C(.035, .5, sd * .22, -1.08, .3, "steel", "y", 8), Lf([[-1.1, .3, .46, sd * .26], [-.6, .34, .56, sd * .3], [-.3, .3, .5, sd * .28]], 0, 0, 0, "plate2", 8, .4), ...[-.14, .14].map((x) => C(.03, .05, x, -.5, -.44, "steel", "z", 6)), B(.3, .05, .05, 0, -.78, -.4, "dark"), B(.3, .05, .05, 0, -.98, -.36, "dark")], Sm, glowMat);
+    build(foot, [Bl(.5, .5, .52, 0, 0, 0, "dark"), B(.74, .2, 1.3, 0, -.17, -.2, "frame"), Bl(.84, .42, 1.0, 0, -.06, -.55, "plate"), Bl(.64, .44, .6, 0, -.06, .42, "plate2"), Bl(.5, .34, .5, 0, .14, -.22, "plate2", { half: true }), ...[-.24, 0, .24].map((x) => B(.16, .12, .2, x, -.2, -1.02, "dark"))], { ...S, mud: 1 }, glowMat);
     return { thigh, shin, foot, sd };
   });
   // the torso turns at the waist; its chest is a shell with a hole in the front that the hatch covers
@@ -45,6 +45,10 @@ export function makeRig(team, o = {}) {
     Bl(2.36, .9, 2.0, 0, 2.18, 0, "plate", { half: true }), Bl(1.5, .5, .56, 0, .74, -1.06, "plate2"),
     ...[-1, 1].flatMap((sd) => [Bl(.56, 1.5, 1.8, sd * 1.3, 1.34, 0, "plate"), Bl(.66, 1.32, .5, sd * .9, 1.46, -1.1, "plate"), B(.34, .1, .06, sd * .9, 1.04, -1.33, "accent"), C(.03, 1.0, sd * 1.56, 1.9, .1, "dark", "z", 6),
       Bl(1.1, 1.0, 1.24, sd * 1.56, 1.9, 0, sd > 0 ? "accent" : "plate"), Lf([[-.5, .2, .9], [0, .3, 1.16], [.36, .26, 1.0]], sd * 2.02, 1.5, 0, "plate2", 8, .3)]),
+    ...[-1, 1].flatMap((sd) => [B(.07, .56, .8, sd * 1.6, 1.0, .25, "plate2"), ...[[.84, .56], [.84, -.06], [1.2, .56], [1.2, -.06]].map(([y, z]) => C(.035, .05, sd * 1.64, y, z, "steel", "x", 6)), C(.05, 1.1, sd * .84, 2.42, .72, "dark", "z", 6, .05, [-.35, 0]), B(.05, .7, .05, sd * .62, 3.0, -.16, "dark")]),
+    ...[-.54, -.18, .18, .54].map((x, i) => Bl(.36, .22, .3, x, 1.0 + (i % 2) * .02, -1.34, "canvas")), B(1.3, .05, .05, 0, 3.34, -.16, "dark"), B(1.3, .05, .05, 0, 3.34, -.56, "dark"), B(.05, .05, .44, -.62, 3.34, -.36, "dark"), B(.05, .05, .44, .62, 3.34, -.36, "dark"),
+    C(.17, .22, 1.2, 2.72, -.62, "dark", "z", 10), [.22, .22, .04, 1.2, 2.72, -.74, "glow"], ...[0, 1, 2, 3, 4].map((i) => B(.03, .16, .02, 1.3 + i * .07, 1.66, -1.34, "cream")), ...[-.5, -.25, 0, .25, .5].map((x, i) => B(.12, .1, .03, x, .52, -1.3, i % 2 ? "dark" : "accent", 0, .5)),
+    B(.5, .34, .3, -.5, 2.0, 1.56, "canvas"), B(.4, .3, .3, .5, 2.0, 1.56, "plate2"), B(.44, .05, .34, .5, 2.0, 1.56, "dark"),
     C(.22, .05, -2.14, 1.52, 0, "cream", "x", 12), B(.07, .09, .36, -2.16, 1.52, 0, "accent"),
     // the head: a collar, a low domed housing with a visor that wraps round it and one eye, two whip aerials
     C(.56, .2, 0, 2.6, -.15, "dark", "y", 12), Bl(.8, .6, .92, 0, 2.86, -.16, "plate2"), { ...Bl(.84, .64, .96, 0, 2.86, -.16, "glow", { face: Math.PI, wide: 1.9, from: 1.3, to: 1.62 }) }, Bl(.3, .26, .3, .3, 2.72, -.5, "dark"), [.1, .1, .04, .3, 2.72, -.66, "glow"],
@@ -63,7 +67,7 @@ export function makeRig(team, o = {}) {
   // arms: a ball at the shoulder, an upper arm and forearm that swell and taper, a gauntlet, and a hand with fingers and a thumb
   const arm = (sd) => { const up = joint(torso, sd * SH_X, SH_Y, 0), fore = joint(up, 0, -A1, 0), hand = joint(fore, 0, -A2, 0);
     build(up, [Bl(.7, .7, .74, 0, 0, 0, "dark"), Lf([[-A1, .4, .44], [-.9, .56, .62], [-.25, .64, .7], [.05, .5, .52]], 0, 0, 0, "frame"), Bl(.62, .86, .76, sd * .1, -.6, 0, "plate")], S, glowMat);
-    build(fore, [Bl(.54, .54, .56, 0, 0, 0, "dark"), Lf([[-A2, .4, .44], [-1.0, .56, .6], [-.35, .54, .58], [0, .42, .44]], 0, 0, 0, "frame"), Lf([[-A2 + .12, .56, .6], [-.86, .72, .76], [-.5, .6, .64]], 0, 0, 0, "plate2", 10, .2), B(.1, .46, .1, sd * .37, -.86, 0, "accent")], S, glowMat);
+    build(fore, [Bl(.54, .54, .56, 0, 0, 0, "dark"), Lf([[-A2, .4, .44], [-1.0, .56, .6], [-.35, .54, .58], [0, .42, .44]], 0, 0, 0, "frame"), Lf([[-A2 + .12, .56, .6], [-.86, .72, .76], [-.5, .6, .64]], 0, 0, 0, "plate2", 10, .2), B(.1, .46, .1, sd * .37, -.86, 0, "accent"), Lf([[-1.2, .3, .5, sd * .3], [-.8, .36, .6, sd * .34], [-.5, .3, .5, sd * .3]], 0, 0, 0, "plate", 8, .4), C(.03, 1.0, -sd * .2, -.6, .3, "dark", "y", 6), ...[-.16, .16].map((z) => C(.03, .05, sd * .5, -.85, z, "steel", "x", 6))], S, glowMat);
     build(hand, [Bl(.5, .5, .4, 0, -.12, 0, "dark"), Bl(.56, .3, .5, 0, .04, 0, "plate"), ...[-.18, -.06, .06, .18].flatMap((x) => [B(.11, .26, .16, x, -.4, -.06, "frame"), B(.11, .14, .24, x, -.52, -.16, "frame")]), B(.13, .26, .16, sd * -.28, -.24, -.12, "frame", 0, sd * .4)], S, glowMat);
     return { up, fore, hand, sd }; };
   const armR = arm(1), armL = arm(-1);
@@ -73,7 +77,7 @@ export function makeRig(team, o = {}) {
   build(gun, [Lf([[-.26, .2, .5], [0, .26, .62], [.2, .22, .5]], 0, -.02, -.28, "plate2", 8, .5), B(.3, .46, 1.5, 0, 0, -1.1, "frame"), Lf([[-.14, .32, 1.3], [.06, .26, 1.1]], 0, .26, -1.1, "plate", 8, .6),
     B(.16, .5, .2, 0, -.44, -.62, "dark", .3), C(.32, .3, 0, -.34, -1.2, "plate", "x", 12), C(.33, .07, 0, -.34, -1.2, "accent", "x", 12),
     C(.2, 1.1, 0, .02, -2.3, "plate2", "z", 10), B(.14, .4, .18, 0, -.36, -2.15, "dark", -.15), C(.11, 1.5, 0, .02, -3.4, "dark", "z", 10), C(.17, .32, 0, .02, -4.1, "frame", "z", 10), C(.19, .06, 0, .02, -3.98, "steel", "z", 10),
-    C(.045, 1.6, 0, -.14, -2.9, "steel", "z", 6), B(.08, .12, .9, 0, .4, -1.2, "dark"), B(.1, .16, .14, 0, .5, -.9, "dark"), B(.1, .2, .1, 0, .5, -1.56, "dark"), [.05, .05, .02, 0, .52, -1.62, "glow"]], S, glowMat);
+    C(.045, 1.6, 0, -.14, -2.9, "steel", "z", 6), B(.08, .12, .9, 0, .4, -1.2, "dark"), B(.1, .16, .14, 0, .5, -.9, "dark"), B(.1, .2, .1, 0, .5, -1.56, "dark"), [.05, .05, .02, 0, .52, -1.62, "glow"], Lf([[-.14, .3, .34], [.14, .3, .34]], 0, 0, -.3, "canvas", 8, .5, Math.PI / 2), B(.04, .2, 1.9, .2, -.1, -1.4, "dark"), C(.2, .2, .26, .0, -1.2, "plate2", "x", 10)], S, glowMat);
   const muzzle = joint(gun, 0, .02, -4.3), flash = new THREE.Mesh(new THREE.BoxGeometry(.6, .6, .8), hot); flash.visible = false; muzzle.add(flash);
   // the blade: carried across the back, and in the left hand for the moment it is swung
   const bladeParts = (len) => [B(.16, .5, .16, 0, .25, 0, "dark"), B(.6, .1, .2, 0, 0, 0, "steel"), H(.34, len, .08, 0, -len / 2, 0, "steel", { sx: 1 }), H(.34, .5, .08, 0, -len - .25, 0, "steel", { sx: 1 }, Math.PI, 0, 0), [.06, len * .9, .1, 0, -len / 2, 0, "glow"]];
