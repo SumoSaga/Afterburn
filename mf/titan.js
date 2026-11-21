@@ -21,7 +21,7 @@ const SCHEMES = {
    skeleton takes its measurements (leg and arm lengths, hip and shoulder widths, ankle height) from the model. The arms are
    drawn a fifth longer than the model's so both hands reach round the rifle. The plates this file builds are kept only
    as a fallback and are hidden. */
-const MB = MECH_BLOCKS, MD = MB.dims;
+const MB = MECH_BLOCKS.medium, MD = MB.dims;   // the medium body; makeRig takes its own measurements from the body for the frame it is building
 const L1 = MD.L1, L2 = MD.L2, ANK = MD.ANK, HIP_Y = MD.ANK + MD.L1 + MD.L2 - .1, HIP_X = MD.HIP_X, KNEEL = 1.25, SH_X = MD.SH_X, SH_Y = MD.SH_Y, A1 = MD.A1, A2 = MD.A2;
 // The mech's body is a rigged model (models/mech.glb) worn over this walker: see mf/puppet.js. The walker is the fallback.
 const MODEL = await loadModel("mech.glb", "mfMech");
@@ -42,8 +42,9 @@ function modelGun(team, mat0) { let src = null; TRIFLE.scene.traverse((o) => { i
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeRig(team, o = {}) {
+  const MB = MECH_BLOCKS[o.cls] || MECH_BLOCKS.medium, MD = MB.dims, L1 = MD.L1, L2 = MD.L2, ANK = MD.ANK, HIP_Y = MD.ANK + MD.L1 + MD.L2 - .1, HIP_X = MD.HIP_X, SH_X = MD.SH_X, SH_Y = MD.SH_Y, A1 = MD.A1, A2 = MD.A2;   // each frame has its own body, cut from its own model
   const S = { ...(SCHEMES[team] || SCHEMES.you), grit: .85, gritScale: 1.9, ...o }, Sm = { ...S, mud: .75 }, glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) }), hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.9, .7) });
-  const size = o.cls === "light" ? .86 : o.cls === "heavy" ? 1.1 : 1, bulk = o.cls === "light" ? .9 : o.cls === "heavy" ? 1.14 : 1; const root = new THREE.Group(); root.scale.setScalar(U * size);   // a light is smaller and leaner, a heavy bigger and broader
+  const size = 1, bulk = 1, gsc = o.cls === "light" ? .84 : o.cls === "heavy" ? 1.08 : 1; const root = new THREE.Group(); root.scale.setScalar(U * size);   // a light is smaller and leaner, a heavy bigger and broader
   // hips: a pelvis girdle with ball joints, a plate in front, guards at the sides, a bedroll slung behind
   const hips = joint(root, 0, HIP_Y, 0);
   build(hips, [Lf([[-.46, .6, .66], [-.12, 1.36, 1.0], [.26, 1.2, .92]], 0, 0, 0, "frame", 10, .45), C(.5, .3, 0, .36, 0, "dark", "y", 12),
@@ -127,12 +128,12 @@ export function makeRig(team, o = {}) {
     const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)); v2.set(px, py, pz).addScaledVector(v1, -(px * v1.x + py * v1.y + pz * v1.z)); if (v2.lengthSq() < 1e-6) v2.set(0, -1, 0); v2.normalize();
     v3.copy(v1).multiplyScalar(a).addScaledVector(v2, h);   // the elbow, from the shoulder
     q1.setFromUnitVectors(DOWN, v2.copy(v3).normalize()); A.up.quaternion.copy(q1); v2.copy(v1).multiplyScalar(d).sub(v3).normalize(); q2.setFromUnitVectors(DOWN, v2); A.fore.quaternion.copy(q1).invert().multiply(q2); }
-  const HOLD = { x: 1.2, y: .95, z: -.05, blade: .55, grip: new THREE.Vector3(0, -.5, -.62), fore: new THREE.Vector3(0, -.42, -2.15), well: new THREE.Vector3(0, -.36, -1.2), mag: drumG, drum: drumG.children[0] }, hipL = new THREE.Vector3(-1.5, -.3, .5), drops = [], key = (u, K) => { if (u <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (u <= K[i][0]) { const a = K[i - 1], b = K[i], k = (u - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * (k * k * (3 - 2 * k)); } return K[K.length - 1][1]; }; let reWas = -1;
+  gun.scale.setScalar(gsc); const HOLD = { x: SH_X + .2, y: SH_Y - .38, z: -.05, blade: .55, grip: new THREE.Vector3(0, -.5, -.62), fore: new THREE.Vector3(0, -.42, -2.15), well: new THREE.Vector3(0, -.36, -1.2), mag: drumG, drum: drumG.children[0] }, hipL = new THREE.Vector3(-1.5, -.3, .5), drops = [], key = (u, K) => { if (u <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (u <= K[i][0]) { const a = K[i - 1], b = K[i], k = (u - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * (k * k * (3 - 2 * k)); } return K[K.length - 1][1]; }; let reWas = -1;
   const tR = new THREE.Vector3(), tL = new THREE.Vector3(), hang = new THREE.Vector3(), swing = new THREE.Vector3();
   torso.scale.set(bulk, 1, bulk); hips.scale.set(bulk, 1, bulk);
   { // the block body in place of the built plates
     const inKeep = (m) => { for (let q = m; q; q = q.parent) if (q === gun || q === bladeHand) return true; return false; }; root.traverse((m) => { if (m.isMesh && !inKeep(m)) m.visible = false; }); bladeBack.scale.setScalar(.001);
-    const tone = (hex, k) => "#" + new THREE.Color(hex).multiplyScalar(k).getHexString(), S2 = { ...S, grit: .3, gritScale: 1.2 }; MB.palette.forEach((c, i) => { S2["c" + i] = tone(c, team === "foe" ? 1.05 : 1.5); }); S2["c" + (MB.palette.length - 1)] = S.accent; S2["c" + (MB.palette.length - 2)] = S.cream;
+    const tone = (hex, k) => "#" + new THREE.Color(hex).multiplyScalar(k).getHexString(), S2 = { ...S, grit: .3, gritScale: 1.2 }; MB.palette.forEach((c, i) => { S2["c" + i] = tone(c, team === "foe" ? 1.05 : 1.5); }); if (MB.accent >= 0) S2["c" + MB.accent] = S.accent;   // a body whose model has a small bright trim takes the paint there; one without keeps its own colours
     const g = MB.g, put = (j, runs) => build(j, runs.map(([x, y, z, n, ci]) => B(g * 1.02, n * g * 1.01, g * 1.02, x * g, (y + (n - 1) / 2) * g, z * g, "c" + ci)), S2, glowMat);
     put(hips, MB.parts.hips); put(torso, MB.parts.torso); legs.forEach((L) => { const s = L.sd < 0 ? "L" : "R"; put(L.thigh, MB.parts["thigh" + s]); put(L.shin, MB.parts["shin" + s]); put(L.foot, MB.parts["foot" + s]); });
     for (const A of [armR, armL]) { const s = A.sd < 0 ? "L" : "R"; put(A.up, MB.parts["up" + s]); put(A.fore, MB.parts["fore" + s]); } }
