@@ -512,7 +512,7 @@ export function mapFrame(dt) { cam.updateMatrixWorld(); live = new Set(); const 
   markT -= dt; if (markT <= 0) { markT = .2; drawDeck(); }
   const sup = B.supply.you; $("sup-fill").style.width = sup / 6 + "%"; $("sup-n").textContent = Math.floor(sup);
 }
-export const income = (who) => (B.over ? 0 : CPRATE);
+export const income = (who) => (B.over ? 0 : CPRATE * (who === "you" && B.hooks.cpRate ? B.hooks.cpRate() : 1));
 let deckKey = "";
 function drawDeck() { const side = B.fac.you, Un = FACTIONS[side].units, S = MAP.sels, pl = B.hooks.pilot();
   $("map-top").innerHTML = `${opLine()}${pl.dead > 0 ? ` <span class="warn">You are down. Back in ${pl.dead.toFixed(1)} s</span>` : ""}`;
