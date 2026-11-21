@@ -605,6 +605,22 @@ cv.addEventListener("contextmenu", (e) => e.preventDefault());
 const msg = $("msg"); function say(t, secs = 0) { msg.textContent = t; msg.style.display = t ? "block" : "none"; sayT = secs; }
 function begin(lock = true) { if (SND) SND.start(); saveLoad(); GARAGE.leave(); started = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); if (lock) wantLock(); }
 $("go").onclick = () => { if (NET.open) return; begin(); };
+/* ---------- going back to a match ----------
+   Every few seconds the match you are in is noted in this browser. A match against the machine keeps where the
+   operation stands: the sector, the tickets, who holds each point, both sides' Command Points and your Titan meter. The
+   troops on the field are not kept, so both sides send theirs again. A match with other people keeps the host's code,
+   and going back joins it again in your old seat, which the host holds for you. A host cannot go back: when the host
+   leaves, the match is over. A note is dropped when its match ends, and after six hours. */
+const lastGet = () => { try { const d = JSON.parse(localStorage.getItem("ab-last") || "null"); return d && Date.now() - d.at < 6 * 3600e3 ? d : null; } catch (e) { return null; } }, lastSet = (d) => { try { if (d) localStorage.setItem("ab-last", JSON.stringify(d)); else localStorage.removeItem("ab-last"); } catch (e) {} };
+let lastT = 3;
+function lastStep(dt) { lastT -= dt; if (lastT > 0) return; lastT = 4; if (B.over) { lastSet(null); return; } const base = { at: Date.now(), key: MAPKEY, field: PLAN.name, sector: OP.sector, of: SECN, atk: OP.atk === "you" };
+  if (B.mp === "guest") lastSet({ ...base, kind: "mp", code: NET.code, name: MY.name || "" }); else if (!B.mp && !pendingFor(MAPKEY)) lastSet({ ...base, kind: "solo", phase: OP.phase, tickets: OP.tickets, max: OP.max, batt: OP.batt, pts: POINTS.map((p) => [p.owner || "", Math.round(p.prog * 100) / 100]), cp: [Math.round(B.supply.you), Math.round(B.supply.foe)], meter: Math.round(P.meter) }); }
+function lastCard() { const d = lastGet(), e = $("rejoin"); if (!d || started) { e.style.display = "none"; return; } const mins = Math.max(1, Math.round((Date.now() - d.at) / 60000)); e.style.display = "block";
+  e.innerHTML = `<h2>Your last match</h2><p class="note">${(d.field || "A field").replace(/[<>&]/g, "")}. You were ${d.atk ? "attacking" : "defending"} sector ${d.sector + 1} of ${d.of}, ${mins} minute${mins > 1 ? "s" : ""} ago${d.kind === "mp" ? ", in the match with code " + String(d.code).replace(/[<>&]/g, "") + ". Going back only works while the host is still playing" : ". The operation picks up where it stood. Troops are not kept, so both sides send theirs again"}.</p><div class="row"><button id="rj-go" class="go" style="margin-top:0">Go back in</button><button id="rj-drop">Forget it</button></div>`;
+  $("rj-drop").onclick = () => { lastSet(null); lastCard(); }; $("rj-go").onclick = () => { try { if (d.kind === "mp") { sessionStorage.setItem("ab-map-join", d.key); sessionStorage.setItem("ab-autojoin", JSON.stringify({ code: d.code, name: d.name })); location.reload(); } else { sessionStorage.setItem("ab-resume", "1"); if (d.key === MAPKEY) location.reload(); else pickMap(d.key); } } catch (err) {} }; }
+function resume() { const d = lastGet(); if (!d || d.kind !== "solo" || d.key !== MAPKEY) return; begin(false); OP.sector = Math.min(d.sector, SECN - 1); OP.phase = "fight"; OP.t = 0; OP.max = d.max; OP.tickets = d.tickets; OP.batt = d.batt; POINTS.forEach((p, i) => { const q = d.pts[i]; if (q) { p.owner = q[0] || null; p.prog = q[1]; } });
+  B.supply.you = d.cp[0]; B.supply.foe = d.cp[1]; P.meter = d.meter; setHomes(); respawn(); say("You are back in. Sector " + (OP.sector + 1) + " of " + SECN + ". Click to take the controls.", 5); }
+lastCard(); try { if (sessionStorage.getItem("ab-resume")) { sessionStorage.removeItem("ab-resume"); setTimeout(resume, 400); } } catch (e) {}
 const PAINTS = ["#c45a1e", "#3f6f9a", "#5c7f36", "#b0312a", "#c9a03a", "#e2d0ae"];
 function masteryRow(id) { const L = levelOf(id), nx = xpNext(id), T = TECH[id], tp = tpFree(id), t = MAST.tiers[id] || {}; let h = `<br><em>Level ${L}${nx ? " · " + nx[0] + " of " + nx[1] + " XP to the next" : " · mastered"}${T ? " · " + tp + " Tech Point" + (tp === 1 ? "" : "s") + " to spend" : ""}</em>`;
   if (T) for (const br of ["a", "b"]) { const n = t[br] || 0, worn = MAST.pick[id] === br && n > 0, cost = [1, 1, 2][n]; h += `<br><span class="tech"><button data-wear="${id}:${br}" class="${worn ? "on" : ""}" ${n ? "" : "disabled"}>${worn ? "Worn" : "Wear"}</button> <strong>${T[br].name}</strong> ${T[br].tiers.map((x, i) => `<i class="${i < n ? "got" : ""}">${i + 1}. ${x}</i>`).join(" ")} ${n < 3 ? `<button data-tier="${id}:${br}" ${tp >= cost ? "" : "disabled"}>Open tier ${n + 1} (${cost})</button>` : ""}</span>`; }
@@ -833,7 +849,7 @@ function frame(now) {
   const t = P.titan;
   render(clock, dt, Math.max(MAP.on ? 0 : hurtFx, P.dead > 0 && !MAP.on ? .8 : 0, t ? (1 - t.hull / t.hullMax) * .4 : (1 - P.hp / HP) * .5), Math.max(coolFx, P.charge * .6), MAP.on);
   if (SND) { cam.getWorldDirection(_f); SND.listener(cam.position.x / U, cam.position.y / U, cam.position.z / U, _f.x, _f.y, _f.z); }
-  if (started) hud(dt);
+  if (started) { hud(dt); lastStep(dt); }
 }
 buildPass(); setHomes(); respawn();
 { const bad = fieldTest(); if (bad.length) { console.warn("[field] " + MAPKEY + " salt " + SALT + ": " + bad.join("; ")); if (MAPKEY.startsWith("custom-") || !retryField()) window.__fieldBad = bad; } else console.log("[field] " + MAPKEY + " salt " + SALT + ": every point can be reached"); }
@@ -946,6 +962,6 @@ try { const aj = JSON.parse(sessionStorage.getItem("ab-autojoin") || "null"); if
   const go = (n) => pickMap(kind.value + "-" + (String(n).replace(/\D/g, "").slice(0, 6) || "1") + "-" + size.value + role.value);
   $("map-go").onclick = () => go(num.value || "1"); $("map-new").onclick = () => go(1000 + Math.floor(Math.random() * 9000));
   $("map-now").textContent = "You are on " + MAPNAME + ", and you " + (OP.atk === "you" ? "attack" : "defend") + ". " + SECN + " sectors: " + POINTS.map((p) => p.name + " " + p.label.toLowerCase() + (p.roof ? " (roofed)" : "")).join(", ") + "."; }
-window.__mf = { GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+window.__mf = { lastStep, GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);
