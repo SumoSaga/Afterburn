@@ -167,7 +167,7 @@ const ORD = { therm: ["Thermite Star", "Sticks where it lands and burns for 4 se
 const dmgAt = (w, d) => (P.campDmg || 1) * (w.max && d > w.max ? 0 : lerp(w.dmg[0], w.dmg[1], clamp((d - w.rng[0]) / (w.rng[1] - w.rng[0]), 0, 1)));
 const pw = () => (P.weapon === 2 ? PW.pistol : PW[LOAD.weapon] && !PW[LOAD.weapon].side ? PW[LOAD.weapon] : PW.carbine);
 /* Mechs on the outline's scale. Hull is in bars of 2,500. No shield of its own: that will come from batteries. At no hull a
-   mech is doomed: it gets one last bar of 2,500 and can still fight, and its pilot can get out (hold B) before it goes.
+   mech is doomed: it gets one last bar of 2,500 and can still fight, and its pilot can get out (press B) before it goes.
    Damage written for the old scale (a hull of 500) is multiplied by TS on the way in; the outline's own numbers are passed raw. */
 const TS = 20, BAR = 2500;
 const MECHS = {
@@ -210,7 +210,7 @@ function placeTitan(t, dt) {
 const muzzleOf = (t) => t.rig.muzzle.getWorldPosition(V3());
 function hurtTitan(t, n, raw = false, shMul = 1) { if (!t.alive || t.doom > 0) return; let dmg = raw ? n : n * TS; if (t.markT > 0) dmg *= 1.2; if (t.remote != null) { relay("thit", [t.remote, Math.round(dmg)]); snd("titan_hit", { pos: [t.pos.x, t.pos.y + t.h * .6, t.pos.z], gain: clamp(.45 + dmg / 1200, .45, 1.3) }); return; }
   if (t.vortex > 0) dmg *= .25; if (t.fortT > 0 || t.drT > 0) dmg *= .75; if (t.ward > 0) { const w = Math.min(t.ward, dmg); t.ward -= w; dmg -= w; if (dmg <= 0) { snd("shield_hit", { pos: [t.pos.x, t.pos.y + t.h * .6, t.pos.z], gain: .8, pitch: 1.4 }); return; } } t.shieldT = 0; t.hitT = 0; const s = Math.min(t.shield, dmg * shMul); snd(s > 0 ? "shield_hit" : "titan_hit", { pos: [t.pos.x, t.pos.y + t.h * .6, t.pos.z], gain: clamp(.45 + dmg / 1200, .45, 1.3) }); t.shield -= s; t.hull -= dmg - s / shMul; if (t === P.titan) { hurtFx = Math.max(hurtFx, s > 0 ? 0 : .6); if (s > 0) coolFx = 1; P.shake = Math.max(P.shake, .12 + dmg * .0002); CK.glitch = .18; }
-  if (t.hull <= 0 && !t.doomed) { t.doomed = true; t.hull = BAR; if (t === P.titan) say("Your mech is doomed. It has one bar left. Fight on, or hold B to get out.", 4); else say(t.team === "you" ? "A friendly mech is doomed." : "Their mech is doomed. Finish it.", 3); }
+  if (t.hull <= 0 && !t.doomed) { t.doomed = true; t.hull = BAR; if (t === P.titan) say("Your mech is doomed. It has one bar left. Fight on, or press B to get out.", 4); else say(t.team === "you" ? "A friendly mech is doomed." : "Their mech is doomed. Finish it.", 3); }
   else if (t.hull <= 0) { t.hull = 0; t.doom = 2.6; t.hatchTo = 1; if (t === P.titan || (P.seq && P.seq.T === t)) { throwClear(t); say("Your mech is gone. You have been thrown clear.", 3); } else say(t.team === "you" ? "A friendly mech is going up." : "Their mech is going up.", 3); } }
 function stepTitans(dt) { stepRodeo(dt); stepFires(dt);
   for (let i = LATER.length - 1; i >= 0; i--) { const l = LATER[i]; l.t -= dt; if (l.t <= 0) { LATER.splice(i, 1); l.fn(); } }
@@ -316,7 +316,7 @@ function stepSeq(dt) { const s = P.seq, T = s.T; s.t += dt; const k = s.t;
     if (k > .25 && k < 1.6) T.hatchTo = 1; if (k >= 1.6) T.hatchTo = 0;
     if (k >= 1.6 && CK.mode === "off") { CK.mode = "dark"; CK.t = 0; }
     if (k >= 2.25 && !s.in) { s.in = true; P.titan = T; T.rk = 0; T.cd = 2; T.kneelTo = 0; P.yaw = T.yaw; P.pitch = 0; P.pos.copy(T.pos); CK.mode = "boot"; CK.t = 0; }
-    if (k >= 3.3) { P.seq = null; T.busy = false; say("You are in. Left button fires the " + MECHS[T.mech].wpn.toLowerCase() + ". Q is " + MECHS[T.mech].keys[0].toLowerCase() + ", E " + MECHS[T.mech].keys[1].toLowerCase() + ", F " + MECHS[T.mech].keys[2].toLowerCase() + ", X the core, C smoke, V the melee. Shift sprints and Space dashes. Hold B to get out.", 7); }
+    if (k >= 3.3) { P.seq = null; T.busy = false; say("You are in. Left button fires the " + MECHS[T.mech].wpn.toLowerCase() + ". Q is " + MECHS[T.mech].keys[0].toLowerCase() + ", E " + MECHS[T.mech].keys[1].toLowerCase() + ", F " + MECHS[T.mech].keys[2].toLowerCase() + ", X the core, C smoke, V the melee. Shift sprints and Space dashes. Press B to get out.", 7); }
   } else {
     if (k >= .45 && !s.outp) { s.outp = true; P.titan = null; T.hatchTo = 1; s.g = exitSpot(T); CK.mode = "off"; }
     if (k >= 2.05) { P.pos.copy(s.g); P.vel.set(0, 0, 0); P.yaw = T.yaw; P.pitch = 0; P.h = 1.8; P.grounded = false; P.seq = null; T.busy = false; T.kneelTo = 0; T.hatchTo = 0; }
@@ -347,7 +347,7 @@ function stepRide(dt) { const t = P.titan; if (!t.alive || t.doom > 0) { throwCl
   if (go && K._pulse && t.pulseCd <= 0) { t.pulseCd = 15; P.sonarT = 4; P.sonarN = 0; P.sonarR = 40; say("Sensor pulse.", 1.5); } K._pulse = false;
   if (go && K._core) { if (t.core >= 1) { t.core = 0; t.coreT = 3.6; t.coreN = 0; say("Salvo Core.", 2); snd("charge_fire", { pitch: .6, gain: 1.5 }); } else say("The core is at " + Math.round(t.core * 100) + " percent.", 1.5); } K._core = false;
   if (t.coreT > 0) { t.coreT -= dt; const due = Math.floor((3.6 - t.coreT) / .16); while (t.coreN < due && t.coreN < 22) { t.coreN++; aimRay(0); const best = rayWorld(_o, _d, 140); fireRockets(t, _o.clone().addScaledVector(_d, Math.max(4, best - .3)), 1, 12.5); } }
-  if (go && K.KeyB) { t.ejT = (t.ejT || 0) + dt; if (t.ejT > .5) { t.ejT = 0; if (t.doomed) { throwClear(t); P.vel.y = 22; t.doom = 1.6; t.hatchTo = 1; say("Out. Your mech is going up.", 2.5); } else startExit(); } } else t.ejT = 0;
+  if (go && K._eject) { if (t.doomed) { throwClear(t); P.vel.y = 22; t.doom = 1.6; t.hatchTo = 1; say("Out. Your mech is going up.", 2.5); } else startExit(); } K._eject = false;   /* one press of B and you are out */
   if (go && K._rockets && t.rk <= 0) { aimRay(0); const best = rayWorld(_o, _d, 120); fireRockets(t, _o.clone().addScaledVector(_d, Math.max(4, best - .3))); } K._rockets = false;
   if (t.fortT > 0) { t.fortT -= dt; wx = wz = 0; }
   if (t.dashing > 0) t.dashing -= dt; else { friction(t, 4, dt); accelerate(t, wx, wz, t.speed * (t.mech === "bastion" && t.wardT > 0 ? .6 : 1) * ((K.ShiftLeft || K.ShiftRight) && t.reload <= 0 ? 1.45 : 1), 3.2, dt); }
@@ -589,6 +589,7 @@ addEventListener("keydown", (e) => { if (started && !panelOpen && e.ctrlKey) e.p
   if (MAP.on) { MAP.keys[e.code] = true; if (e.code === "KeyT") again(); return; }
   if (!active()) return; const code = e.code === "ControlLeft" ? "KeyC" : e.code; K[code] = true;
   if (code === "Space") P.jumpBuf = .14; if (code === "KeyT") again(); if (code === "KeyE" && P.dead <= 0) useKey(); if (code === "KeyV" && P.dead <= 0 && !P.titan) tryCallTitan();
+  if (code === "KeyB" && !e.repeat && P.titan) K._eject = true;
   if (code === "Space") K._dash = !!P.titan; if (code === "KeyF") { if (P.titan) K._pulse = true; else startKnife(); } if (P.titan && !e.repeat) { if (code === "KeyV") K._punch = true; if (code === "KeyQ") K._rockets = true; if (code === "KeyE") K._wall = true; if (code === "KeyX") K._core = true; if (code === "KeyC") K._smoke = true; } if (code === "KeyZ" && !e.repeat) ping("fa"); if (code === "KeyB" && !e.repeat && !P.titan) ping("fb"); if (code === "KeyX" && !P.titan) startNade(); if (code === "KeyG" && !e.repeat) { gDownT = performance.now(); WHEEL.x = WHEEL.y = 0; WHEEL.was = WHEEL.armed = WHEEL.dbl = false; setTimeout(() => { if (gDownT && performance.now() - gDownT >= 190) { WHEEL.on = true; wheelDraw(); } }, 200); }
   if (!P.titan && (code === "Digit1" || code === "Digit2" || code === "Digit3")) startSwap(code === "Digit1" ? 0 : code === "Digit2" ? 1 : 2); if (code === "KeyQ" && !P.titan && !e.repeat) useKit();
   if (!runOn && !runDone && ["KeyW", "KeyA", "KeyS", "KeyD"].includes(code)) runOn = true; });
