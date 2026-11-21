@@ -6,6 +6,7 @@ import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, 
 import { VM } from "./hands.js";
 import { GARAGE, GARAGE_FOV } from "./garage.js";
 import { makeRig, TITAN, cockpitRifle } from "./titan.js";
+import "./editor.js";
 import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, LIST_MAX, PASSIVES, SUPCAP, supUsed, squadsOut, thumbOf, credit, nearAI, pingTo, fieldTest, stunAt, addDome, GOAL, OP, SECN, homeOf, setHomes, spend, opLine, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn, UTILS, utilsFor, layMine, refund, TECH, MAST, saveMast, levelOf, xpNext, tpFree, buyTier, pickBranch, wornTech } from "./battle.js";
 import { NET, onMsg, send, host, join, leave, cut } from "./net.js";
 import { makeFigure } from "./figure.js";
@@ -815,7 +816,7 @@ function frame(now) {
   if (started) hud(dt);
 }
 buildPass(); setHomes(); respawn();
-{ const bad = fieldTest(); if (bad.length) { console.warn("[field] " + MAPKEY + " salt " + SALT + ": " + bad.join("; ")); if (!retryField()) window.__fieldBad = bad; } else console.log("[field] " + MAPKEY + " salt " + SALT + ": every point can be reached"); }
+{ const bad = fieldTest(); if (bad.length) { console.warn("[field] " + MAPKEY + " salt " + SALT + ": " + bad.join("; ")); if (MAPKEY.startsWith("custom-") || !retryField()) window.__fieldBad = bad; } else console.log("[field] " + MAPKEY + " salt " + SALT + ": every point can be reached"); }
 
 /* ---------- more than one player ----------
    Up to four: two sides of one or two. Each player's own pilot and Titan run on their own machine and are sent to the

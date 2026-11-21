@@ -21,7 +21,9 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, t) => a + 
 const CON = "#7d858a", CON2 = "#a1a7a8", STEEL = "#5f676d", DRAB = "#4f5a3c", DRAB2 = "#66704a", RUST = "#7c3a1e", SAND = "#917b5f", WOOD = "#5c4030", WOOD2 = "#76634c", DARK = "#2a2724";
 const BOXCOL = [RUST, "#3f6f9a", DRAB, STEEL, "#c9733a", "#8a3a2a", "#b9a582"];
 
-export const THEMES = { colony: "Frontier colony", city: "City blocks", ship: "Ship boarding", mixed: "Mixed country", town: "Town", works: "Works", airfield: "Airfield", farm: "Farmland" };
+// a field made in the editor, read back from this browser's library by its number
+const DESIGN = (id) => { try { const d = JSON.parse(localStorage.getItem("ab-maps") || "{}")[id]; return d && Array.isArray(d.pts) && d.pts.length && [...new Set(d.pts.map((p) => p.s))].sort().every((s, i) => s === i) ? d : null; } catch (e) { return null; } };
+export const THEMES = { custom: "Custom field", colony: "Frontier colony", city: "City blocks", ship: "Ship boarding", mixed: "Mixed country", town: "Town", works: "Works", airfield: "Airfield", farm: "Farmland" };
 /* front: what stands along the streets. yard: what fills the ground behind. veh: what is parked or wrecked.
    wall: what leans against buildings. open: what is dropped on open ground. sq: what stands round the square. */
 const KITS = {
@@ -49,10 +51,10 @@ const CAPS = { apartment: 2, office: 2, terminal: 1, church: 2, firestation: 2, 
 const MIX = { colony: ["works", "airfield", "works", "works"], city: ["works", "town", "works", "airfield", "town"], ship: ["works", "airfield", "works", "airfield"], mixed: null, town: ["town", "town", "town", "farm", "works"], works: ["works", "works", "works", "town", "airfield"], airfield: ["airfield", "works", "airfield", "town", "works"], farm: ["farm", "farm", "farm", "town", "works"] };
 
 export function planMap(key, api) {
-  const kp = key.split("-"), theme = THEMES[kp[0]] ? kp[0] : "mixed", size = (kp[2] || "sa")[0], flip = (kp[2] || "sa")[1] === "d", R = rng(hashStr(kp[0] + "-" + kp[1] + "-" + size + (api.salt ? "~" + api.salt : ""))), wear = R.range(.25, .7);
+  const kp = key.split("-"), DZ = kp[0] === "custom" ? DESIGN(kp[1]) : null, theme = THEMES[kp[0]] ? (kp[0] === "custom" && !DZ ? "colony" : kp[0]) : "mixed", size = (kp[2] || "sa")[0], flip = (kp[2] || "sa")[1] === "d", R = rng(hashStr(kp[0] + "-" + kp[1] + "-" + size + (api.salt ? "~" + api.salt : ""))), wear = R.range(.25, .7);
   const plan = { key, theme, zones: [], sites: [], districts: [], roads: [], prims: [], gens: [], trees: [], bushes: [], rocks: [], paint: [], yards: [], lit: 0 };
-  const P = plan.prims, occ = [], keep = [], count = {}, COLONY = theme === "colony", CITY = theme === "city" || COLONY, URB = CITY, SHIP = theme === "ship", FLAT = CITY || SHIP; plan.indoor = SHIP;   // City blocks and Ship boarding are built on level ground for pilots: see the urban layer below
-  const fits = (x0, z0, x1, z1, m = 0, lists = [occ, keep]) => { for (const L of lists) for (const o of L) if (x0 - m < o[2] && x1 + m > o[0] && z0 - m < o[3] && z1 + m > o[1]) return false; return true; };
+  const P = plan.prims, occ = [], keep = [], count = {}, COLONY = theme === "colony", CITY = theme === "city" || COLONY, URB = CITY, SHIP = theme === "ship", CUSTOM = theme === "custom", FLAT = CITY || SHIP || CUSTOM, mz = (z) => ((kp[2] || "sa")[1] === "d" ? -42 - z : z); plan.indoor = SHIP;   // City blocks and Ship boarding are built on level ground for pilots: see the urban layer below
+  const fits = (x0, z0, x1, z1, m = 0, lists = [occ, keep]) => { if (CUSTOM) return true; for (const L of lists) for (const o of L) if (x0 - m < o[2] && x1 + m > o[0] && z0 - m < o[3] && z1 + m > o[1]) return false; return true; };
   const S = (x, z, w, h, d, col, o, dy = 0) => P.push(["s", x, z, w, h, d, col, o || { stripe: false, base: col, cap: col }, dy]), D = (x, z, w, h, d, col, dy = 0, roof = 0) => P.push(["d", x, z, w, h, d, col, dy, roof]), G = (x, z, w, h, d, dy = 0) => P.push(["g", x, z, w, h, d, dy]);
   const state = () => { const k = R(); return k < wear * .22 ? "ruined" : k < wear * .75 ? "damaged" : "timber"; };
 
@@ -99,7 +101,10 @@ export function planMap(key, api) {
   const zOf = (a) => (flip ? -146 + a : 104 - a), even = (v) => Math.round(v / 2) * 2, defH = flip ? 0 : 2, atkZ = flip ? -152 : 126, defZ = flip ? 126 : -152, HALLCOL = { town: "#8a5a44", works: "#5f676d", airfield: "#8a8e92", farm: "#76634c" };
   const kits = MIX[theme] ? MIX[theme].slice() : ["town", "works", "airfield", "farm", R.pick(["town", "works", "farm"])]; for (let i = kits.length - 1; i > 0; i--) { const j = R.int(0, i); [kits[i], kits[j]] = [kits[j], kits[i]]; }
   const used = {}; plan.sectors = []; plan.atk = flip ? "foe" : "you"; plan.size = size; let li = 0;
-  SPEC.bands.forEach(([a, r, n], k) => { const last = k === SPEC.bands.length - 1, z = even(zOf(a)), xs = n === 1 ? [0] : n === 3 ? [-84, even(R.range(-4, 4)), 84] : last ? [-28, 28] : [-even(R.range(SPEC.xr[0], SPEC.xr[1])), even(R.range(SPEC.xr[0], SPEC.xr[1]))];
+  if (CUSTOM) { const ids = [...new Set(DZ.pts.map((q) => q.s))].sort((a, b) => a - b);   // the sectors and their objectives are the ones drawn in the editor
+    ids.forEach((sv, k) => { const last = k === ids.length - 1, qs = DZ.pts.filter((q) => q.s === sv).sort((a, b) => b.z - a.z), sec = { k, z: even(qs.reduce((a, q) => a + mz(q.z), 0) / qs.length), pts: [], gapX: even(qs.reduce((a, q) => a + q.x, 0) / qs.length) + (qs.some((q) => q.roof) ? 22 : 0), last }; plan.sectors.push(sec);
+      qs.forEach((q) => { const name = "ABCDEFGHIJ"[li], d = { name, label: last && qs.length === 1 ? "The citadel" : "Point " + name, x: even(q.x), z: even(mz(q.z)), r: 12, h: 0, kn: "works", kit: KITS.works, ax: 0, blds: [], sector: k, roof: !!q.roof, last }; plan.districts.push(d); sec.pts.push(li); plan.sites.push([name, d.x, d.z, d.label, k, d.roof ? 1 : 0]); plan.zones.push([d.x - 15, d.z - 15, d.x + 15, d.z + 15, 0, 24]); plan.yards.push([d.x, d.z, 15]); li++; }); }); }
+  else SPEC.bands.forEach(([a, r, n], k) => { const last = k === SPEC.bands.length - 1, z = even(zOf(a)), xs = n === 1 ? [0] : n === 3 ? [-84, even(R.range(-4, 4)), 84] : last ? [-28, 28] : [-even(R.range(SPEC.xr[0], SPEC.xr[1])), even(R.range(SPEC.xr[0], SPEC.xr[1]))];
     const h = FLAT ? 0 : last ? defH : Math.round(clamp(api.hills(0, z) * .3 - 1, 0, 6)), roofAt = n === 1 ? 0 : n === 3 ? 1 : R.int(0, 1), sec = { k, z, pts: [], gapX: n === 3 ? 42 : n === 1 ? 20 : 0, last }; plan.sectors.push(sec);
     xs.forEach((x, i) => { const kn = kits[li % kits.length], kit = KITS[kn], name = "ABCDEFGHIJ"[li], roof = SHIP || i === roofAt; let label; do label = last ? (n === 1 ? "The citadel" : i ? "Citadel east" : "Citadel west") : R.pick(kit.names); while (used[label] && Object.keys(used).length < 12); used[label] = 1;
       const d = { name, label, x, z, r, h, kn, kit, ax: R.chance(.5) ? 1 : 0, blds: [], sector: k, roof, last }; plan.districts.push(d); sec.pts.push(li); plan.sites.push([name, x, z, label, k, roof ? 1 : 0]); plan.zones.push([x - r - 3, z - r - 3, x + r + 3, z + r + 3, h, 24]); plan.yards.push([x, z, r + 3]); li++; }); });
@@ -110,10 +115,12 @@ export function planMap(key, api) {
   const exitOf = (d, tx, tz) => { const ex = d.r + 3, c = [[ex, 0], [-ex, 0], [0, ex], [0, -ex]]; let b = c[0], bs = -1e9; for (const q of c) { const sc = q[0] * (tx - d.x) + q[1] * (tz - d.z); if (sc > bs) { bs = sc; b = q; } } return [d.x + b[0], d.z + b[1], d.h]; };
   const road = (a, b, k) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len < 3) return; const n = Math.max(2, Math.round(len / 6)), mid = api.hills((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) * .5; plan.roads.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], k, hw: k === "track" ? 2.4 : 3.6, len });
     for (let i = 1; i < n; i++) { const t = i / n, x = lerp(a[0], b[0], t), z = lerp(a[1], b[1], t), base = lerp(a[2], b[2], sm(t)); plan.zones.push([x - 4.5, z - 4.5, x + 4.5, z + 4.5, base + (len > 30 ? clamp((mid - base) * .5, -2, 5) * Math.sin(Math.PI * t) : 0), 13]); } };
-  const link = (d1, d2) => road(exitOf(d1, d2.x, d2.z), exitOf(d2, d1.x, d1.z), d1.kit.street === "track" && d2.kit.street === "track" ? "track" : "asphalt"), DS = (k) => plan.sectors[k].pts.map((i) => plan.districts[i]);
+  const link = (d1, d2) => road(exitOf(d1, d2.x, d2.z), exitOf(d2, d1.x, d1.z), d1.kit.street === "track" && d2.kit.street === "track" ? "track" : "asphalt"), DS = (k) => (CUSTOM ? [] : plan.sectors[k].pts.map((i) => plan.districts[i]));
   const baseEdge = (z0, d) => [clamp(d.x, -26, 26), z0, z0 > 0 ? 0 : 2], aEdge = flip ? -146 : 104, dEdge = flip ? 104 : -146;
   for (const d of DS(0)) road(baseEdge(aEdge, d), exitOf(d, d.x, aEdge + (flip ? -200 : 200)), "asphalt"); for (const d of DS(plan.sectors.length - 1)) road(baseEdge(dEdge, d), exitOf(d, d.x, dEdge + (flip ? 200 : -200)), "asphalt");
   for (let k = 0; k < plan.sectors.length; k++) { const row = DS(k); for (let i = 0; i + 1 < row.length; i++) link(row[i], row[i + 1]); if (k + 1 < plan.sectors.length) { const nx = DS(k + 1), seen = new Set(); for (const d of row) { const t = nx.reduce((b, q) => (Math.abs(q.x - d.x) < Math.abs(b.x - d.x) ? q : b)); seen.add(t); link(d, t); } for (const q of nx) if (!seen.has(q)) link(row.reduce((b, d) => (Math.abs(q.x - d.x) < Math.abs(b.x - d.x) ? d : b)), q); } }
+
+  if (CUSTOM) for (const L of DZ.lanes || []) road([L[0], mz(L[1]), 0], [L[2], mz(L[3]), 0], "asphalt");
 
   /* ---------- an objective hall: the roofed point. Hollow, four doorways a squad can use and a mech cannot, a roof you
      can run on with two skylights to drop through, a gallery inside and cover on the floor. 22 m by 16 m. ---------- */
@@ -137,7 +144,7 @@ export function planMap(key, api) {
      Frontier colony are made of these from one base to the other, so there is always a wall, a roof or a pipe within a
      jump of the last one. */
   const PANEL = ["#cfcabb", "#b9b6aa", "#a8b0b0", "#c2b59a", "#9aa3a0"], TRIMS = ["#d2691e", "#2f7f86", "#c9a23a", "#8a3a2a", "#3f6f9a"], GLASS = "#1c2630", FRAME = "#3c4046", WALLC = ["#8f959a", "#7d858a", "#a39c8c"];
-  const nearRoad = (x, z, r) => plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < r; });
+  const nearRoad = (x, z, r) => !CUSTOM && plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < r; });
   const prefab = (x, z, w, d, h, y0 = 0, col = R.pick(PANEL), trim = R.pick(TRIMS)) => { S(x, z, w, h, d, col, null, y0); if (!y0) D(x, z, w + .5, .45, d + .5, FRAME);
     for (let y = 1.9; y < h - 1.5; y += 3.1) { D(x, z, w + .1, 1.1, d * .8, GLASS, y0 + y); D(x, z, w * .8, 1.1, d + .1, GLASS, y0 + y); }
     D(x, z, w + .14, .5, d + .14, trim, y0 + h - .9); D(x, z, w + .4, .3, d + .4, FRAME, y0 + h); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) D(x + a * w / 2, z + b * d / 2, .45, h, .45, FRAME, y0);
@@ -148,11 +155,11 @@ export function planMap(key, api) {
   const runwall = (x, z, len, az, h = R.pick([8, 9, 10]), force) => { const w = az ? 1.2 : len, d = az ? len : 1.2; if (!force && !place(x, z, w / 2, d / 2, 1.5, 7.6)) return false; if (force) { if (!fits(x - w / 2, z - d / 2, x + w / 2, z + d / 2, .5) || nearRoad(x, z, 8.2)) return false; occ.push([x - w / 2, z - d / 2, x + w / 2, z + d / 2]); }
     const c = R.pick(WALLC); S(x, z, w, h, d, c); D(x, z, w + .25, .3, d + .25, FRAME, h); D(x, z, w + .08, .4, d + .08, "#c9733a", .8); for (let u = -len / 2 + 6; u < len / 2 - 2; u += 6) D(x + (az ? 0 : u), z + (az ? u : 0), az ? 1.3 : .14, h, az ? .14 : 1.3, FRAME); return true; };
   // a pipeline: a square duct on pylons, high enough to walk under, wide enough to run along the top of
-  const pipeline = (x, z, len, az) => { const w = az ? 2.2 : len, d = az ? len : 2.2; if (!place(x, z, w / 2, d / 2, 1.5, 7.6)) return false; const y = R.pick([0, 4.2, 4.2]), c = R.pick([RUST, "#a1a7a8", "#c2b59a", "#56613f"]); S(x, z, w, 2.2, d, c, null, y);
+  const pipeline = (x, z, len, az, yF) => { const w = az ? 2.2 : len, d = az ? len : 2.2; if (!place(x, z, w / 2, d / 2, 1.5, 7.6)) return false; const y = yF === undefined ? R.pick([0, 4.2, 4.2]) : yF, c = R.pick([RUST, "#a1a7a8", "#c2b59a", "#56613f"]); S(x, z, w, 2.2, d, c, null, y);
     for (let u = -len / 2 + 1; u <= len / 2 - 1; u += 6) D(x + (az ? 0 : u), z + (az ? u : 0), az ? 2.5 : .5, 2.5, az ? .5 : 2.5, FRAME, y - .15); if (y) for (let u = -len / 2 + 2; u <= len / 2 - 2; u += Math.max(8, (len - 4) / Math.ceil((len - 4) / 12))) S(x + (az ? 0 : u), z + (az ? u : 0), .9, y, .9, "#5f676d");
     if (y) { const e = len / 2 + 1.2; for (let i = 0; i < 3; i++) S(x + (az ? 0 : e + i * 1.4), z + (az ? e + i * 1.4 : 0), az ? 2.2 : 1.4, y - 1.2 - i * 1.5 + 2.2, az ? 1.4 : 2.2, "#565e64"); } return true; };
   // tanks with a catwalk across their tops
-  const tankfarm = (x, z) => { const n = R.int(2, 3), rr = R.range(3, 4.2), h = R.pick([7, 8, 9]), az = R.chance(.5), span = (n - 1) * (rr * 2 + 1.5); if (!place(x, z, az ? rr + 1 : span / 2 + rr + 1, az ? span / 2 + rr + 1 : rr + 1)) return false; const c = R.pick(["#cfcabb", "#a8b0b0", RUST, "#c2b59a"]);
+  const tankfarm = (x, z, azF) => { const n = azF === undefined ? R.int(2, 3) : 2, rr = azF === undefined ? R.range(3, 4.2) : 3.4, h = R.pick([7, 8, 9]), az = azF === undefined ? R.chance(.5) : azF, span = (n - 1) * (rr * 2 + 1.5); if (!place(x, z, az ? rr + 1 : span / 2 + rr + 1, az ? span / 2 + rr + 1 : rr + 1)) return false; const c = R.pick(["#cfcabb", "#a8b0b0", RUST, "#c2b59a"]);
     for (let i = 0; i < n; i++) { const o = (i - (n - 1) / 2) * (rr * 2 + 1.5), tx = x + (az ? 0 : o), tz = z + (az ? o : 0); P.push(["ct", tx, tz, rr, h, c]); D(tx, tz, rr * 1.7, .5, rr * 1.7, R.pick(TRIMS), h * .6); }
     S(x, z, az ? 1.6 : span + 2, .3, az ? span + 2 : 1.6, "#6c747a", null, h + .1); D(x, z, az ? 1.8 : span + 2, .9, az ? span + 2 : .12, "#c9733a", h + .4); return true; };
   const dropship = (x, z) => { S(x, z, 14, 2.8, 4.4, "#7d858a", null, 1.4); S(x - 4, z, 5, 1.6, 9.5, "#6c747a", null, 2.2); S(x + 5.5, z, 2, 2.2, .6, "#5f676d", null, 4.2); for (const sx of [-4, 3]) for (const sz of [-1.7, 1.7]) S(x + sx, z + sz, .5, 1.4, .5, FRAME); D(x - 7.1, z, .3, 1, 2.6, "#2a3038", 2.4); G(x + 7.1, z, .2, .6, 1.6, 2.2); };
@@ -170,7 +177,8 @@ export function planMap(key, api) {
   const COVER = [["container", 2.5], ["barrier", 2], ["crates", 2.5], ["sandbag", 1.5], ["barrels", 1.2], ["hesco", 1.2], ["container2", 1], ["wall", 1], ["piperack", .8], ["tank", .6]];
 
   /* ---------- a district ---------- */
-  for (const d of plan.districts) { const kit = d.kit, r = d.r, hs = kit.sw / 2, W = (u, v) => (d.ax ? [d.x + v, d.z + u] : [d.x + u, d.z + v]), rect = (u0, v0, u1, v1) => { const a = W(u0, v0), b = W(u1, v1); return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]; };
+  for (const d of plan.districts) { if (CUSTOM) { plan.paint.push({ x0: d.x - 12, z0: d.z - 12, x1: d.x + 12, z1: d.z + 12, k: "apron" }); if (d.roof) { hall(d, null, (u0, v0, u1, v1) => [d.x + Math.min(u0, u1), d.z + Math.min(v0, v1), d.x + Math.max(u0, u1), d.z + Math.max(v0, v1)]); plan.lit++; P.push(["li", d.x, d.z, 4.9]); } else { plan.lit++; P.push(["lp", d.x - 7, d.z - 7, 1, 0]); } continue; }
+    const kit = d.kit, r = d.r, hs = kit.sw / 2, W = (u, v) => (d.ax ? [d.x + v, d.z + u] : [d.x + u, d.z + v]), rect = (u0, v0, u1, v1) => { const a = W(u0, v0), b = W(u1, v1); return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]; };
     const rotOf = (fu, fv) => (d.ax ? Math.atan2(fv, fu) : Math.atan2(fu, fv)), turned = (alongU) => (alongU ? d.ax : 1 - d.ax);   // is a thing laid along this street turned a quarter turn on the map
     const pt = (k, q, extra) => plan.paint.push({ x0: q[0], z0: q[1], x1: q[2], z1: q[3], k, ...extra });
     pt(URB ? "apron" : kit.ground, [d.x - r - 3, d.z - r - 3, d.x + r + 3, d.z + r + 3]);
@@ -220,7 +228,7 @@ export function planMap(key, api) {
   const inDistrict = (x, z, m) => plan.districts.some((d) => Math.abs(x - d.x) < d.r + m && Math.abs(z - d.z) < d.r + m) || (Math.abs(x) < 34 + m && (z > 104 - m || z < -146 + m));
   for (const rd of plan.roads) { const ux = (rd.bx - rd.ax) / rd.len, uz = (rd.bz - rd.az) / rd.len, nx = -uz, nz = ux, rot = Math.atan2(ux, uz); let side = R.sign();
     for (let t = 7; t < rd.len - 5; t += R.range(8, 15)) { const x = rd.ax + ux * t, z = rd.az + uz * t, k = R(); side = -side;
-      if (URB) { if (k > .8 && k < .9 && rd.len > 40) { const r90 = Math.abs(ux) > Math.abs(uz) ? 1 : 0; prop("barrier", x + nx * 2, z + nz * 2, r90, .1, [occ]); prop(R.pick(["sandbag", "crates"]), x - nx * 2 + ux * 3.5, z - nz * 2 + uz * 3.5, r90, .1, [occ]); } continue; }
+      if (URB || CUSTOM) { if (!CUSTOM && k > .8 && k < .9 && rd.len > 40) { const r90 = Math.abs(ux) > Math.abs(uz) ? 1 : 0; prop("barrier", x + nx * 2, z + nz * 2, r90, .1, [occ]); prop(R.pick(["sandbag", "crates"]), x - nx * 2 + ux * 3.5, z - nz * 2 + uz * 3.5, r90, .1, [occ]); } continue; }
       if (k < .3) { const px = x + nx * side * (rd.hw + 2.2), pz = z + nz * side * (rd.hw + 2.2); if (fits(px - .3, pz - .3, px + .3, pz + .3, .2, [occ])) { occ.push([px - .2, pz - .2, px + .2, pz + .2]); PROPS.pole().put(px, pz, Math.abs(ux) > Math.abs(uz) ? 1 : 0); } }
       else if (k < .5) gen(R.w(KITS.town.veh.concat(KITS.works.veh)), x + nx * side * (rd.hw - .6), z + nz * side * (rd.hw - .6), rot + R.range(-.5, .5), R.w([["damaged", 1], ["ruined", 1.4]]), .3, [occ]);
       else if (k < .57) gen("billboard", x + nx * side * (rd.hw + 6), z + nz * side * (rd.hw + 6), rot + (side > 0 ? -1 : 1) * Math.PI / 2 * 0 + R.pick([0, Math.PI]), state(), .3, [occ]);
@@ -234,7 +242,7 @@ export function planMap(key, api) {
      the roofed points use, stand off the lanes for pilots and troops to go into and clear.
      A ship adds a hull down both sides, bulkheads across it between the sectors with wide doorways, and a deck overhead,
      so nothing can come down from the sky: no mechs and no pods. Every point on a ship is inside. */
-  if (FLAT) { const LANE = 7.5, tones = SHIP ? ["#5f676d", "#4a5258", "#6c747a", "#565e64"] : ["#8a5a44", "#7d858a", "#9a8f80", "#6f6a62", "#76634c", "#5f676d"], near = (x, z, r) => plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < r; });
+  if (FLAT && !CUSTOM) { const LANE = 7.5, tones = SHIP ? ["#5f676d", "#4a5258", "#6c747a", "#565e64"] : ["#8a5a44", "#7d858a", "#9a8f80", "#6f6a62", "#76634c", "#5f676d"], near = (x, z, r) => plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < r; });
     plan.houses = []; const tower = (x, z, w, d, h, col) => { if (Math.abs(x) + w / 2 > 112 || z + d / 2 > 100 || z - d / 2 < -142 || !fits(x - w / 2, z - d / 2, x + w / 2, z + d / 2, 1.2) || near(x, z, LANE + Math.max(w, d) / 2 - .5)) return false; occ.push([x - w / 2, z - d / 2, x + w / 2, z + d / 2]); if (URB) { prefab(x, z, w, d, h); return true; } S(x, z, w, h, d, col); D(x, z, w + .3, .35, d + .3, "#3c4046", h);
       if (!SHIP) for (let y = 3; y < h - 1; y += 3) { D(x, z, w + .06, .9, d * .7, "#2a3038", y); D(x, z, w * .7, .9, d + .06, "#2a3038", y); } else { G(x, z, w + .08, .12, d + .08, h * .55); } return true; };
     // blocks down both sides of every lane
@@ -284,6 +292,14 @@ export function planMap(key, api) {
     else { for (const [ox, oz] of [[-6, -5], [6, -5], [0, 6]]) gen("fueltank", x + ox, z + oz, 0, state(), .3, [occ]); some(["tank", "piperack", "barrels", "container", "wall", "crates"], 8); gen("boxtruck", x + 9, z + 8, R.range(0, 6), state(), .3, [occ]); }
   }
 
+  /* ---------- a field from the editor: every piece where it was put ---------- */
+  if (CUSTOM) { plan.houses = []; plan.paint.unshift({ x0: -124, z0: -190, x1: 124, z1: 152, k: ["apron", "pave", "dirt", "grass"].includes(DZ.ground) ? DZ.ground : "apron" }); const SZ = { blockS: [8, 6, 6], blockM: [12, 9, 8], blockL: [16, 12, 11], tower: [8, 8, 15] };
+    for (const it of (DZ.items || []).slice(0, 600)) { const x = +it.x || 0, z = mz(+it.z || 0), az = !!it.r, t = it.t, sz = SZ[t];
+      if (sz) { const w = az ? sz[1] : sz[0], dd = az ? sz[0] : sz[1]; occ.push([x - w / 2, z - dd / 2, x + w / 2, z + dd / 2]); prefab(x, z, w, dd, sz[2]); }
+      else if (t === "stack") stack(x, z, az ? 11 : 14, az ? 14 : 11); else if (/^wall\d\d$/.test(t)) runwall(x, z, +t.slice(4), az, 9, true); else if (t === "pipe" || t === "pipelow") pipeline(x, z, 24, az, t === "pipe" ? 4.2 : 0); else if (t === "tanks") tankfarm(x, z, az); else if (t === "pad") pad(x, z); else if (t === "dropship") dropship(x, z);
+      else if (t === "hall") { hall({ last: false, kn: "works" }, null, (u0, v0, u1, v1) => (az ? [x + Math.min(v0, v1), z + Math.min(u0, u1), x + Math.max(v0, v1), z + Math.max(u0, u1)] : [x + Math.min(u0, u1), z + Math.min(v0, v1), x + Math.max(u0, u1), z + Math.max(v0, v1)])); plan.yards.push([x, z, 13]); plan.houses.push([x, z]); }
+      else if (t === "tree" || t === "rock" || PROPS[t === "lowwall" ? "wall" : t]) prop(t === "lowwall" ? "wall" : t, x, z, az ? 1 : 0, 0, [[]]); } }
+
   /* ---------- the two bases: dressed at the sides, the middle left clear for troops ---------- */
   for (const [bz, f] of [[128, -1], [-166, 1]]) for (const sd of [-1, 1]) { const lists = [occ]; prop("tent", sd * 20, bz - f * 3, 1, .2, lists); prop("tent", sd * 20, bz - f * 10, 1, .2, lists); prop("container", sd * 27, bz + f * 4, 1, .2, lists); prop("hesco", sd * 16, bz + f * 18, 0, .2, lists); prop("hesco", sd * 24, bz + f * 17, 0, .2, lists); prop("crates", sd * 14, bz + f * 2, 0, .2, lists); prop("tower", sd * 29, bz + f * 14, 0, .2, lists); gen(R.pick(["humvee", "technical", "boxtruck"]), sd * 15, bz - f * 12, R.range(0, 6), "timber", .3, lists); prop("barrels", sd * 25, bz - f * 4, 0, .2, lists); }
 
@@ -301,6 +317,6 @@ export function planMap(key, api) {
       default: return n2 > .66 ? "#63603e" : ["#5c4c3a", "#64533f", "#6c5a44", "#544636", "#4f4434"][Math.floor(n * 4.99)]; } };
   if (SHIP) { plan.trees.length = 0; plan.bushes.length = 0; plan.rocks.length = 0; }
   plan.soft = (x, z) => { if (SHIP) return false; const p = plan.kindAt(x, z); return !!p && (p.k === "dirt" || p.k === "grass") && !p.road; };   // where grass and brush may grow inside a built place
-  plan.name = THEMES[theme] + " " + (kp[1] || "");
+  plan.name = CUSTOM ? (DZ.name || "Custom field") : THEMES[theme] + " " + (kp[1] || "");
   return plan;
 }
