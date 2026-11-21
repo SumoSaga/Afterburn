@@ -21,7 +21,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, t) => a + 
 const CON = "#7d858a", CON2 = "#a1a7a8", STEEL = "#5f676d", DRAB = "#4f5a3c", DRAB2 = "#66704a", RUST = "#7c3a1e", SAND = "#917b5f", WOOD = "#5c4030", WOOD2 = "#76634c", DARK = "#2a2724";
 const BOXCOL = [RUST, "#3f6f9a", DRAB, STEEL, "#c9733a", "#8a3a2a", "#b9a582"];
 
-export const THEMES = { city: "City blocks", ship: "Ship boarding", mixed: "Mixed country", town: "Town", works: "Works", airfield: "Airfield", farm: "Farmland" };
+export const THEMES = { colony: "Frontier colony", city: "City blocks", ship: "Ship boarding", mixed: "Mixed country", town: "Town", works: "Works", airfield: "Airfield", farm: "Farmland" };
 /* front: what stands along the streets. yard: what fills the ground behind. veh: what is parked or wrecked.
    wall: what leans against buildings. open: what is dropped on open ground. sq: what stands round the square. */
 const KITS = {
@@ -46,12 +46,12 @@ const KITS = {
     wall: [["bales", 3], ["crates", 2], ["barrels", 2], ["pallets", 1]], open: [["bales", 4], ["fence", 4], ["tree", 4], ["bush", 3], ["crates", 1], ["rock", 2], ["tank", .6]],
     sq: [["bales", 2], ["fence", 1], ["veh", 2], ["crates", 1.5], ["sandbag", 1]] } };
 const CAPS = { apartment: 2, office: 2, terminal: 1, church: 2, firestation: 2, airliner: 2 }, THIN = { watertower: .9, billboard: .4, celltower: 1.1, busstop: 0 };
-const MIX = { city: ["town", "town", "works", "town", "town"], ship: ["works", "airfield", "works", "airfield"], mixed: null, town: ["town", "town", "town", "farm", "works"], works: ["works", "works", "works", "town", "airfield"], airfield: ["airfield", "works", "airfield", "town", "works"], farm: ["farm", "farm", "farm", "town", "works"] };
+const MIX = { colony: ["works", "airfield", "works", "works"], city: ["works", "town", "works", "airfield", "town"], ship: ["works", "airfield", "works", "airfield"], mixed: null, town: ["town", "town", "town", "farm", "works"], works: ["works", "works", "works", "town", "airfield"], airfield: ["airfield", "works", "airfield", "town", "works"], farm: ["farm", "farm", "farm", "town", "works"] };
 
 export function planMap(key, api) {
   const kp = key.split("-"), theme = THEMES[kp[0]] ? kp[0] : "mixed", size = (kp[2] || "sa")[0], flip = (kp[2] || "sa")[1] === "d", R = rng(hashStr(kp[0] + "-" + kp[1] + "-" + size + (api.salt ? "~" + api.salt : ""))), wear = R.range(.25, .7);
   const plan = { key, theme, zones: [], sites: [], districts: [], roads: [], prims: [], gens: [], trees: [], bushes: [], rocks: [], paint: [], yards: [], lit: 0 };
-  const P = plan.prims, occ = [], keep = [], count = {}, CITY = theme === "city", SHIP = theme === "ship", FLAT = CITY || SHIP; plan.indoor = SHIP;   // City blocks and Ship boarding are built on level ground for pilots: see the urban layer below
+  const P = plan.prims, occ = [], keep = [], count = {}, COLONY = theme === "colony", CITY = theme === "city" || COLONY, URB = CITY, SHIP = theme === "ship", FLAT = CITY || SHIP; plan.indoor = SHIP;   // City blocks and Ship boarding are built on level ground for pilots: see the urban layer below
   const fits = (x0, z0, x1, z1, m = 0, lists = [occ, keep]) => { for (const L of lists) for (const o of L) if (x0 - m < o[2] && x1 + m > o[0] && z0 - m < o[3] && z1 + m > o[1]) return false; return true; };
   const S = (x, z, w, h, d, col, o, dy = 0) => P.push(["s", x, z, w, h, d, col, o || { stripe: false, base: col, cap: col }, dy]), D = (x, z, w, h, d, col, dy = 0, roof = 0) => P.push(["d", x, z, w, h, d, col, dy, roof]), G = (x, z, w, h, d, dy = 0) => P.push(["g", x, z, w, h, d, dy]);
   const state = () => { const k = R(); return k < wear * .22 ? "ruined" : k < wear * .75 ? "damaged" : "timber"; };
@@ -130,15 +130,61 @@ export function planMap(key, api) {
     for (const sd of [-1, 1]) { const q = rect(sd * dl - 1.5, sd * (HW + .3), sd * dl + 1.5, sd * (HW + .5)); G((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], .16, q[3] - q[1], DH + .2); }
     occ.push(rect(-HL - .6, -HW - .6, HL + .6, HW + .6)); for (const sd of [-1, 1]) keep.push(rect(sd * dl - 3, sd * HW, sd * dl + 3, sd * (HW + 6)), rect(sd * HL, -3, sd * (HL + 6), 3)); }
 
+
+  /* ---------- frontier pieces: what a colony world is built from ----------
+     Prefabricated blocks in pale panel with a band of colour under the roof and dark window strips, long blast walls to
+     run along, raised pipelines to run on, tank farms with a catwalk, landing pads with a dropship. City blocks and the
+     Frontier colony are made of these from one base to the other, so there is always a wall, a roof or a pipe within a
+     jump of the last one. */
+  const PANEL = ["#cfcabb", "#b9b6aa", "#a8b0b0", "#c2b59a", "#9aa3a0"], TRIMS = ["#d2691e", "#2f7f86", "#c9a23a", "#8a3a2a", "#3f6f9a"], GLASS = "#1c2630", FRAME = "#3c4046", WALLC = ["#8f959a", "#7d858a", "#a39c8c"];
+  const nearRoad = (x, z, r) => plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < r; });
+  const prefab = (x, z, w, d, h, y0 = 0, col = R.pick(PANEL), trim = R.pick(TRIMS)) => { S(x, z, w, h, d, col, null, y0); if (!y0) D(x, z, w + .5, .45, d + .5, FRAME);
+    for (let y = 1.9; y < h - 1.5; y += 3.1) { D(x, z, w + .1, 1.1, d * .8, GLASS, y0 + y); D(x, z, w * .8, 1.1, d + .1, GLASS, y0 + y); }
+    D(x, z, w + .14, .5, d + .14, trim, y0 + h - .9); D(x, z, w + .4, .3, d + .4, FRAME, y0 + h); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) D(x + a * w / 2, z + b * d / 2, .45, h, .45, FRAME, y0);
+    if (w > 6 && d > 6) { S(x + R.range(-w / 4, w / 4), z + R.range(-d / 4, d / 4), 2.2, 1.2, 1.6, "#8a8e92", null, y0 + h); if (R.chance(.5)) D(x + w / 3, z - d / 3, .12, 4, .12, FRAME, y0 + h); if (R.chance(.45)) D(x - w / 5, z + d / 5, w * .4, .1, d * .3, "#24364a", y0 + h + .45); }
+    if (R.chance(.6)) { const sd = R.sign(); if (R.chance(.5)) G(x, z + sd * (d / 2 + .08), Math.min(4, w * .4), .22, .08, y0 + Math.min(3.4, h - 1.4)); else G(x + sd * (w / 2 + .08), z, .08, .22, Math.min(4, d * .4), y0 + Math.min(3.4, h - 1.4)); } };
+  const place = (x, z, hw, hd, m = 2.2, lane = 8) => { if (!fits(x - hw, z - hd, x + hw, z + hd, m) || nearRoad(x, z, lane + Math.max(hw, hd) * .8)) return false; occ.push([x - hw, z - hd, x + hw, z + hd]); return true; };
+  // a blast wall: long, tall and flat, with a hazard stripe at its foot
+  const runwall = (x, z, len, az, h = R.pick([8, 9, 10]), force) => { const w = az ? 1.2 : len, d = az ? len : 1.2; if (!force && !place(x, z, w / 2, d / 2, 1.5, 7.6)) return false; if (force) { if (!fits(x - w / 2, z - d / 2, x + w / 2, z + d / 2, .5) || nearRoad(x, z, 8.2)) return false; occ.push([x - w / 2, z - d / 2, x + w / 2, z + d / 2]); }
+    const c = R.pick(WALLC); S(x, z, w, h, d, c); D(x, z, w + .25, .3, d + .25, FRAME, h); D(x, z, w + .08, .4, d + .08, "#c9733a", .8); for (let u = -len / 2 + 6; u < len / 2 - 2; u += 6) D(x + (az ? 0 : u), z + (az ? u : 0), az ? 1.3 : .14, h, az ? .14 : 1.3, FRAME); return true; };
+  // a pipeline: a square duct on pylons, high enough to walk under, wide enough to run along the top of
+  const pipeline = (x, z, len, az) => { const w = az ? 2.2 : len, d = az ? len : 2.2; if (!place(x, z, w / 2, d / 2, 1.5, 7.6)) return false; const y = R.pick([0, 4.2, 4.2]), c = R.pick([RUST, "#a1a7a8", "#c2b59a", "#56613f"]); S(x, z, w, 2.2, d, c, null, y);
+    for (let u = -len / 2 + 1; u <= len / 2 - 1; u += 6) D(x + (az ? 0 : u), z + (az ? u : 0), az ? 2.5 : .5, 2.5, az ? .5 : 2.5, FRAME, y - .15); if (y) for (let u = -len / 2 + 2; u <= len / 2 - 2; u += Math.max(8, (len - 4) / Math.ceil((len - 4) / 12))) S(x + (az ? 0 : u), z + (az ? u : 0), .9, y, .9, "#5f676d");
+    if (y) { const e = len / 2 + 1.2; for (let i = 0; i < 3; i++) S(x + (az ? 0 : e + i * 1.4), z + (az ? e + i * 1.4 : 0), az ? 2.2 : 1.4, y - 1.2 - i * 1.5 + 2.2, az ? 1.4 : 2.2, "#565e64"); } return true; };
+  // tanks with a catwalk across their tops
+  const tankfarm = (x, z) => { const n = R.int(2, 3), rr = R.range(3, 4.2), h = R.pick([7, 8, 9]), az = R.chance(.5), span = (n - 1) * (rr * 2 + 1.5); if (!place(x, z, az ? rr + 1 : span / 2 + rr + 1, az ? span / 2 + rr + 1 : rr + 1)) return false; const c = R.pick(["#cfcabb", "#a8b0b0", RUST, "#c2b59a"]);
+    for (let i = 0; i < n; i++) { const o = (i - (n - 1) / 2) * (rr * 2 + 1.5), tx = x + (az ? 0 : o), tz = z + (az ? o : 0); P.push(["ct", tx, tz, rr, h, c]); D(tx, tz, rr * 1.7, .5, rr * 1.7, R.pick(TRIMS), h * .6); }
+    S(x, z, az ? 1.6 : span + 2, .3, az ? span + 2 : 1.6, "#6c747a", null, h + .1); D(x, z, az ? 1.8 : span + 2, .9, az ? span + 2 : .12, "#c9733a", h + .4); return true; };
+  const dropship = (x, z) => { S(x, z, 14, 2.8, 4.4, "#7d858a", null, 1.4); S(x - 4, z, 5, 1.6, 9.5, "#6c747a", null, 2.2); S(x + 5.5, z, 2, 2.2, .6, "#5f676d", null, 4.2); for (const sx of [-4, 3]) for (const sz of [-1.7, 1.7]) S(x + sx, z + sz, .5, 1.4, .5, FRAME); D(x - 7.1, z, .3, 1, 2.6, "#2a3038", 2.4); G(x + 7.1, z, .2, .6, 1.6, 2.2); };
+  // a landing pad: painted ground, lights at the corners, sometimes a dropship on it
+  const pad = (x, z) => { if (!place(x, z, 9, 9, 1.5)) return false; plan.paint.push({ x0: x - 9, z0: z - 9, x1: x + 9, z1: z + 9, k: "apron" }); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { G(x + a * 8.4, z + b * 8.4, .5, .2, .5, .05); D(x + a * 8.4, z + b * 5, .5, .06, 6, "#c9733a"); D(x + a * 5, z + b * 8.4, 6, .06, .5, "#c9733a"); }
+    D(x, z, 1, .06, 7, "#d8d2c0"); D(x - 2.5, z, 1, .06, 7, "#d8d2c0"); D(x + 2.5, z, 1, .06, 7, "#d8d2c0"); D(x, z, 6, .07, 1, "#d8d2c0"); if (R.chance(.55)) dropship(x, z); else for (let k = 0; k < 3; k++) prop(R.pick(["crates", "container", "barrels"]), x + R.range(-6, 6), z + R.range(-6, 6), R.chance(.5) ? 1 : 0, .2, [[]]); return true; };
+  // a block with a smaller one on top, so the roofs make steps
+  const stack = (x, z, w, d) => { if (!place(x, z, w / 2, d / 2)) return false; const c = R.pick(PANEL), t = R.pick(TRIMS), h1 = R.pick([4, 5]), ox = R.sign() * w * .18, oz = R.sign() * d * .14; prefab(x, z, w, d, h1, 0, c, t); prefab(x + ox, z + oz, w * .6, d * .66, R.pick([3.5, 4.5]), h1, c, t); S(x - ox * 2.4, z - oz * 2.6, 2.4, h1 / 2, 2.4, "#565e64"); return true; };
+  const block = (x, z, w, d, h = R.pick([7, 8, 9, 11])) => { if (!place(x, z, w / 2, d / 2)) return false; prefab(x, z, w, d, h); return true; };
+  const LOTS = { pads: 0, n: 0 }, lot = (x, z) => { const az = R.chance(.5), kind = R.w([["kick", 3], ["wall", 1.5], ["pipe", COLONY ? 3 : 1.5], ["block", COLONY ? 3 : 5], ["stack", 3], ["tanks", COLONY ? 2 : .7], ["pad", LOTS.pads < 3 ? .8 : 0]]); let ok = false;
+    if (kind === "kick") { const len = R.pick([16, 20, 24]), h = R.pick([8, 9, 10]); ok = runwall(x + (az ? -3.85 : 0), z + (az ? 0 : -3.85), len, az, h); if (ok) runwall(x + (az ? 3.85 : len * .35), z + (az ? len * .35 : 3.85), len, az, h, true); }
+    else if (kind === "wall") ok = runwall(x, z, R.pick([18, 24, 30]), az); else if (kind === "pipe") ok = pipeline(x, z, R.pick([18, 26, 34]), az); else if (kind === "tanks") ok = tankfarm(x, z); else if (kind === "pad") { ok = pad(x, z); if (ok) LOTS.pads++; }
+    else if (kind === "stack") ok = stack(x, z, R.range(11, 15), R.range(9, 12)); else ok = block(x, z, R.range(9, 15), R.range(8, 12));
+    if (!ok) ok = block(x, z, R.range(7, 10), R.range(6, 9), R.pick([5, 7, 8, 10])); if (!ok) ok = block(x, z, R.range(5, 6.5), R.range(5, 6.5), R.pick([4, 6, 8])); if (ok) LOTS.n++; return ok; };
+  const COVER = [["container", 2.5], ["barrier", 2], ["crates", 2.5], ["sandbag", 1.5], ["barrels", 1.2], ["hesco", 1.2], ["container2", 1], ["wall", 1], ["piperack", .8], ["tank", .6]];
+
   /* ---------- a district ---------- */
   for (const d of plan.districts) { const kit = d.kit, r = d.r, hs = kit.sw / 2, W = (u, v) => (d.ax ? [d.x + v, d.z + u] : [d.x + u, d.z + v]), rect = (u0, v0, u1, v1) => { const a = W(u0, v0), b = W(u1, v1); return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]; };
     const rotOf = (fu, fv) => (d.ax ? Math.atan2(fv, fu) : Math.atan2(fu, fv)), turned = (alongU) => (alongU ? d.ax : 1 - d.ax);   // is a thing laid along this street turned a quarter turn on the map
     const pt = (k, q, extra) => plan.paint.push({ x0: q[0], z0: q[1], x1: q[2], z1: q[3], k, ...extra });
-    pt(kit.ground, [d.x - r - 3, d.z - r - 3, d.x + r + 3, d.z + r + 3]);
+    pt(URB ? "apron" : kit.ground, [d.x - r - 3, d.z - r - 3, d.x + r + 3, d.z + r + 3]);
     const main = rect(-r - 3, -hs, r + 3, hs), cross = rect(-hs + .5, -r - 3, hs - .5, r + 3), sq = d.roof ? rect(-13, -10, 13, 10) : rect(-10, -10, 10, 10);
     pt(kit.street, main, { ax: d.ax, c: d.ax ? d.x : d.z, hw: hs }); pt(kit.street === "runway" ? "asphalt" : kit.street, cross, { ax: 1 - d.ax, c: d.ax ? d.z : d.x, hw: hs - .5 }); pt(d.roof ? "apron" : kit.walk === "dirt" ? "dirt" : "pave", sq, {});
     const mine = [main, cross, sq]; keep.push(...mine);
     if (d.roof) hall(d, W, rect);
+    if (URB) {   // a frontier district: a block, a stack, tanks or a pad in each corner between the two streets, and cover laid round the point
+      for (const su of [-1, 1]) for (const sv of [-1, 1]) { const u0 = hs + (d.roof ? 9 : 3), v0 = hs + (d.roof ? 6 : 3), lu = R.range(11, 16), lv = R.range(9, 13), q = rect(su * u0, sv * v0, su * (u0 + lu), sv * (v0 + lv)); if (R.chance(.5)) block((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], q[3] - q[1], R.pick([8, 9, 11, 12])); else stack((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], q[3] - q[1]); }   // a building on each corner of the crossing
+      { const cs = []; for (let u = -r + 5; u <= r - 5; u += 13) for (let v = -r + 5; v <= r - 5; v += 13) cs.push(W(u + R.range(-3, 3), v + R.range(-3, 3))); for (let i = cs.length - 1; i > 0; i--) { const j = R.int(0, i); [cs[i], cs[j]] = [cs[j], cs[i]]; } for (const [x, z] of cs) lot(x, z); }   // and the rest of the ground built on, lot by lot
+      for (let i = 0, n = 0; i < 40 && n < 6 && !d.roof; i++) { const a = R.range(0, 6.283), rad = R.range(5.5, 10.5); if (prop(R.w(COVER.slice(0, 6)), d.x + Math.cos(a) * rad, d.z + Math.sin(a) * rad, R.chance(.5) ? 1 : 0, .9, [occ])) n++; }
+      for (let i = 0, n = 0; i < 90 && n < 8 + r * .4; i++) { const [x, z] = W(R.range(-r, r), R.range(-r, r)); if (prop(R.w(COVER), x, z, R.chance(.5) ? 1 : 0, .9)) n++; }
+      if (d.roof) { plan.lit++; P.push(["li", d.x, d.z, 4.9]); } else { const [x, z] = W(-hs - .8, -hs - .8); plan.lit++; P.push(["lp", x, z, d.ax ? 0 : 1, d.ax ? 1 : 0]); occ.push([x - .2, z - .2, x + .2, z + .2]); }
+      continue; }
     // the landmark stands on one corner of the square
     if (!d.roof) { const [x, z] = W(R.sign() * (hs + 7.5), R.sign() * (hs + 7.5)), g = gen(R.pick(kit.mark), x, z, R.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), "timber", .3, [occ]); if (g) d.blds.push([x, z, g.hw, g.hd]); }
     // buildings along both sides of both streets, fronts to the street
@@ -174,6 +220,7 @@ export function planMap(key, api) {
   const inDistrict = (x, z, m) => plan.districts.some((d) => Math.abs(x - d.x) < d.r + m && Math.abs(z - d.z) < d.r + m) || (Math.abs(x) < 34 + m && (z > 104 - m || z < -146 + m));
   for (const rd of plan.roads) { const ux = (rd.bx - rd.ax) / rd.len, uz = (rd.bz - rd.az) / rd.len, nx = -uz, nz = ux, rot = Math.atan2(ux, uz); let side = R.sign();
     for (let t = 7; t < rd.len - 5; t += R.range(8, 15)) { const x = rd.ax + ux * t, z = rd.az + uz * t, k = R(); side = -side;
+      if (URB) { if (k > .8 && k < .9 && rd.len > 40) { const r90 = Math.abs(ux) > Math.abs(uz) ? 1 : 0; prop("barrier", x + nx * 2, z + nz * 2, r90, .1, [occ]); prop(R.pick(["sandbag", "crates"]), x - nx * 2 + ux * 3.5, z - nz * 2 + uz * 3.5, r90, .1, [occ]); } continue; }
       if (k < .3) { const px = x + nx * side * (rd.hw + 2.2), pz = z + nz * side * (rd.hw + 2.2); if (fits(px - .3, pz - .3, px + .3, pz + .3, .2, [occ])) { occ.push([px - .2, pz - .2, px + .2, pz + .2]); PROPS.pole().put(px, pz, Math.abs(ux) > Math.abs(uz) ? 1 : 0); } }
       else if (k < .5) gen(R.w(KITS.town.veh.concat(KITS.works.veh)), x + nx * side * (rd.hw - .6), z + nz * side * (rd.hw - .6), rot + R.range(-.5, .5), R.w([["damaged", 1], ["ruined", 1.4]]), .3, [occ]);
       else if (k < .57) gen("billboard", x + nx * side * (rd.hw + 6), z + nz * side * (rd.hw + 6), rot + (side > 0 ? -1 : 1) * Math.PI / 2 * 0 + R.pick([0, Math.PI]), state(), .3, [occ]);
@@ -188,13 +235,13 @@ export function planMap(key, api) {
      A ship adds a hull down both sides, bulkheads across it between the sectors with wide doorways, and a deck overhead,
      so nothing can come down from the sky: no mechs and no pods. Every point on a ship is inside. */
   if (FLAT) { const LANE = 7.5, tones = SHIP ? ["#5f676d", "#4a5258", "#6c747a", "#565e64"] : ["#8a5a44", "#7d858a", "#9a8f80", "#6f6a62", "#76634c", "#5f676d"], near = (x, z, r) => plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < r; });
-    plan.houses = []; const tower = (x, z, w, d, h, col) => { if (Math.abs(x) + w / 2 > 112 || z + d / 2 > 100 || z - d / 2 < -142 || !fits(x - w / 2, z - d / 2, x + w / 2, z + d / 2, 1.2) || near(x, z, LANE + Math.max(w, d) / 2 - .5)) return false; occ.push([x - w / 2, z - d / 2, x + w / 2, z + d / 2]); S(x, z, w, h, d, col); D(x, z, w + .3, .35, d + .3, "#3c4046", h);
+    plan.houses = []; const tower = (x, z, w, d, h, col) => { if (Math.abs(x) + w / 2 > 112 || z + d / 2 > 100 || z - d / 2 < -142 || !fits(x - w / 2, z - d / 2, x + w / 2, z + d / 2, 1.2) || near(x, z, LANE + Math.max(w, d) / 2 - .5)) return false; occ.push([x - w / 2, z - d / 2, x + w / 2, z + d / 2]); if (URB) { prefab(x, z, w, d, h); return true; } S(x, z, w, h, d, col); D(x, z, w + .3, .35, d + .3, "#3c4046", h);
       if (!SHIP) for (let y = 3; y < h - 1; y += 3) { D(x, z, w + .06, .9, d * .7, "#2a3038", y); D(x, z, w * .7, .9, d + .06, "#2a3038", y); } else { G(x, z, w + .08, .12, d + .08, h * .55); } return true; };
     // blocks down both sides of every lane
     /* Rooftop routes. Blocks along a lane are 7 to 10 metres high. Behind every second one a flight of steps climbs to the
        roof (each step a jump high), and where two neighbours stand close and near the same height a plank joins their
        roofs, so a pilot can get up and run the length of a street above the mechs. */
-    for (const rd of plan.roads) { const ux = (rd.bx - rd.ax) / rd.len, uz = (rd.bz - rd.az) / rd.len, alongZ = Math.abs(uz) > Math.abs(ux), straight = Math.min(Math.abs(ux), Math.abs(uz)) < .2; for (const sd of [-1, 1]) { let t = 6, prev = null, n = 0; while (t < rd.len - 6) { const len = R.pick([9, 12, 15]), dep = R.pick([6, 8, 10]), h = SHIP ? R.pick([6, 8, 9]) : R.pick([7, 8, 9, 10]), off = LANE + dep / 2 + .4, cx = rd.ax + ux * (t + len / 2) - uz * off * sd, cz = rd.az + uz * (t + len / 2) + ux * off * sd, w = alongZ ? dep : len, d = alongZ ? len : dep, gap = R.pick([3.5, 4, 5]);
+    for (const rd of plan.roads) { const ux = (rd.bx - rd.ax) / rd.len, uz = (rd.bz - rd.az) / rd.len, alongZ = Math.abs(uz) > Math.abs(ux), straight = Math.min(Math.abs(ux), Math.abs(uz)) < .2; for (const sd of [-1, 1]) { let t = 6, prev = null, n = 0; while (t < rd.len - 6) { const len = URB && R.chance(.3) ? R.pick([22, 26, 30]) : R.pick([9, 12, 15]), dep = R.pick([6, 8, 10]), h = SHIP ? R.pick([6, 8, 9]) : R.pick([7, 8, 9, 10]), off = LANE + dep / 2 + .4, cx = rd.ax + ux * (t + len / 2) - uz * off * sd, cz = rd.az + uz * (t + len / 2) + ux * off * sd, w = alongZ ? dep : len, d = alongZ ? len : dep, gap = R.pick([3.5, 4, 5]);
           if (tower(cx, cz, w, d, h, R.pick(tones))) { n++;
             if (straight && n % 2 === 1) { const k = Math.max(5, Math.floor(len / 1.5)), out = alongZ ? Math.sign(cx - (rd.ax + ux * (t + len / 2))) || sd : Math.sign(cz - (rd.az + uz * (t + len / 2))) || sd; for (let i = 0; i < k; i++) { const a = -len / 2 + (i + .5) * (len / k), sh = h * (i + 1) / (k + 1), sx = alongZ ? cx + out * (dep / 2 + .8) : cx + a, sz = alongZ ? cz + a : cz + out * (dep / 2 + .8); if (fits(sx - .8, sz - .8, sx + .8, sz + .8, 0)) S(sx, sz, alongZ ? 1.5 : len / k, sh, alongZ ? len / k : 1.5, "#565e64"); } }   // steps up the far side
             if (prev && straight && Math.abs(prev.h - h) <= 2 && prev.gap <= 5) { const y = Math.min(prev.h, h) - .3, mid = t - prev.gap / 2, bx = rd.ax + ux * mid - uz * off * sd, bz = rd.az + uz * mid + ux * off * sd; S(bx, bz, alongZ ? 2 : prev.gap + 1, .3, alongZ ? prev.gap + 1 : 2, "#76634c", null, y); }
@@ -203,6 +250,12 @@ export function planMap(key, api) {
     const want = size === "s" ? 4 : size === "m" ? 6 : 8; let made = 0; for (let i = 0; i < 300 && made < want; i++) { const x = R.range(-96, 96), z = R.range(-128, 88), turn = R.chance(.5), hw = turn ? 9 : 12, hd = turn ? 12 : 9; if (!fits(x - hw - 4, z - hd - 4, x + hw + 4, z + hd + 4, 0) || near(x, z, LANE + Math.max(hw, hd)) || !near(x, z, 34)) continue;
       hall({ last: false, kn: SHIP ? "works" : R.pick(["town", "works", "farm"]) }, null, (u0, v0, u1, v1) => (turn ? [x + Math.min(v0, v1), z + Math.min(u0, u1), x + Math.max(v0, v1), z + Math.max(u0, u1)] : [x + Math.min(u0, u1), z + Math.min(v0, v1), x + Math.max(u0, u1), z + Math.max(v0, v1)])); plan.yards.push([x, z, 13]); plan.houses.push([x, z]); made++; }
     plan.blockhouses = made;
+    if (URB) { /* Filling in. The ground between the districts and beside the lanes is tried spot by spot for a frontier piece,
+         so the field is built up from one base to the other. Pairs of blast walls 6.5 metres apart make a corridor to
+         run and kick through; the outer edge of the field is a broken line of high wall, good for one long run. */
+      const lim = size === "s" ? 86 : size === "m" ? 100 : 108, cells = []; for (let gx = -lim + 8; gx <= lim - 8; gx += 15) for (let gz = -134; gz <= 94; gz += 15) cells.push([gx + R.range(-5, 5), gz + R.range(-5, 5)]); for (let i = cells.length - 1; i > 0; i--) { const j = R.int(0, i); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+      for (const [x, z] of cells) { if (inDistrict(x, z, 0)) continue; if (lot(x, z)) { plan.paint.push({ x0: x - 10, z0: z - 10, x1: x + 10, z1: z + 10, k: R.chance(.7) ? "apron" : "pave" }); if (R.chance(.7)) prop(R.w(COVER), x + R.range(-9, 9), z + R.range(-9, 9), R.chance(.5) ? 1 : 0, .8); } } plan.infill = LOTS.n;
+      for (const sd of [-1, 1]) for (let z = -138; z < 96; z += 40) { const len = 32, cz = z + 18 + R.range(-2, 2); runwall(sd * (lim + 6), cz, len, true, R.pick([11, 12, 13]), true); } }
     if (SHIP) { const HX = 120, Z0 = -186, Z1 = 150, HH = 14, hull = "#4a5258";
       for (let z = Z0; z < Z1; z += 28) for (const sd of [-1, 1]) { S(sd * HX, z + 14, 3, HH, 28, hull); G(sd * (HX - 1.6), z + 14, .12, .25, 22, 4); }   // the hull, down both sides
       for (let x = -HX; x < HX; x += 30) { S(x + 15, Z0, 30, HH, 3, hull); S(x + 15, Z1, 30, HH, 3, hull); }
@@ -217,7 +270,7 @@ export function planMap(key, api) {
       plan.paint.unshift({ x0: -HX, z0: Z0, x1: HX, z1: Z1, k: "apron" }); } }
   /* ---------- out in the hills: small places with their own reason to be there ---------- */
   const OUT = { camp: 12, farmstead: 14, fuelstop: 13, relay: 11, checkpoint: 14, crash: 19, tankfarm: 13 }, kinds = Object.keys(OUT); plan.outposts = []; for (let i = kinds.length - 1; i > 0; i--) { const j = R.int(0, i); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
-  for (let i = 0; i < 400 && !SHIP && plan.outposts.length < (size === "s" ? 5 : 4); i++) { const kind = kinds[plan.outposts.length % kinds.length], hr = OUT[kind], x = R.range(-138, 138), z = R.range(-140, 96);
+  for (let i = 0; i < 400 && !FLAT && plan.outposts.length < (size === "s" ? 5 : 4); i++) { const kind = kinds[plan.outposts.length % kinds.length], hr = OUT[kind], x = R.range(-138, 138), z = R.range(-140, 96);
     if (inDistrict(x, z, hr + 20) || plan.outposts.some((o) => Math.hypot(o.x - x, o.z - z) < 48) || plan.roads.some((rd) => { const t = clamp(((x - rd.ax) * (rd.bx - rd.ax) + (z - rd.az) * (rd.bz - rd.az)) / (rd.len * rd.len), 0, 1); return Math.hypot(x - lerp(rd.ax, rd.bx, t), z - lerp(rd.az, rd.bz, t)) < hr + 12; })) continue;
     const h0 = api.hills(x, z); if (h0 > 24 || Math.abs(api.hills(x + 10, z) - h0) > 4 || Math.abs(api.hills(x, z + 10) - h0) > 4) continue; const h = Math.round(h0 * 2) / 2;
     plan.outposts.push({ x, z, kind, r: hr }); plan.zones.push([x - hr, z - hr, x + hr, z + hr, h, 16]); plan.paint.push({ x0: x - hr + 1, z0: z - hr + 1, x1: x + hr - 1, z1: z + hr - 1, k: kind === "fuelstop" || kind === "tankfarm" ? "apron" : "dirt" }); plan.yards.push([x, z, hr - 1]);

@@ -31,9 +31,10 @@ const hash2 = (x, y) => { const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
 function noise2(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); return lerp(lerp(hash2(xi, yi), hash2(xi + 1, yi), u), lerp(hash2(xi, yi + 1), hash2(xi + 1, yi + 1), u), v); }
 
 /* ---------- settings ---------- */
-export const DEF = { px: 3, fov: 95, sens: 1, walk: 4.5, sprint: 6.5, jump: 7.4, gravity: 22, air: 2, wallTime: 3, wallSpeed: 9.5, wallKick: 2, slideBoost: 3, outlines: 1, palette: 0, blocks: 1, weather: "clear", shadows: 1, fps: 0 };
+export const DEF = { px: 3, fov: 95, sens: 1, walk: 5.6, sprint: 8.2, jump: 7.4, gravity: 22, air: 2, wallTime: 3, wallSpeed: 11, wallKick: 2, slideBoost: 3, outlines: 1, palette: 0, blocks: 1, weather: "clear", shadows: 1, fps: 0 };
 export const CFG = { ...DEF };
 try { Object.assign(CFG, JSON.parse(localStorage.getItem("mf-fps-cfg3") || "{}")); } catch (e) {}
+if (!CFG.v37) { CFG.v37 = 1; if (CFG.walk <= 4.5) CFG.walk = DEF.walk; if (CFG.sprint <= 6.5) CFG.sprint = DEF.sprint; if (CFG.wallSpeed <= 9.5) CFG.wallSpeed = DEF.wallSpeed; }   // pilots were made faster in build 37: anyone still on the old speeds is moved up
 export const saveCfg = () => { try { localStorage.setItem("mf-fps-cfg3", JSON.stringify(CFG)); } catch (e) {} };
 
 /* ---------- renderer, cameras, materials ---------- */
