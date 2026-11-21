@@ -26,6 +26,7 @@ function rifle(o, mat = gunMat) { const g = new THREE.Group(), bl = o.barrel, bo
     B(.042, .07, .2, 0, .004, .2, "gun2"), B(.046, .09, .03, 0, 0, .31, "dark"), B(.03, .02, .06, 0, .083, -.06, "dark"), B(.012, .03, .012, 0, .08, -.1 - o.guard + .02, "dark"), B(.04, .012, .3, 0, -.012, -.2, "accent")];
   if (o.scope) body.push(C(.021, .19, 0, .118, -.04, "dark", "z", 10), C(.027, .04, 0, .118, -.15, "gun", "z", 10), C(.024, .03, 0, .118, .06, "gun", "z", 10), B(.02, .03, .03, 0, .092, -.08, "dark"), B(.02, .03, .03, 0, .092, .01, "dark"));
   if (o.pistol) body.splice(7, 2);
+  if (o.fat) body.push(C(.034, bl + .12, 0, .028, -.1 - o.guard - bl / 2, "gun2", "z", 8), C(.04, .03, 0, .028, -.1 - o.guard - bl, "dark", "z", 8), B(.06, .05, .12, 0, .0, -.24, "accent"));   // a launcher: a wide tube
   if (!o.scope) body.push(B(.042, .008, .052, 0, .088, -.06, "dark"), B(.005, .04, .03, -.02, .108, -.06, "dark"), B(.005, .04, .03, .02, .108, -.06, "dark"), B(.044, .005, .03, 0, .129, -.06, "dark"), B(.004, .004, .002, 0, .108, -.06, "glow"));   // an open frame with a dot in it, so there is something to look through
   build(g, body, S, glow, mat);
   const mag = new THREE.Group(); mag.position.set(0, -.018, -.075); mag.rotation.x = -.12; g.add(mag); build(mag, [B(.03, o.mag, .052, 0, -o.mag / 2, 0, "mag"), B(.034, .014, .056, 0, -o.mag + .004, 0, "dark"), B(.032, .01, .054, 0, -.03, 0, "steel")], S, glow, mat);
@@ -35,7 +36,7 @@ function charger(mat = gunMat) { const g = new THREE.Group(); build(g, [B(.06, .
     C(.03, .08, 0, .03, -.7, "gun", "z", 10), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.044, .075, .2, 0, .004, .2, "gun2"), B(.048, .095, .03, 0, 0, .31, "dark"), B(.05, .05, .09, 0, .1, -.04, "dark"), B(.045, .1, .07, 0, -.05, -.1, "accent")], S, glow, mat);
   const coil = new THREE.Mesh(new THREE.BoxGeometry(.045, .045, .11), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.4, 3) })); coil.position.set(0, .03, -.62); g.add(coil);
   g.userData = { coil, fore: new THREE.Vector3(0, -.01, -.3), well: new THREE.Vector3(0, -.09, -.1), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .03, -.75) }; return g; }
-const SPEC = { shotgun: { barrel: .14, guard: .34, mag: .035 }, pistol: { barrel: .03, guard: .09, mag: .1, pistol: true }, carbine: { barrel: .2, guard: .26, mag: .12 }, longrifle: { barrel: .36, guard: .3, mag: .09, scope: true }, smg: { barrel: .08, guard: .16, mag: .17 } };
+const SPEC = { grenadier: { barrel: .1, guard: .3, mag: .16, fat: true }, sniper: { barrel: .52, guard: .36, mag: .1, scope: true }, maglauncher: { barrel: .06, guard: .26, mag: .13, fat: true }, shotgun: { barrel: .14, guard: .34, mag: .035 }, pistol: { barrel: .03, guard: .09, mag: .1, pistol: true }, carbine: { barrel: .2, guard: .26, mag: .12 }, longrifle: { barrel: .36, guard: .3, mag: .09, scope: true }, smg: { barrel: .08, guard: .16, mag: .17 } };
 /* The assault rifle is a model (models/rifle.glb): one mesh, no moving parts of its own. Its magazine is cut away from the
    rest by where its triangles lie (below the well, between the grip and the front of the well), so it can come out, and
    it is given a top so it looks whole in the hand. The model is 1 unit long with its muzzle toward +z; here it is turned
@@ -60,10 +61,16 @@ const GUNS = { charge: charger() }; for (const k in SPEC) GUNS[k] = (k === "carb
 for (const k in GUNS) { GUNS[k].visible = false; rig.add(GUNS[k]); }
 
 /* ---------- arms: the hand is at the arm's origin and the forearm runs back along +z toward the elbow ---------- */
-function arm(sd) { const a = new THREE.Group(); build(a, [Bl(.088, .055, .105, 0, 0, 0, "dark"), ...[-.03, -.01, .01, .03].flatMap((x) => [B(.018, .03, .055, x, -.016, -.062, "dark"), B(.018, .046, .02, x, -.04, -.086, "dark")]), B(.022, .026, .06, sd * .048, -.004, -.034, "dark", 0, 0, sd * .5), B(.06, .012, .05, 0, .03, .0, "shell"),
+function arm(sd) { const a = new THREE.Group(); build(a, [Bl(.088, .055, .105, 0, 0, 0, "dark"), B(.06, .012, .05, 0, .03, .0, "shell"),
     Lf([[.03, .086, .074], [.08, .098, .088]], 0, 0, 0, "dark", 10, 0, X), Lf([[.07, .09, .08], [.2, .108, .1], [.5, .125, .118]], 0, 0, 0, "suit", 10, 0, X), Lf([[.11, .108, .1], [.26, .128, .12]], 0, 0, 0, "wrap", 10, 0, X), Lf([[.13, .05, .13, 0, .0], [.24, .06, .15]], sd * .05, 0, 0, "shell", 8, .3, X),
-    Lf([[.105, .112, .104], [.118, .112, .104]], 0, 0, 0, "dark", 10, 0, X), Lf([[.25, .132, .124], [.264, .132, .124]], 0, 0, 0, "dark", 10, 0, X)], S, glow, gunMat); a.userData.built = a.children.slice(); root.add(a); return a; }
-const TUNE = { tiltR: 0, tiltL: 0 }; globalThis.__armTune = TUNE;
+    Lf([[.105, .112, .104], [.118, .112, .104]], 0, 0, 0, "dark", 10, 0, X), Lf([[.25, .132, .124], [.264, .132, .124]], 0, 0, 0, "dark", 10, 0, X)], S, glow, gunMat); 
+  /* Blocky fingers that move: four fingers of two blocks each, hinged at the knuckle and the middle joint, and a thumb.
+     curl 0 is an open hand and 1 a fist. The first finger (next to the thumb) can squeeze a little more by itself. */
+  const fingers = [-.03, -.01, .01, .03].map((x) => { const p = new THREE.Group(), d = new THREE.Group(); p.position.set(x, -.008, -.04); d.position.set(0, 0, -.04); p.add(d); a.add(p); build(p, [B(.0175, .021, .042, 0, 0, -.02, "dark")], S, glow, gunMat); build(d, [B(.0165, .019, .036, 0, 0, -.018, "dark"), B(.0167, .006, .02, 0, .0098, -.02, "wrap")], S, glow, gunMat); return { p, d, first: x * sd > .02 }; });
+  const thumb = new THREE.Group(); thumb.position.set(sd * .046, -.006, -.012); a.add(thumb); build(thumb, [B(.022, .024, .056, 0, 0, -.026, "dark")], S, glow, gunMat);
+  a.userData.setHand = (curl, trig = 0) => { for (const f of fingers) { const c = clamp(f.first ? curl * .75 + trig : curl, 0, 1.25); f.p.rotation.x = -c * 1.15; f.d.rotation.x = -c * 1.3; } thumb.rotation.set(-curl * .5, sd * (.75 - curl * .35), 0); };
+  a.userData.setHand(.9); a.userData.built = a.children.slice(); root.add(a); return a; }
+const TUNE = { tiltR: 0, tiltL: 0 }, HAND = { L: .88, R: 1 }; globalThis.__armTune = TUNE;
 const armR = arm(1), armL = arm(-1), elbowR = new THREE.Vector3(.36, -.52, .3), elbowL = new THREE.Vector3(-.42, -.6, .22);
 /* The arms you see are the pilot model's own (models/pilot.glb): the same suit, bracers and gloves other players see on
    you, with fingers that close. Each built arm above stays as the thing the moves steer (a point at the palm, the forearm
@@ -144,8 +151,10 @@ export const VM = { cam: { pitch: 0, roll: 0 }, muzzle: new THREE.Vector3(),
     (D.grip ? tmp.copy(D.grip) : tmp.set(0, -.062, .04)).applyMatrix4(rig.matrix); armR.position.copy(tmp); armR.lookAt(elbowR); armR.rotateZ(-1.25);
     tmp.copy(D.fore); tmp.x += lh[0]; tmp.y += lh[1]; tmp.z += lh[2]; tmp.applyMatrix4(rig.matrix); if (free > 0) { tmp2.set(lw[0], lw[1], lw[2]); tmp.lerp(tmp2, free); }
     armL.position.copy(tmp); armL.lookAt(elbowL); armL.rotateZ(lerp(1.35, .5, free));
-    if (ARMS.R) { const k = 1 - Math.exp(-dt * 18), holding = !!item || (st.reload >= .5 && st.reload < .655), away = free > .3 || (st.reload >= .22 && st.reload < .7 && !holding);
-      ARMS.L.curl += ((holding ? 1 : away ? .3 : .85) - ARMS.L.curl) * k; ARMS.R.curl += (1 - ARMS.R.curl) * k; ARMS.R.set(ARMS.R.curl, Math.sin(cycle * Math.PI) * .35 + (st.firing ? .12 : 0), TUNE.tiltR); ARMS.L.set(ARMS.L.curl, ARMS.L.curl * .3, TUNE.tiltL); }
+    { // the hands: closed on the grip and the handguard, the trigger finger squeezing on a shot, the left hand opening as it lets go, reaching with the fingers wide, and closing on what it takes
+      const k = 1 - Math.exp(-dt * 22), holding = !!item || (st.reload >= .5 && st.reload < .655), u = st.reload, grab = u >= .2 && u < .34, reach = (u >= .34 && u < .5) || (u >= .7 && u < .79), rack = u >= .79 && u < .88, away = free > .3 && !item;
+      HAND.L += ((holding || grab || rack ? 1 : reach || away ? .12 : .88) - HAND.L) * k; HAND.R += ((st.swap >= 0 && st.swap < .42 ? .5 : 1) - HAND.R) * k; const trig = Math.sin(cycle * Math.PI) * .4 + (st.firing ? .14 : 0);
+      if (ARMS.R) { ARMS.R.set(HAND.R, trig, TUNE.tiltR); ARMS.L.set(HAND.L, HAND.L * .3, TUNE.tiltL); } else { armR.userData.setHand(HAND.R, trig); armL.userData.setHand(HAND.L); } }
     { const inHand = st.reload >= .5 && st.reload < .655 && !!D.mag; held.mag.visible = inHand && !D.handMag; for (const k in GUNS) { const hm = GUNS[k].userData.handMag; if (hm) hm.visible = inHand && GUNS[k] === G; } } held.nade.visible = item === "nade"; held.knife.visible = item === "knife";
     if (st.reload >= 0 && D.mag && st.reload >= .27 && !VM._dropped) { VM._dropped = true; const m = D.loose ? D.loose() : new THREE.Group(); if (!D.loose) build(m, [B(.03, .12, .052, 0, 0, 0, "mag")], S, glow, gunMat); m.position.copy(D.well).applyMatrix4(rig.matrix); m.quaternion.copy(rig.quaternion); root.add(m); drops.push({ m, v: new THREE.Vector3(-.15, -.2, .1), s: new THREE.Vector3(rnd() * 6, rnd() * 6, rnd() * 6), t: 0 }); }
     if (st.reload < 0) VM._dropped = false;
