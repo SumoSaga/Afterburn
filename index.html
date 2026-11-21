@@ -50,6 +50,7 @@
   #oob { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); display: none; text-align: center; padding: 12px 26px; background: rgba(60,8,4,.82); border-top: 3px solid #ff4a2a; border-bottom: 3px solid #ff4a2a; text-shadow: 0 1px 3px #000; }
   #oob b { display: block; font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: #ff9a7a; } #oob span { display: block; font-size: 15px; color: #f1ead9; margin-top: 2px; } #oob em { display: block; font-style: normal; font-size: 56px; font-weight: 700; color: #fff; line-height: 1.1; }
   #mini { position: absolute; left: 18px; top: 18px; width: 200px; height: 200px; border-radius: 50%; background: rgba(10,12,15,.6); box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 6px 18px rgba(0,0,0,.4); }
+  #mini.ride { left: 2.4%; top: auto; bottom: 18%; width: 12.5%; max-width: 160px; height: auto; aspect-ratio: 1; z-index: 6; box-shadow: 0 0 0 1px rgba(143,224,240,.6), 0 0 14px rgba(143,224,240,.25); } #compass.ride { top: 7%; z-index: 6; } #ck-radar, #ck-compass { display: none !important; }
   #compass { position: absolute; left: 50%; top: 78px; width: 560px; height: 56px; margin-left: -280px; overflow: hidden; text-shadow: 0 1px 2px #000, 0 0 3px #000; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
   #compass > s { position: absolute; left: 50%; top: 0; width: 2px; height: 10px; margin-left: -1px; background: #f6c868; } #compass > div { position: absolute; left: 0; top: 0; white-space: nowrap; text-align: center; }
   #compass .cc { top: 36px; font-size: 15px; color: #fff; letter-spacing: .08em; } #compass .cc.minor { font-size: 11px; color: #b4ac9c; top: 39px; } #compass .ct { top: 44px; width: 1px; height: 6px; background: rgba(255,255,255,.45); }
@@ -213,7 +214,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "42";
+  window.AB_BUILD = "43";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -275,7 +276,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 42 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 43 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -361,7 +362,7 @@
   <h2>Your save</h2>
   <p><i>Your loadout, battlegroups, mastery and settings live in this browser. Save them to a file to keep them safe or carry them to another machine.</i></p>
   <div class="row"><button id="s-export">Save to a file</button><button id="s-import">Load from a file</button><input type="file" id="s-file" accept="application/json,.json" style="display:none"></div><p id="s-savenote" class="lab"></p>
-  <div class="row" style="margin-top:14px"><button id="s-close" class="on">Back</button><button id="s-tune">Tuning</button><button id="s-lab">Sound lab</button></div>
+  <div class="row" style="margin-top:14px"><button id="s-close" class="on">Back</button><button id="s-leave" style="display:none;border-color:#ff6a4a;color:#ffb4a0">Leave the match</button><button id="s-tune">Tuning</button><button id="s-lab">Sound lab</button></div>
   <p class="lab">Escape opens and closes this page. These save on this browser.</p>
 </div>
 <div id="panel" class="box">
@@ -378,15 +379,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=42"></script>
-<script src="punch/punch-lab.js?v=42"></script>
-<script src="cb/genbuild.js?v=42"></script>
-<script src="cb/machines.js?v=42"></script>
-<script src="cb/soldiers.js?v=42"></script>
-<script src="cb/cbmechdata.js?v=42"></script>
-<script src="cb/cbmech.js?v=42"></script>
-<script src="cb/cbnature.js?v=42"></script>
-<script src="cb/cbweather.js?v=42"></script>
+<script src="punch/punch.js?v=43"></script>
+<script src="punch/punch-lab.js?v=43"></script>
+<script src="cb/genbuild.js?v=43"></script>
+<script src="cb/machines.js?v=43"></script>
+<script src="cb/soldiers.js?v=43"></script>
+<script src="cb/cbmechdata.js?v=43"></script>
+<script src="cb/cbmech.js?v=43"></script>
+<script src="cb/cbnature.js?v=43"></script>
+<script src="cb/cbweather.js?v=43"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>

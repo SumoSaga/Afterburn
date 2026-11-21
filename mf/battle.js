@@ -144,7 +144,7 @@ for (const [name, x, z, label, sector = 0, roof = 0] of SITES) { const gy = grou
 
 /* ---------- the operation: one side attacks through the sectors in turn, the other holds them ----------
    Only the points of the active sector can change hands. When the attackers hold all of them the sector falls, the
-   defenders get 40 seconds to fall back, and the next sector opens. The attackers have tickets: a pilot coming back costs
+   defenders get 20 seconds to fall back, and the next sector opens. The attackers have tickets: a pilot coming back costs
    one (or, with no pilots on that side, a bought squad wiped costs one and a Titan lost costs three). At no tickets the
    first battalion is spent and a second comes in where the first stopped. When the second is spent the defenders have won. */
 B.stats = { stuck: 0, moved: 0, repath: 0 };
@@ -162,8 +162,8 @@ export function refund(n) { if (B.mp === "guest" || B.over) return; OP.tickets =
 export function spend(side, n = 1) { if (B.mp === "guest" || B.over || side !== OP.atk || OP.phase !== "fight") return; OP.tickets = Math.max(0, OP.tickets - n); }
 const tgtSector = (side) => (OP.phase === "retreat" && side !== OP.atk ? Math.min(SECN - 1, OP.sector + 1) : OP.sector);
 function sectorFalls() { const a = OP.atk; if (OP.sector >= SECN - 1) { B.over = a; say(a === "you" ? "The citadel is yours. The operation is won. Press T to fight it again, or U to swap sides." : "The citadel has fallen. The operation is lost. Press T to fight it again, or U to swap sides.", 0); return; }
-  OP.phase = "retreat"; OP.t = 40; OP.fellAt = B.time; OP.tickets = Math.min(OP.max, OP.tickets + Math.round(OP.max / 3)); setHomes(); for (const sq of SQUADS) if (sq.side !== a && (sq.auto || sq.wave !== undefined)) { sq.think = 0; sq.order = null; sq.wave = undefined; }
-  say(a === "you" ? "Sector " + (OP.sector + 1) + " is yours. They are falling back. The next sector opens in 40 seconds." : "Sector " + (OP.sector + 1) + " has fallen. Fall back to the next line. You have 40 seconds.", 5); }
+  OP.phase = "retreat"; OP.t = 20; OP.fellAt = B.time; OP.tickets = Math.min(OP.max, OP.tickets + Math.round(OP.max / 3)); setHomes(); for (const sq of SQUADS) if (sq.side !== a && (sq.auto || sq.wave !== undefined)) { sq.think = 0; sq.order = null; sq.wave = undefined; }
+  say(a === "you" ? "Sector " + (OP.sector + 1) + " is yours. They are falling back. The next sector opens in 20 seconds." : "Sector " + (OP.sector + 1) + " has fallen. Fall back to the next line. You have 20 seconds, and their guns open on the old ground after 8.", 5); }
 function waveSquad(side, i) { const who = B.cmds.find((w) => B.side[w] === side); if (!who) return; const U2 = FACTIONS[B.fac[who]].units, id = Object.keys(U2).find((k) => !U2[k].veh), sq = id && deploy(who, id, false, null, true); if (!sq) return; sq.owner = "wave"; sq.wave = i; sq.auto = false; sq.order = { type: "point", i }; const from = sq.c.set(BASE[side][0], 0, BASE[side][1]), to = V3(POINTS[i].x + (rnd() - .5) * 6, 0, POINTS[i].z + (rnd() - .5) * 6);
   /* The blockhouses. A defending squad in three takes the nearest blockhouse to its point and holds inside it. An attacking
      squad in three goes through the nearest one on its way, to clear it, and then carries on to the point. */
@@ -171,7 +171,7 @@ function waveSquad(side, i) { const who = B.cmds.find((w) => B.side[w] === side)
   if (hs && rnd() < .34) { const hv = V3(hs[0] + (rnd() - .5) * 8, 0, hs[1] + (rnd() - .5) * 5); if (side === OP.atk) { sq.path = [...legNodes(from, hv, false), ...legNodes(hv, to, false)]; sq.clear = true; } else { sq.order = { type: "move", pos: hv }; sq.path = legNodes(from, hv, false); sq.garrison = true; } return; }
   sq.path = legNodes(from, to, false); }
 function stepOp(dt) { const a = OP.atk, d = other(a);
-  if (OP.phase === "retreat" && OP.t < 25) { OP.shellT = (OP.shellT || 0) - dt; if (OP.shellT <= 0) { OP.shellT = 1.2; const bd = bounds();   // stragglers: marked for the attackers, and shelled one at a time
+  if (OP.phase === "retreat" && OP.t < 12) { OP.shellT = (OP.shellT || 0) - dt; if (OP.shellT <= 0) { OP.shellT = 1.2; const bd = bounds();   // stragglers: marked for the attackers, and shelled one at a time
       if (bd && bd.def !== null) { const late = arr(d).filter((g) => g.s.dead < 0 && (g.s.root.position.z / U - bd.def) * bd.dir < 0); for (const g of late) g.mark = true; const g = late[Math.floor(rnd() * late.length)];
         if (g) { const x = g.s.root.position.x / U, z = g.s.root.position.z / U; if (B.hooks.blast) B.hooks.blast(V3(x + (rnd() - .5) * 3, groundH(x, z) + .2, z + (rnd() - .5) * 3), 4.5, {}); damage(g, 90, null); } } } }
   if (OP.phase === "retreat") { OP.t -= dt; if (OP.t <= 0) { OP.sector++; OP.phase = "fight"; OP.wave = 2; setHomes();
@@ -189,8 +189,8 @@ function stepOp(dt) { const a = OP.atk, d = other(a);
 export function bounds() { if (B.over || (OP.phase !== "fight" && OP.phase !== "retreat")) return null; const s = Math.min(OP.sector, SECN - 1), avg = (k) => { const q = POINTS.filter((p) => p.sector === k); return q.length ? q.reduce((t, p) => t + p.z, 0) / q.length : null; }, zs = avg(s), home = (HOMES[s] || HOMES[0]).atk[1]; if (zs === null) return null;
   const dir = Math.sign(zs - home) || -1, far = Math.max(...POINTS.filter((p) => p.sector === s).map((p) => (p.z - zs) * dir)), zn = s < SECN - 1 ? avg(s + 1) : null, gap = Math.abs(zs - home);
   const atk = zn === null ? null : zs + dir * Math.max(far + 26, Math.abs(zn - zs) / 2), retreat = OP.phase === "retreat" && atk !== null;
-  // in a retreat the defenders' line is the far edge of the sector they lost, and they have 15 seconds to be past it
-  return { dir, atk, def: retreat ? atk : home + dir * Math.min(24, gap * .4), retreat, grace: retreat ? Math.max(0, OP.t - 25) : 0 }; }
+  // in a retreat the defenders' line is the far edge of the sector they lost, and they have 8 seconds to be past it
+  return { dir, atk, def: retreat ? atk : home + dir * Math.min(24, gap * .4), retreat, grace: retreat ? Math.max(0, OP.t - 12) : 0 }; }
 export const opLine = () => { const a = OP.atk === "you", pts = POINTS.filter((p) => p.sector === Math.min(OP.sector + (OP.phase === "retreat" ? 1 : 0), SECN - 1)).map((p) => `<i class="${p.owner || "none"}" title="${p.roof ? "Roofed: pilots and troops only" : "Open air"}">${p.name}${p.roof ? "&#9650;" : ""}</i>`).join("");
   return `<span class="${a ? "you" : "foe"}">${a ? "ATTACK" : "DEFEND"}</span> Sector ${Math.min(OP.sector + (OP.phase === "retreat" ? 2 : 1), SECN)}/${SECN} ${pts} <span class="${a ? "you" : "foe"}">${OP.phase === "retreat" ? "opens in " + Math.ceil(OP.t) : OP.phase === "regroup" ? "battalion 2 in " + Math.ceil(OP.t) : OP.tickets + " tickets" + (OP.batt > 1 ? " · last battalion" : "")}</span>`; };
 
