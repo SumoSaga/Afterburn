@@ -586,12 +586,12 @@ function restart() { for (const rp of RPS.values()) rp.titan = null; for (const 
   resetBattle(); respawn(); if (MAP.on) setMap(false); runT = 0; runOn = true; runDone = false; say("");
   campDone = false; P.campCore = 0; P.campAssets = 1; P.campRate = 1; P.campDmg = 1;
   WEATHER.state.weather = PLAN && PLAN.indoor ? "clear" : CFG.weather;
-  if (!B.mp && pendingFor(MAPKEY)) { const k = battleSetup(); if (k.weather && !(PLAN && PLAN.indoor)) WEATHER.state.weather = k.weather; P.meter = Math.min(100, k.meter); B.supply.you = Math.max(0, B.supply.you + k.cp); if (OP.atk === "you") { OP.max = Math.max(5, OP.max + k.tickets); OP.tickets = OP.max; } P.campCore = k.core; P.campAssets = k.assets; P.campRate = k.rate; P.campDmg = k.dmg;
+  if (!B.mp && pendingFor(MAPKEY)) { const k = battleSetup(); if (k.weather && !(PLAN && PLAN.indoor)) WEATHER.state.weather = k.weather; P.meter = Math.min(100, k.meter); B.supply.you = Math.max(0, B.supply.you + k.cp); if (OP.atk === "you") { OP.max = Math.max(3, OP.max + k.tickets); OP.tickets = OP.max; } P.campCore = k.core; P.campAssets = k.assets; P.campRate = k.rate; P.campDmg = k.dmg;
     if (k.strike) { if (!B.assets.includes("strike")) B.assets.push("strike"); B.supply.you += 180; }
     if (k.turrets) for (const p of POINTS) if (p.sector < k.turrets) deploy("you", "turret", false, [p.x + 3, p.z + 3]);
     if (k.notes.length) later(1.5, () => say("The campaign gives you: " + k.notes.join(". ") + ".", 7)); } }
 let campDone = false;
-function campWatch() { if (campDone || B.mp || !B.over || !pendingFor(MAPKEY)) return; campDone = true; const msg = campResolve(B.over === "you", OP.max ? OP.tickets / OP.max : 0, OP.sector); say(msg + " Press T to go back to the war.", 0); }
+function campWatch() { if (campDone || B.mp || !B.over || !pendingFor(MAPKEY)) return; campDone = true; const msg = campResolve(B.over === "you", OP.max ? Math.min(1, OP.tickets / OP.max) : 0, OP.sector); say(msg + " Press T to go back to the war.", 0); }
 
 /* ---------- input ---------- */
 const cv = renderer.domElement;

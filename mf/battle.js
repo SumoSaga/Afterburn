@@ -33,7 +33,7 @@ export const FACTIONS = {
     recon: { name: "Orbital Recon Pod", icon: "O", veh: { build: "recon", static: true, recon: true, hp: 400, speed: 0, r: .8 }, cost: 180, sup: 2, pts: 18, desc: "A sensor pod. Directorate only. Enemy squads within 35 metres of it show on your map." } } },
 };
 export const PASSIVES = { combined: ["Combined Arms", "Your troops within 20 metres of you take points a quarter faster and take 15 percent less damage."], shock: ["Shock Drop", "Your drop pods land 30 percent sooner."], logistics: ["Mechanized Logistics", "Your support cards cost 15 percent less."], attrition: ["Attrition Wave", "When one of your Assault Infantry squads is wiped out, you get a fifth of its cost back."] };
-export const CP0 = 150, CPMAX = 600, CPRATE = 4.5, HPK = 1.4, SUPCAP = 10, LIST_MAX = 6;
+export const TPP = 10, SECREFUND = 5, CP0 = 150, CPMAX = 600, CPRATE = 4.5, HPK = 1.4, SUPCAP = 10, LIST_MAX = 6;
 export const DOCTRINES = { manual: ["Manual", "You bring in every squad yourself and they wait for your orders."], rush: ["Infantry rush", "Infantry as fast as Command Points allow, sent at the nearest point you do not hold."], armor: ["Armor support", "Vehicles first, with infantry to hold what they take."], mixed: ["Mixed", "Two squads of infantry for every vehicle."] };
 export const LIST_PTS = 100, GOAL = 400;
 export const LOAD = { side: "militia", weapon: "carbine", chassis: "vanguard", paint: "#c45a1e", doctrine: "manual", passive: "combined", kit: "grapple", anti: "rail", ord: "frag", v: 2, tags: { militia: {}, machine: {} }, list: { militia: ["assault", "breachers", "antiarmor", "skirmishers", "turret"], machine: ["assault", "breachers", "antiarmor", "aegis", "turret"] } };
@@ -144,11 +144,12 @@ for (const [name, x, z, label, sector = 0, roof = 0] of SITES) { const gy = grou
 
 /* ---------- the operation: one side attacks through the sectors in turn, the other holds them ----------
    Only the points of the active sector can change hands. When the attackers hold all of them the sector falls, the
-   defenders get 20 seconds to fall back, and the next sector opens. The attackers have tickets: a pilot coming back costs
+   defenders get 20 seconds to fall back, and the next sector opens. The attackers have ten tickets for each of their
+   players, and five come back for each sector they take. A pilot coming back costs
    one (or, with no pilots on that side, a bought squad wiped costs one and a Titan lost costs three). At no tickets the
    first battalion is spent and a second comes in where the first stopped. When the second is spent the defenders have won. */
 B.stats = { stuck: 0, moved: 0, repath: 0 };
-export const OP = { atk: PLAN ? PLAN.atk : "you", sector: 0, tickets: 30, max: 30, batt: 1, phase: "fight", t: 0, wave: 4, ot: 0, ai: false };
+export const OP = { atk: PLAN ? PLAN.atk : "you", sector: 0, tickets: 10, max: 10, batt: 1, phase: "fight", t: 0, wave: 4, ot: 0, ai: false };
 export const SECN = 1 + Math.max(0, ...SITES.map((q) => q[4] || 0)), ATK = PLAN ? PLAN.atk : "you", HOMES = PLAN ? PLAN.homes : [{ atk: [0, 126], def: [0, -152] }];
 const say = (t, n) => { if (B.hooks.say) B.hooks.say(t, n); };
 /* Can troops get where the operation needs them? From each side's way in to every point of every sector, on foot,
@@ -162,7 +163,7 @@ export function refund(n) { if (B.mp === "guest" || B.over) return; OP.tickets =
 export function spend(side, n = 1) { if (B.mp === "guest" || B.over || side !== OP.atk || OP.phase !== "fight") return; OP.tickets = Math.max(0, OP.tickets - n); }
 const tgtSector = (side) => (OP.phase === "retreat" && side !== OP.atk ? Math.min(SECN - 1, OP.sector + 1) : OP.sector);
 function sectorFalls() { const a = OP.atk; if (OP.sector >= SECN - 1) { B.over = a; say(a === "you" ? "The citadel is yours. The operation is won. Press T to fight it again, or U to swap sides." : "The citadel has fallen. The operation is lost. Press T to fight it again, or U to swap sides.", 0); return; }
-  OP.phase = "retreat"; OP.t = 20; OP.fellAt = B.time; OP.tickets = Math.min(OP.max, OP.tickets + Math.round(OP.max / 3)); setHomes(); for (const sq of SQUADS) if (sq.side !== a && (sq.auto || sq.wave !== undefined)) { sq.think = 0; sq.order = null; sq.wave = undefined; }
+  OP.phase = "retreat"; OP.t = 20; OP.fellAt = B.time; OP.tickets += SECREFUND;   // a sector taken gives five tickets back, and this may take the count past where it started setHomes(); for (const sq of SQUADS) if (sq.side !== a && (sq.auto || sq.wave !== undefined)) { sq.think = 0; sq.order = null; sq.wave = undefined; }
   say(a === "you" ? "Sector " + (OP.sector + 1) + " is yours. They are falling back. The next sector opens in 20 seconds." : "Sector " + (OP.sector + 1) + " has fallen. Fall back to the next line. You have 20 seconds, and their guns open on the old ground after 8.", 5); }
 function waveSquad(side, i) { const who = B.cmds.find((w) => B.side[w] === side); if (!who) return; const U2 = FACTIONS[B.fac[who]].units, id = Object.keys(U2).find((k) => !U2[k].veh), sq = id && deploy(who, id, false, null, true); if (!sq) return; sq.owner = "wave"; sq.wave = i; sq.auto = false; sq.order = { type: "point", i }; const from = sq.c.set(BASE[side][0], 0, BASE[side][1]), to = V3(POINTS[i].x + (rnd() - .5) * 6, 0, POINTS[i].z + (rnd() - .5) * 6);
   /* The blockhouses. A defending squad in three takes the nearest blockhouse to its point and holds inside it. An attacking
@@ -377,7 +378,7 @@ export function stepBattle(dt) { if (B.mp === "guest") return stepGuest(dt); if 
 }
 export function resetBattle() { for (const L of [GRUNTS, ALLIES]) { for (const g of L) if (!g.gone) { try { g.s.remove(); } catch (e) {} } L.length = 0; }
   for (const v of VEH) { if (v.mid) removeMachine(v.mid); else scene.remove(v.group); } VEH.length = 0; SQUADS.length = 0; MAP.sels = [];
-  OP.atk = ATK; OP.sector = 0; OP.batt = 1; OP.phase = "fight"; OP.t = 0; OP.wave = 4; OP.ot = 0; OP.ai = !B.mp && ATK === "foe"; OP.max = OP.tickets = 30 * Math.max(1, B.hooks.attackers ? B.hooks.attackers() : 1); setHomes();
+  OP.atk = ATK; OP.sector = 0; OP.batt = 1; OP.phase = "fight"; OP.t = 0; OP.wave = 4; OP.ot = 0; OP.ai = !B.mp && ATK === "foe"; setHomes();
   for (const p of POINTS) { p.owner = other(ATK); p.prog = p.owner === "you" ? 1 : -1; ownerChanged(p, true); }
   GH.sq.clear(); GH.g.clear(); B.cmds = []; B.side = {}; B.away = {};
   const add = (key, side, fac, list, doc) => { fac = FACTIONS[fac] ? fac : "militia"; B.cmds.push(key); B.side[key] = side; B.fac[key] = fac; B.list[key] = (list || []).filter((id) => FACTIONS[fac].units[id]); B.doctrine[key] = DOCTRINES[doc] ? doc : "mixed"; B.supply[key] = CP0; B.passive = B.passive || {}; B.passive[key] = key === "you" ? LOAD.passive : (B.roster || []).find((r) => r.key === key)?.passive || null; B.turn[key] = 0; B.ai[key] = 2; B.cd[key] = cd0(); };
@@ -385,6 +386,7 @@ export function resetBattle() { for (const L of [GRUNTS, ALLIES]) { for (const g
   if (B.mp === "host") { const mine = LOAD.side, theirs = mine === "militia" ? "machine" : "militia"; for (const r of B.roster || []) if (r.key !== "you") { const f = r.side === "you" ? mine : theirs; add(r.key, r.side, f, (r.lists && r.lists[f]) || (r.fac === f ? r.list : Object.keys(FACTIONS[f].units)), r.doctrine); B.tech[r.key] = r.tech || {}; } }   // every other player is a commander too, on one side or the other
   else if (!B.mp) { const f = LOAD.side === "militia" ? "machine" : "militia"; add("foe", "foe", f, Object.keys(FACTIONS[f].units).filter((id) => !["technical", "jumps"].includes(id)), "mixed"); }
   B.cap = B.duo ? { inf: 10, veh: 2 } : { inf: 18, veh: 3 }; B.share = B.duo ? .6 : 1; B.score.you = B.score.foe = 0; B.time = 0; B.over = null;
+  OP.max = OP.tickets = TPP * sideCount(OP.atk);   // ten tickets for each player on the attacking side, counted once every commander is in
   if (B.mp !== "guest") for (const w of B.cmds) { const inf = B.list[w].filter((id) => !FACTIONS[B.fac[w]].units[id].veh); for (let i = 0; i < 0 && inf.length; i++) deploy(w, inf[i % inf.length], false); }
   for (const f of FALLS) scene.remove(f.mesh); FALLS.length = 0; for (const d of DOMES) { scene.remove(d.mesh); scene.remove(d.box); } DOMES.length = 0; for (const m of MEDS) scene.remove(m.box); MEDS.length = 0; for (const m of MINES) scene.remove(m.mesh); MINES.length = 0; mineKey = ""; MAP.arm = null;
 }

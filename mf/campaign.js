@@ -6,7 +6,7 @@
    Systems give standing perks, results ripple into the next battle, and one Bonus Card can be played per operation.
    Ticket numbers in the spec are for a pool of 250; this game's pool is 30 a pilot, so they are scaled by 30/250.
    Kept in the browser under ab-campaign and in the save file. */
-const KEY = "ab-campaign", TS = 30 / 250, tk = (n) => Math.round(n * TS);
+const KEY = "ab-campaign", TS = 10 / 250, tk = (n) => Math.round(n * TS);
 export const TYPES = {
   capital: { name: "Capital Hub", kind: "town", perk: "150 more War Credits a turn. Lose it and the war is lost." },
   foundry: { name: "Mech Foundry", kind: "works", perk: "Your call-in meter starts every battle at 15." },
