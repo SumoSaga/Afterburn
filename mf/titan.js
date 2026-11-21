@@ -136,7 +136,12 @@ export function makeRig(team, o = {}) {
     const tone = (hex, k) => "#" + new THREE.Color(hex).multiplyScalar(k).getHexString(), S2 = { ...S, grit: .3, gritScale: 1.2 }; MB.palette.forEach((c, i) => { S2["c" + i] = tone(c, team === "foe" ? 1.05 : 1.5); }); if (MB.accent >= 0) S2["c" + MB.accent] = S.accent;   // a body whose model has a small bright trim takes the paint there; one without keeps its own colours
     const g = MB.g, put = (j, runs) => build(j, runs.map(([x, y, z, n, ci]) => B(g * 1.02, n * g * 1.01, g * 1.02, x * g, (y + (n - 1) / 2) * g, z * g, "c" + ci)), S2, glowMat);
     put(hips, MB.parts.hips); put(torso, MB.parts.torso); legs.forEach((L) => { const s = L.sd < 0 ? "L" : "R"; put(L.thigh, MB.parts["thigh" + s]); put(L.shin, MB.parts["shin" + s]); put(L.foot, MB.parts["foot" + s]); });
-    for (const A of [armR, armL]) { const s = A.sd < 0 ? "L" : "R"; put(A.up, MB.parts["up" + s]); put(A.fore, MB.parts["fore" + s]); } }
+    for (const A of [armR, armL]) { const s = A.sd < 0 ? "L" : "R"; put(A.up, MB.parts["up" + s]); put(A.fore, MB.parts["fore" + s]); }
+    // the hatch: a plate on the chest's front, hinged along its top, that swings up when a pilot climbs in
+    let fz = 0; for (const r of MB.parts.torso) if (Math.abs(r[0] * g) < .45) fz = Math.min(fz, r[2] * g);
+    let ty = -9, by = 9; for (const r of MB.parts.torso) if (Math.abs(r[0] * g) < .45 && r[2] * g < fz + g * 2.5) { ty = Math.max(ty, (r[1] + r[3] - .5) * g); by = Math.min(by, (r[1] - .5) * g); }
+    const hh = clamp(ty - by, .7, 1.3), hw = Math.min(1.1, SH_X * 1.1);
+    hatch.position.set(0, ty, fz - g * .75); build(hatch, [B(hw, hh, g * .5, 0, -hh / 2, 0, "c" + Math.max(0, MB.palette.length - 3)), B(hw * .8, .1, g * .6, 0, -.2, -.02, "accent"), B(hw * .45, .07, g * .7, 0, -hh + .2, -.02, "glow")], S2, glowMat); }
   const rig = { root, hips, torso, hatch, muzzle, pod, flash, gun, hold: HOLD, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
     pose(dt, s) {
       const sp = Math.abs(s.speed || 0), sg = (s.speed || 0) < 0 ? -1 : 1, amt = clamp(sp / 1.4, 0, 1), kn = clamp(s.kneel || 0, 0, 1), limp = s.limp ? 1 : 0;
