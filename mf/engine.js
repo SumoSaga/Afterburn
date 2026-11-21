@@ -245,6 +245,7 @@ const NOX = (KEYN % 977) * 1.3, NOZ = ((KEYN >>> 10) % 991) * 1.7;   // every ma
 const HK = KEYN ? .78 : 1, hillsRaw = (x, z) => 4 + HK * 17 * fbm(x * .011 + 3 + NOX, z * .011 + NOZ) + HK * 8 * fbm(x * .034 + 9 + NOX, z * .034 + NOZ) + Math.max(0, Math.hypot(x, z + 20) - 150) * .5 + clamp((-z - 40) / 150, 0, 1) * 7 + clamp((-x - 40) / 120, 0, 1) * 5;
 const genDims = (model) => { try { const e = GEN.entry(model); return e ? [e.dims[0] / U, e.dims[1] / U, e.dims[2] / U] : null; } catch (e) { return null; } };
 export const PLAN = GEN ? planMap(MAPKEY, { hills: hillsRaw, salt: SALT, dims: genDims, isVeh: (t) => !!(GEN.TYPES[t] && GEN.TYPES[t].vehicle) }) : null;
+if (PLAN && PLAN.indoor) { hemi.intensity *= 2.2; fill.intensity *= 2.5; }   // under a deck the sun does not reach, so the soft light does the work
 export const MAPNAME = PLAN ? PLAN.name : "The refinery", SITES = PLAN ? PLAN.sites : [["A", 100, 14, "Town square"], ["B", -6, -4, "Refinery"], ["C", -95, -20, "Lodge"], ["D", 52, -118, "Ridge relay"], ["E", -34, 86, "Depot"]];
 // built ground: [x0, z0, x1, z1, height, how far it takes to blend into the hills]
 const ZONES = PLAN ? PLAN.zones : [[-56, -56, 56, 56, 0, 34], [62, -48, 152, 66, 0, 30], [-34, 104, 34, 150, 0, 26], [-34, -190, 34, -146, 2, 26], [-8, 56, 8, 104, 0, 16], [-8, -146, 8, -56, 1, 16], [56, -7, 62, 7, 0, 14], [-112, -36, -80, -6, 9, 22], [36, -134, 66, -108, 17, 18], [-54, 68, -18, 98, 3, 20]];
