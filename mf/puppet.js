@@ -10,7 +10,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 
 const LOADED = new Map();   // one load per file, however many places ask for it
-export function loadModel(file, key, foeTint = "#b98f86") { if (!LOADED.has(file)) LOADED.set(file, loadOnce(file, key, foeTint)); return LOADED.get(file); }
+const MODELS_ON = new URLSearchParams(location.search).has("models");   // Hayden, 2026-11-20: the game keeps its blocky built look. The detailed models stay in the repository and only load with ?models in the address.
+export function loadModel(file, key, foeTint = "#b98f86") { if (!MODELS_ON) return Promise.resolve(null); if (!LOADED.has(file)) LOADED.set(file, loadOnce(file, key, foeTint)); return LOADED.get(file); }
 async function loadOnce(file, key, foeTint) {
   try { const g = await new GLTFLoader().loadAsync(new URL("../models/" + file + "?v=" + (globalThis.AB_BUILD || ""), import.meta.url).href); let map = null; g.scene.traverse((o) => { if (o.isMesh && o.material.map) map = o.material.map; });
     const mk = (col, k, alpha = "0.5") => { const m = new THREE.MeshToonMaterial({ map, color: col, gradientMap: grad, side: THREE.DoubleSide }); m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a = " + alpha + ";"); }; m.customProgramCacheKey = () => key + k; return m; };   // the alpha marks what it is for the pixel pass: .5 a figure, .6 what the pilot holds

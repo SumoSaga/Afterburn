@@ -35,7 +35,7 @@ const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.
 
 export function makeRig(team, o = {}) {
   const S = { ...(SCHEMES[team] || SCHEMES.you), grit: .85, gritScale: 1.9, ...o }, Sm = { ...S, mud: .75 }, glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) }), hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.9, .7) });
-  const root = new THREE.Group(); root.scale.setScalar(U);
+  const size = o.cls === "light" ? .86 : o.cls === "heavy" ? 1.1 : 1, bulk = o.cls === "light" ? .9 : o.cls === "heavy" ? 1.14 : 1; const root = new THREE.Group(); root.scale.setScalar(U * size);   // a light is smaller and leaner, a heavy bigger and broader
   // hips: a pelvis girdle with ball joints, a plate in front, guards at the sides, a bedroll slung behind
   const hips = joint(root, 0, HIP_Y, 0);
   build(hips, [Lf([[-.46, .6, .66], [-.12, 1.36, 1.0], [.26, 1.2, .92]], 0, 0, 0, "frame", 10, .45), C(.5, .3, 0, .36, 0, "dark", "y", 12),
@@ -92,9 +92,10 @@ export function makeRig(team, o = {}) {
   // Built pointing along -z from the butt of its stock.
   const gun = new THREE.Object3D(); torso.add(gun);
   build(gun, [Lf([[-.26, .2, .5], [0, .26, .62], [.2, .22, .5]], 0, -.02, -.28, "plate2", 8, .5), B(.3, .46, 1.5, 0, 0, -1.1, "frame"), Lf([[-.14, .32, 1.3], [.06, .26, 1.1]], 0, .26, -1.1, "plate", 8, .6),
-    B(.16, .5, .2, 0, -.44, -.62, "dark", .3), C(.32, .3, 0, -.34, -1.2, "plate", "x", 12), C(.33, .07, 0, -.34, -1.2, "accent", "x", 12),
+    B(.16, .5, .2, 0, -.44, -.62, "dark", .3), 
     C(.2, 1.1, 0, .02, -2.3, "plate2", "z", 10), B(.14, .4, .18, 0, -.36, -2.15, "dark", -.15), C(.11, 1.5, 0, .02, -3.4, "dark", "z", 10), C(.17, .32, 0, .02, -4.1, "frame", "z", 10), C(.19, .06, 0, .02, -3.98, "steel", "z", 10),
     C(.045, 1.6, 0, -.14, -2.9, "steel", "z", 6), B(.08, .12, .9, 0, .4, -1.2, "dark"), B(.1, .16, .14, 0, .5, -.9, "dark"), B(.1, .2, .1, 0, .5, -1.56, "dark"), [.05, .05, .02, 0, .52, -1.62, "glow"], Lf([[-.14, .3, .34], [.14, .3, .34]], 0, 0, -.3, "canvas", 8, .5, Math.PI / 2), B(.04, .2, 1.9, .2, -.1, -1.4, "dark"), C(.2, .2, .26, .0, -1.2, "plate2", "x", 10)], S, glowMat);
+  const drumG = new THREE.Group(); gun.add(drumG); build(drumG, [C(.34, .34, 0, -.36, -1.2, "plate", "x", 12), C(.35, .08, 0, -.36, -1.2, "accent", "x", 12), B(.2, .16, .3, 0, -.14, -1.2, "dark")], S, glowMat);   // the drum, a piece of its own so a reload can take it off
   const muzzle = joint(gun, 0, .02, -4.3), flash = new THREE.Mesh(new THREE.BoxGeometry(.6, .6, .8), hot); flash.visible = false; muzzle.add(flash);
   // the blade: carried across the back, and in the left hand for the moment it is swung
   const bladeParts = (len) => [B(.16, .5, .16, 0, .25, 0, "dark"), B(.6, .1, .2, 0, 0, 0, "steel"), H(.34, len, .08, 0, -len / 2, 0, "steel", { sx: 1 }), H(.34, .5, .08, 0, -len - .25, 0, "steel", { sx: 1 }, Math.PI, 0, 0), [.06, len * .9, .1, 0, -len / 2, 0, "glow"]];
@@ -109,8 +110,9 @@ export function makeRig(team, o = {}) {
     const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)); v2.set(px, py, pz).addScaledVector(v1, -(px * v1.x + py * v1.y + pz * v1.z)); if (v2.lengthSq() < 1e-6) v2.set(0, -1, 0); v2.normalize();
     v3.copy(v1).multiplyScalar(a).addScaledVector(v2, h);   // the elbow, from the shoulder
     q1.setFromUnitVectors(DOWN, v2.copy(v3).normalize()); A.up.quaternion.copy(q1); v2.copy(v1).multiplyScalar(d).sub(v3).normalize(); q2.setFromUnitVectors(DOWN, v2); A.fore.quaternion.copy(q1).invert().multiply(q2); }
-  const HOLD = { x: 1.34, y: 1.5, z: -.72, blade: .62, grip: new THREE.Vector3(0, -.5, -.62), fore: new THREE.Vector3(0, -.42, -2.15), well: null, mag: null }, hipL = new THREE.Vector3(-1.5, -.3, .5), drops = [], key = (u, K) => { if (u <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (u <= K[i][0]) { const a = K[i - 1], b = K[i], k = (u - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * (k * k * (3 - 2 * k)); } return K[K.length - 1][1]; }; let reWas = -1;
+  const HOLD = { x: 1.34, y: 1.5, z: -.72, blade: .62, grip: new THREE.Vector3(0, -.5, -.62), fore: new THREE.Vector3(0, -.42, -2.15), well: new THREE.Vector3(0, -.36, -1.2), mag: drumG, drum: drumG.children[0] }, hipL = new THREE.Vector3(-1.5, -.3, .5), drops = [], key = (u, K) => { if (u <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (u <= K[i][0]) { const a = K[i - 1], b = K[i], k = (u - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * (k * k * (3 - 2 * k)); } return K[K.length - 1][1]; }; let reWas = -1;
   const tR = new THREE.Vector3(), tL = new THREE.Vector3(), hang = new THREE.Vector3(), swing = new THREE.Vector3();
+  torso.scale.set(bulk, 1, bulk); hips.scale.set(bulk, 1, bulk);
   const rig = { root, hips, torso, hatch, muzzle, pod, flash, gun, hold: HOLD, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
     pose(dt, s) {
       const sp = Math.abs(s.speed || 0), sg = (s.speed || 0) < 0 ? -1 : 1, amt = clamp(sp / 1.4, 0, 1), kn = clamp(s.kneel || 0, 0, 1), limp = s.limp ? 1 : 0;
