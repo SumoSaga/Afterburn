@@ -8,13 +8,21 @@
    kneels, how far the hatch is open, where it aims, recoil, a punch. Built in metres, facing -z, drawn at U. */
 import { THREE, U, clamp, lerp, charMat, grad } from "./engine.js";
 import { loadModel, puppet as wear } from "./puppet.js";
+import { MECH_BLOCKS } from "./mechblocks.js";
 import { build, box as B, hull as H, drum as C, loft as Lf, ball as Bl } from "./parts.js";
 
 const SCHEMES = {
   you: { frame: "#34373a", plate: "#b9b3a4", plate2: "#8f8a80", accent: "#c45a1e", dark: "#1e2022", glow: [.5, 2.6, 3.2], steel: "#a3a8ab", canvas: "#7a6a4c", cream: "#e2dac4" },
   foe: { frame: "#1e2022", plate: "#4a4e52", plate2: "#36393c", accent: "#b0312a", dark: "#141516", glow: [3.4, .5, .3], steel: "#7c8084", canvas: "#4a4336", cream: "#b9b3a4" },
 };
-const L1 = 1.3, L2 = 1.35, ANK = .27, HIP_Y = 2.85, HIP_X = .66, KNEEL = 1.25, SH_X = 1.5, SH_Y = 1.74, A1 = 1.5, A2 = 1.45;
+/* The walker's body is Hayden's mech model rebuilt from blocks (mf/mechblocks.js, made by blocks.py): the model was cut into
+   its rigid pieces (hips, chest, thighs, shins, feet, upper arms, forearms with hands) and each piece redrawn from 17 cm
+   blocks in the model's own colours. The pieces hang on this skeleton's joints, so it keeps every pose it had, and the
+   skeleton takes its measurements (leg and arm lengths, hip and shoulder widths, ankle height) from the model. The arms are
+   drawn a fifth longer than the model's so both hands reach round the rifle. The plates this file builds are kept only
+   as a fallback and are hidden. */
+const MB = MECH_BLOCKS, MD = MB.dims;
+const L1 = MD.L1, L2 = MD.L2, ANK = MD.ANK, HIP_Y = MD.ANK + MD.L1 + MD.L2 - .1, HIP_X = MD.HIP_X, KNEEL = 1.25, SH_X = MD.SH_X, SH_Y = MD.SH_Y, A1 = MD.A1, A2 = MD.A2;
 // The mech's body is a rigged model (models/mech.glb) worn over this walker: see mf/puppet.js. The walker is the fallback.
 const MODEL = await loadModel("mech.glb", "mfMech");
 /* The mech's rifle is a model too (models/titan-rifle.glb). It is one solid mesh lying corner to corner in its file, so it
@@ -95,13 +103,22 @@ export function makeRig(team, o = {}) {
     B(.16, .5, .2, 0, -.44, -.62, "dark", .3), 
     C(.2, 1.1, 0, .02, -2.3, "plate2", "z", 10), B(.14, .4, .18, 0, -.36, -2.15, "dark", -.15), C(.11, 1.5, 0, .02, -3.4, "dark", "z", 10), C(.17, .32, 0, .02, -4.1, "frame", "z", 10), C(.19, .06, 0, .02, -3.98, "steel", "z", 10),
     C(.045, 1.6, 0, -.14, -2.9, "steel", "z", 6), B(.08, .12, .9, 0, .4, -1.2, "dark"), B(.1, .16, .14, 0, .5, -.9, "dark"), B(.1, .2, .1, 0, .5, -1.56, "dark"), [.05, .05, .02, 0, .52, -1.62, "glow"], Lf([[-.14, .3, .34], [.14, .3, .34]], 0, 0, -.3, "canvas", 8, .5, Math.PI / 2), B(.04, .2, 1.9, .2, -.1, -1.4, "dark"), C(.2, .2, .26, .0, -1.2, "plate2", "x", 10)], S, glowMat);
+  /* Each mech's primary gets pieces of its own on top of the plain rifle, so you can tell them apart across a field:
+     rail-carbine (long, lit rails), Vulcan (a ring of barrels and a belt box), flak-shotgun (two short fat barrels),
+     plasma repeater (lit coils), slag launcher (a wide tube and a tank). The Centurion keeps the plain autocannon. */
+  { const X = { kestrel: [C(.07, 2.2, 0, .02, -4.9, "dark", "z", 8), B(.05, .05, 2.6, -.16, .12, -3.4, "glow"), B(.05, .05, 2.6, .16, .12, -3.4, "glow"), B(.12, .3, .5, 0, .34, -1.3, "dark")],
+      bastion: [...[0, 1, 2, 3, 4, 5].map((i) => C(.075, 2.4, Math.cos(i * 1.047) * .2, .02 + Math.sin(i * 1.047) * .2, -3.6, "dark", "z", 6)), C(.34, .3, 0, .02, -2.5, "frame", "z", 10), C(.34, .16, 0, .02, -4.6, "steel", "z", 10), B(.7, .7, .9, -.5, -.3, -1.1, "plate2"), B(.72, .1, .92, -.5, .02, -1.1, "accent")],
+      jackal: [C(.2, 1.1, -.17, .02, -3.2, "dark", "z", 8), C(.2, 1.1, .17, .02, -3.2, "dark", "z", 8), B(.8, .5, .7, 0, -.05, -2.3, "frame"), B(.82, .08, .3, 0, .22, -2.3, "accent")],
+      nomad: [...[0, 1, 2].map((i) => C(.24, .12, 0, .02, -2.7 - i * .45, "glow", "z", 10)), B(.2, .2, .5, 0, .34, -1.4, "accent")],
+      furnace: [C(.36, 2.0, 0, .02, -3.3, "dark", "z", 10), C(.4, .2, 0, .02, -4.2, "steel", "z", 10), C(.4, 1.0, .0, .62, -1.5, "plate2", "z", 10), C(.41, .12, 0, .62, -1.5, "accent", "z", 10), B(.1, .1, .1, 0, .02, -4.32, "glow")] }[o.mech];
+    if (X) build(gun, X, S, glowMat); }
   const drumG = new THREE.Group(); gun.add(drumG); build(drumG, [C(.34, .34, 0, -.36, -1.2, "plate", "x", 12), C(.35, .08, 0, -.36, -1.2, "accent", "x", 12), B(.2, .16, .3, 0, -.14, -1.2, "dark")], S, glowMat);   // the drum, a piece of its own so a reload can take it off
   const muzzle = joint(gun, 0, .02, -4.3), flash = new THREE.Mesh(new THREE.BoxGeometry(.6, .6, .8), hot); flash.visible = false; muzzle.add(flash);
   // the blade: carried across the back, and in the left hand for the moment it is swung
   const bladeParts = (len) => [B(.16, .5, .16, 0, .25, 0, "dark"), B(.6, .1, .2, 0, 0, 0, "steel"), H(.34, len, .08, 0, -len / 2, 0, "steel", { sx: 1 }), H(.34, .5, .08, 0, -len - .25, 0, "steel", { sx: 1 }, Math.PI, 0, 0), [.06, len * .9, .1, 0, -len / 2, 0, "glow"]];
   const bladeBack = new THREE.Object3D(); bladeBack.position.set(.2, 2.3, 1.62); bladeBack.rotation.set(0, 0, .5); torso.add(bladeBack); build(bladeBack, bladeParts(2.3), S, glowMat);
   const bladeHand = new THREE.Object3D(); bladeHand.position.set(0, -.3, -.1); bladeHand.rotation.set(-1.2, 0, 0); armL.hand.add(bladeHand); build(bladeHand, bladeParts(2.3), S, glowMat); bladeHand.visible = false;
-  const pod = joint(torso, -1.56, 2.92, -.7);
+  const pod = joint(torso, -SH_X - .3, SH_Y + 1.1, -.5);
   const husk = new THREE.MeshToonMaterial({ color: "#1c1a18", gradientMap: grad, side: THREE.DoubleSide });
 
   const DOWN = new THREE.Vector3(0, -1, 0), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
@@ -110,9 +127,15 @@ export function makeRig(team, o = {}) {
     const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)); v2.set(px, py, pz).addScaledVector(v1, -(px * v1.x + py * v1.y + pz * v1.z)); if (v2.lengthSq() < 1e-6) v2.set(0, -1, 0); v2.normalize();
     v3.copy(v1).multiplyScalar(a).addScaledVector(v2, h);   // the elbow, from the shoulder
     q1.setFromUnitVectors(DOWN, v2.copy(v3).normalize()); A.up.quaternion.copy(q1); v2.copy(v1).multiplyScalar(d).sub(v3).normalize(); q2.setFromUnitVectors(DOWN, v2); A.fore.quaternion.copy(q1).invert().multiply(q2); }
-  const HOLD = { x: 1.34, y: 1.5, z: -.72, blade: .62, grip: new THREE.Vector3(0, -.5, -.62), fore: new THREE.Vector3(0, -.42, -2.15), well: new THREE.Vector3(0, -.36, -1.2), mag: drumG, drum: drumG.children[0] }, hipL = new THREE.Vector3(-1.5, -.3, .5), drops = [], key = (u, K) => { if (u <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (u <= K[i][0]) { const a = K[i - 1], b = K[i], k = (u - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * (k * k * (3 - 2 * k)); } return K[K.length - 1][1]; }; let reWas = -1;
+  const HOLD = { x: 1.2, y: .95, z: -.05, blade: .55, grip: new THREE.Vector3(0, -.5, -.62), fore: new THREE.Vector3(0, -.42, -2.15), well: new THREE.Vector3(0, -.36, -1.2), mag: drumG, drum: drumG.children[0] }, hipL = new THREE.Vector3(-1.5, -.3, .5), drops = [], key = (u, K) => { if (u <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (u <= K[i][0]) { const a = K[i - 1], b = K[i], k = (u - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * (k * k * (3 - 2 * k)); } return K[K.length - 1][1]; }; let reWas = -1;
   const tR = new THREE.Vector3(), tL = new THREE.Vector3(), hang = new THREE.Vector3(), swing = new THREE.Vector3();
   torso.scale.set(bulk, 1, bulk); hips.scale.set(bulk, 1, bulk);
+  { // the block body in place of the built plates
+    const inKeep = (m) => { for (let q = m; q; q = q.parent) if (q === gun || q === bladeHand) return true; return false; }; root.traverse((m) => { if (m.isMesh && !inKeep(m)) m.visible = false; }); bladeBack.scale.setScalar(.001);
+    const tone = (hex, k) => "#" + new THREE.Color(hex).multiplyScalar(k).getHexString(), S2 = { ...S, grit: .3, gritScale: 1.2 }; MB.palette.forEach((c, i) => { S2["c" + i] = tone(c, team === "foe" ? 1.05 : 1.5); }); S2["c" + (MB.palette.length - 1)] = S.accent; S2["c" + (MB.palette.length - 2)] = S.cream;
+    const g = MB.g, put = (j, runs) => build(j, runs.map(([x, y, z, n, ci]) => B(g * 1.02, n * g * 1.01, g * 1.02, x * g, (y + (n - 1) / 2) * g, z * g, "c" + ci)), S2, glowMat);
+    put(hips, MB.parts.hips); put(torso, MB.parts.torso); legs.forEach((L) => { const s = L.sd < 0 ? "L" : "R"; put(L.thigh, MB.parts["thigh" + s]); put(L.shin, MB.parts["shin" + s]); put(L.foot, MB.parts["foot" + s]); });
+    for (const A of [armR, armL]) { const s = A.sd < 0 ? "L" : "R"; put(A.up, MB.parts["up" + s]); put(A.fore, MB.parts["fore" + s]); } }
   const rig = { root, hips, torso, hatch, muzzle, pod, flash, gun, hold: HOLD, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
     pose(dt, s) {
       const sp = Math.abs(s.speed || 0), sg = (s.speed || 0) < 0 ? -1 : 1, amt = clamp(sp / 1.4, 0, 1), kn = clamp(s.kneel || 0, 0, 1), limp = s.limp ? 1 : 0;

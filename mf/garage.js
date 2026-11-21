@@ -32,7 +32,7 @@ const lamps = [new THREE.PointLight("#ffc890", 1700, 520, 1.5), new THREE.PointL
 const gear = new THREE.Group(); root.add(gear); let fig = null, figKey = "", rig = null, rigKey = "", gearKey = "";
 function refresh() { if (!root.visible) return;
   const fk = LOAD.side + LOAD.paint; if (fk !== figKey) { figKey = fk; if (fig) fig.dispose(); fig = makeFigure(LOAD.side, false, LOAD.paint); root.add(fig.root); }
-  const rk = LOAD.paint + LOAD.chassis; if (rk !== rigKey) { rigKey = rk; if (rig) rig.root.removeFromParent(); rig = makeRig("you", { accent: LOAD.paint, cls: LOAD.chassis }); root.add(rig.root); rig.root.position.set(5 * U, 0, -4 * U); rig.root.rotation.y = Math.PI - .25; }
+  const rk = LOAD.paint + LOAD.chassis + LOAD.side; if (rk !== rigKey) { rigKey = rk; if (rig) rig.root.removeFromParent(); rig = makeRig("you", { accent: LOAD.paint, cls: LOAD.chassis, mech: ({ machine: { light: "kestrel", medium: "centurion", heavy: "bastion" }, militia: { light: "jackal", medium: "nomad", heavy: "furnace" } })[LOAD.side][LOAD.chassis] }); root.add(rig.root); rig.root.position.set(5 * U, 0, -4 * U); rig.root.rotation.y = Math.PI - .25; }
   const gk = LOAD.weapon + LOAD.kit; if (gk !== gearKey) { gearKey = gk; while (gear.children.length) gear.remove(gear.children[0]);
     const lay = (kind, x, z, ry) => { const g = gunProp(kind, charMat); g.scale.setScalar(U); g.position.set(x * U, .88 * U, z * U); g.rotation.set(0, ry, Math.PI / 2); gear.add(g); };
     lay(LOAD.weapon, -4.7, 2.42, 1.45); lay("pistol", -3.85, 2.8, 1.9); const ch = gunProp("charge", charMat); ch.scale.setScalar(U); ch.position.set(-3.2 * U, .62 * U, 2.75 * U); ch.rotation.set(-1.25, 0, .08); gear.add(ch);   // primary and sidearm on the bench, the rail-charge rifle leaning on it

@@ -188,7 +188,7 @@ const approach = (v, to, r) => (Math.abs(to - v) <= r ? to : v + Math.sign(to - 
 const ease = (u) => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
 function makeTitan(team, x, z, yaw, kit = null) {
   const myF = (B.fac && B.fac.you) || LOAD.side, fac = team === "you" ? myF : myF === "militia" ? "machine" : "militia";   // each side is one faction, and the two sides are opposite
-  const cls = kit && BYF.machine[kit.chassis] ? kit.chassis : team === "you" ? LOAD.chassis : ["medium", "medium", "heavy", "light"][Math.floor(rnd() * 4)], mech = BYF[fac][cls], ch = MECHS[mech], rig = makeRig(team, { cls, ...(team === "you" ? { accent: kit ? kit.paint : LOAD.paint } : {}) }); scene.add(rig.root);
+  const cls = kit && BYF.machine[kit.chassis] ? kit.chassis : team === "you" ? LOAD.chassis : ["medium", "medium", "heavy", "light"][Math.floor(rnd() * 4)], mech = BYF[fac][cls], ch = MECHS[mech], rig = makeRig(team, { cls, mech, ...(team === "you" ? { accent: kit ? kit.paint : LOAD.paint } : {}) }); scene.add(rig.root);
   const t = { team, rig, mech, batt: true, smoke: 0, smokeT: 0, pos: V3(x, .05, z), vel: V3(), yaw, r: cls === "heavy" ? 1.7 : cls === "light" ? 1.3 : 1.5, h: ch.h, eye: ch.eye, ward: 0, wardT: 0, markT: 0, drT: 0, fortT: 0, ocT: 0, hoverT: 0, spin: 0, chg: 0, cans: 2, shield: 0, hull: ch.hull, hullMax: ch.hull, speed: ch.speed, dashMax: ch.dash, shieldT: 9, hitT: 9, alive: true, doom: 0, doomed: false, vortex: 0, vortexCd: 0, pulseCd: 0, core: 0, coreT: 0, ammo: MECHS[mech].mag, reload: 0, fireCd: 0, dash: ch.dash, dashT: 0, dashing: 0, grounded: true,
     cd: 2 + rnd(), rk: 4 + rnd() * 4, think: 0, flow: null, strafe: 1, strafeT: 0, walk: 0, kneel: 0, kneelTo: 0, hatch: 0, hatchTo: 0, aimYaw: 0, aimPitch: 0, recoil: 0, punch: 0, punchCd: 0, busy: false, land: 1 };
   TITANS.push(t); return t;
@@ -248,7 +248,15 @@ function doPunch(t, yaw) { if (t.punchCd > 0) return; t.punch = .45; t.punchCd =
   blastUnits(at, 3.2, victims(t.team), 9999, 110, t.team === "you"); hit = true;
   if (t.team !== "you" && !P.titan && !P.seq && Math.hypot(P.pos.x - at.x, P.pos.z - at.z) < 3 && Math.abs(P.pos.y - t.pos.y) < 5) { hurtPilot(80); hit = true; }
   if (hit) { const p = toU(at); flash(p, "#ffd28a", 4000, .2); puff(p, { n: 22, color: "#ffe9b0", hot: 3, size: 5, life: .3, vel: () => V3((rnd() - .5) * 160, (rnd() - .3) * 120, (rnd() - .5) * 160) }); ringFx(p, "#f2c46a", 60, .3); P.shake = Math.max(P.shake, t === P.titan ? .5 : .25); } }); }
-function stepTitanAI(t, dt) {
+/* A mech the machine is driving uses one thing of its own every so often, when an enemy mech is close: a ward for the ones
+   that have one, a mark, a shield strip, mines, fire. With a full core and an enemy mech within 20 metres it lets the core go. */
+function aiAbility(t, dt) { t.abT = (t.abT == null ? 5 + rnd() * 5 : t.abT) - dt; if (t.abT > 0) return; const o = TITANS.find((q) => q.team !== t.team && q.alive && q.doom <= 0), d = o ? Math.hypot(o.pos.x - t.pos.x, o.pos.z - t.pos.z) : 1e9; if (!o || d > 45) { t.abT = 2; return; } t.abT = 9 + rnd() * 6; const m = t.mech, mine = o === P.titan;
+  if (t.core >= 1 && d < 20) { t.core = 0; const c = toU(V3(t.pos.x, t.pos.y + 2, t.pos.z)); flash(c, "#ffd0a0", 8000, .5); ringFx(c, "#ffb060", 20 * U, .8); snd("charge_fire", { pos: [t.pos.x, t.pos.y + 3, t.pos.z], pitch: .5, gain: 1.5 }); hurtTitan(o, 2500, true); if (mine) say("Their " + MECHS[m].name + " let its core go.", 2.5); return; }
+  if (m === "centurion") { t.vortex = 6; } else if (m === "bastion") { t.ward = 3500; t.wardT = 6; } else if (m === "kestrel") { t.ward = 1500; t.wardT = 2.5; if (o.remote == null) o.markT = 5; }
+  else if (m === "jackal") { if (o.remote == null && d < 30) { o.shield = 0; ringFx(toU(V3(t.pos.x, t.pos.y + 1, t.pos.z)), "#9fd8ff", 30 * U, .6); if (mine) say("An arc wave took your shield.", 2); } }
+  else if (m === "nomad") { if (B.mp !== "guest") for (let i = 0; i < 3; i++) layMine(o.pos.x + (rnd() - .5) * 7, o.pos.z + (rnd() - .5) * 7, t.team, true); }
+  else if (m === "furnace") { addFire(o.pos.x, o.pos.z, 4, 4, 400, t.team); blast(V3(o.pos.x, o.pos.y + .5, o.pos.z), 3, {}); } }
+function stepTitanAI(t, dt) { aiAbility(t, dt);
   const chest = V3(t.pos.x, t.pos.y + t.h * .7, t.pos.z);
   // what it shoots at: the other side's Titan first, then the pilot or the nearest grunt it can see
   let tgt = null, kind = null; const foe = TITANS.find((o) => o.team !== t.team && o.alive && o.doom <= 0);
@@ -404,14 +412,14 @@ function fireCannon(t) { const m = t.mech;
 function railShot(t) { const c = clamp(t.chg, 0, 1); t.chg = 0; t.ammo--; t.fireCd = .45; snd("charge_fire", { pitch: 1 + c * .3, gain: .9 + c * .5 }); kickMech(t, 1 + c * 2); mechPellet(t, 450 + 950 * c, .001, c > .9 ? "#d8f8ff" : "#8fe0f0", true); }
 /* fire on the ground: it burns mechs, troops and pilots of the other side that stand in it */
 const FIRES = [], CANS = []; let fireTick = 0;
-function addFire(x, z, r, sec, dps, team = "you") { FIRES.push({ x, z, r, t: sec, dps, team }); }
+function addFire(x, z, r, sec, dps, team = "you", ghost = false) { FIRES.push({ x, z, r, t: sec, dps, team, ghost }); if (!ghost && team === "you" && B.mp) relay("fire", [r2(x), r2(z), r, sec, dps]); }   // a ghost is another player's fire: drawn here, and it burns this pilot, but the mechs and troops are its owner's to count
 function slagLand(at) { blast(at, 3.5, { team: "you", titan: 55, pilot: 120 }); addFire(at.x, at.z, 4, 3, 400); for (let i = CANS.length - 1; i >= 0; i--) { const c = CANS[i]; if (Math.hypot(c.x - at.x, c.z - at.z) < 6) { scene.remove(c.mesh); CANS.splice(i, 1); blast(V3(c.x, groundH(c.x, c.z) + 1, c.z), 5, { team: "you", titan: 40, pilot: 120 }); addFire(c.x, c.z, 7, 6, 500); } } }
 function stepFires(dt) { fireTick -= dt; const tick = fireTick <= 0; if (tick) fireTick = .25;
   for (let i = CANS.length - 1; i >= 0; i--) { const c = CANS[i]; c.t -= dt; if (c.t <= 0) { scene.remove(c.mesh); CANS.splice(i, 1); } }
   for (let i = FIRES.length - 1; i >= 0; i--) { const f = FIRES[i]; f.t -= dt; if (f.t <= 0) { FIRES.splice(i, 1); continue; } const gy = groundH(f.x, f.z);
     if (rnd() < dt * 5 * f.r) { const a = rnd() * 6.28, d = Math.sqrt(rnd()) * f.r; puff(toU(V3(f.x + Math.cos(a) * d, gy + .3, f.z + Math.sin(a) * d)), { n: 5, color: "#ff9a3c", hot: 3, size: 6, life: .5, vel: () => V3((rnd() - .5) * 20, 40 + rnd() * 50, (rnd() - .5) * 20) }); }
-    if (!tick) continue; const n = f.dps * .25; for (const o of TITANS) if (o.alive && o.team !== f.team && Math.hypot(o.pos.x - f.x, o.pos.z - f.z) < f.r + o.r) hurtTitan(o, n, true);
-    blastUnits(V3(f.x, gy + .5, f.z), f.r, victims(f.team), n * .4, n, f.team === "you"); if (f.team !== "you" && !P.titan && P.dead <= 0 && Math.hypot(P.pos.x - f.x, P.pos.z - f.z) < f.r) hurtPilot(n * .2); } }
+    if (!tick) continue; const n = f.dps * .25; if (f.team !== "you" && !P.titan && P.dead <= 0 && Math.hypot(P.pos.x - f.x, P.pos.z - f.z) < f.r) hurtPilot(n * .2); if (f.ghost) continue; for (const o of TITANS) if (o.alive && o.team !== f.team && Math.hypot(o.pos.x - f.x, o.pos.z - f.z) < f.r + o.r) hurtTitan(o, n, true);
+    blastUnits(V3(f.x, gy + .5, f.z), f.r, victims(f.team), n * .4, n, f.team === "you"); } }
 /* ---------- what Q, E, F and X do in each mech but the Centurion (whose four are in stepRide) ---------- */
 const aimSpot = (far) => { aimRay(0); return _o.clone().addScaledVector(_d, Math.max(3, rayWorld(_o, _d, far) - .4)); }, aimMech = (far) => { aimRay(0); return titanHit(_o, _d, rayWorld(_o, _d, far), "you").who; };
 const ahead = (t, o, far, cone) => { const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), dx = o.pos.x - t.pos.x, dz = o.pos.z - t.pos.z, d = Math.hypot(dx, dz); return d < far && (dx * fx + dz * fz) / (d || 1) > cone; };
@@ -750,6 +758,7 @@ const ACT = {
     if (a[0] === 0) { const from = muzzleOf(t), end = V3(a[1], a[2], a[3]); tracer(from, toU(end), "#ffd890", 9000, 1.5); flash(from, "#ffc477", 3200, .1); t.recoil = 1; snd("cannon", { pos: [t.pos.x, t.pos.y + 4, t.pos.z] }); later(.03, () => blast(end, 2.2, {})); }
     else if (a[0] === 1) { const from = V3(a[1], a[2], a[3]), tgt = V3(a[4], a[5], a[6]), m = fxLayer(new THREE.Mesh(new THREE.BoxGeometry(3, 3, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, 2, .8) }))); scene.add(m); ROCKETS.push({ pos: from, vel: tgt.clone().sub(from).normalize().multiplyScalar(14).add(V3(0, 10, 0)), tgt, team: null, ghost: true, t: 0, mesh: m }); snd("rocket", { pos: xyz(from) }); }
     else if (a[0] === 2) { t.punch = .45; } },
+  fire: (slot, a) => { const rp = RPS.get(slot); if (rp) addFire(a[0], a[1], a[2], a[3], a[4], rp.side, true); },
   tsmk: (slot) => { const rp = RPS.get(slot), t = rp && rp.titan; if (!t) return; t.smokeT = 4; if (P.rodeo && P.rodeo.T === t) throwRider(45); },
   nmine: (slot, a) => { const rp = RPS.get(slot); if (rp && B.mp === "host") layMine(a[0], a[1], rp.side, true); },
   nade: (slot, a) => { const rp = RPS.get(slot); mkNade(V3(a[0], a[1], a[2]), V3(a[3], a[4], a[5]), null, a[6] || 1.7, !!a[7], rp ? rp.side : null); } };
