@@ -550,11 +550,15 @@ export function mapFrame(dt) { cam.updateMatrixWorld(); live = new Set(); const 
   markT -= dt; if (markT <= 0) { markT = .2; drawDeck(); }
   const sup = B.supply.you; $("sup-fill").style.width = sup / 6 + "%"; $("sup-n").textContent = Math.floor(sup);
 }
-export const income = (who) => (B.over ? 0 : CPRATE * (who === "you" && B.hooks.cpRate ? B.hooks.cpRate() : 1));
+/* A side with fewer players is paid for the players it is missing: each of its commanders earns the rate times the
+   other side's head count over its own, so two against three earn half as much again each, one against three three times. */
+export const sideCount = (side) => B.cmds.filter((w) => B.side[w] === side).length || 1;
+export const outnumbered = (who) => { const s = B.side[who] || who; return Math.max(1, sideCount(other(s)) / sideCount(s)); };
+export const income = (who) => (B.over ? 0 : CPRATE * (who === "you" && B.hooks.cpRate ? B.hooks.cpRate() : 1) * outnumbered(who));
 let deckKey = "";
 function drawDeck() { const side = B.fac.you, Un = FACTIONS[side].units, S = MAP.sels, pl = B.hooks.pilot();
   $("map-top").innerHTML = `${opLine()}${pl.dead > 0 ? ` <span class="warn">You are down. Back in ${pl.dead.toFixed(1)} s</span>` : ""}`;
-  $("sup-rate").textContent = "+" + income("you").toFixed(0) + " each second · " + squadsOut("you") + " of your squads on the field";
+  $("sup-rate").textContent = "+" + income("you").toFixed(1).replace(/\.0$/, "") + " each second" + (outnumbered("you") > 1 ? " (outnumbered, ×" + outnumbered("you").toFixed(1).replace(/\.0$/, "") + ")" : "") + " · " + squadsOut("you") + " of your squads on the field";
   const ticks = B.list.you.map((id) => `<s style="left:${Un[id].cost / 6}%" title="${Un[id].name}"><b>${Un[id].icon}</b></s>`).join(""); if ($("sup-ticks")._h !== ticks) { $("sup-ticks").innerHTML = ticks; $("sup-ticks")._h = ticks; }
   const dk = B.doctrine.you + "|" + Object.keys(UTILS).map((k) => Math.ceil(B.cd.you[k]) + (B.supply.you >= utilCost("you", k) ? "y" : "n")).join("") + (MAP.arm ? MAP.arm.kind + (MAP.arm.unit || "") : "") + B.list.you.map((id) => (B.supply.you >= Un[id].cost + POD_EXTRA ? "p" : "")).join("") + B.list.you.map((id) => (B.supply.you >= Un[id].cost ? 1 : 0) + (room("you", Un[id]) ? "r" : "f")).join("") + (B.over || "");
   if (dk !== deckKey) { deckKey = dk; $("map-doc").innerHTML = Object.entries(DOCTRINES).map(([k, [n]]) => `<button data-doc="${k}" class="${B.doctrine.you === k ? "on" : ""}" title="${DOCTRINES[k][1]}">${n}</button>`).join("");
