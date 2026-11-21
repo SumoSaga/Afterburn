@@ -141,6 +141,7 @@
   @media (max-width: 820px) { #m-side { width: 190px; padding-left: 20px; } #m-side h1 { font-size: 28px; } #m-nav button { font-size: 18px; } #m-main { padding: 30px 16px; } .tiles { grid-template-columns: 1fr; } }
 
   #panel { display: none; width: min(440px, 88vw); }
+  .tech { display: inline-block; margin-top: 3px; font-size: 12px; color: #b9ad94; } .tech i { font-style: normal; opacity: .55; margin-right: 6px; } .tech i.got { opacity: 1; color: #f2c46a; } .tech button { font-size: 11px; padding: 1px 6px; }
   #settings { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 20px 26px; width: min(460px, 90vw); max-height: 92vh; overflow-y: auto; z-index: 40; background: rgba(20,16,12,.96); }
   h1 { font-size: 22px; margin: 0; letter-spacing: .12em; color: #f2c46a; }
   h2 { font-size: 13px; margin: 14px 0 6px; letter-spacing: .1em; color: #f2c46a; text-transform: uppercase; }
@@ -159,7 +160,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "29";
+  window.AB_BUILD = "30";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -217,7 +218,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 29 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 30 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -293,6 +294,9 @@
   <h2>Smoother play</h2>
   <p><i>If the game drags, try these from the top. A bigger pixel size above helps the most, then shadows, then outlines.</i></p>
   <div class="row"><button id="s-shadow">Shadows</button><button id="s-line">Outlines</button><button id="s-fps">Frame counter</button></div>
+  <h2>Your save</h2>
+  <p><i>Your loadout, battlegroups, mastery and settings live in this browser. Save them to a file to keep them safe or carry them to another machine.</i></p>
+  <div class="row"><button id="s-export">Save to a file</button><button id="s-import">Load from a file</button><input type="file" id="s-file" accept="application/json,.json" style="display:none"></div><p id="s-savenote" class="lab"></p>
   <div class="row" style="margin-top:14px"><button id="s-close" class="on">Back</button><button id="s-tune">Tuning</button><button id="s-lab">Sound lab</button></div>
   <p class="lab">Escape opens and closes this page. These save on this browser.</p>
 </div>
@@ -310,15 +314,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=29"></script>
-<script src="punch/punch-lab.js?v=29"></script>
-<script src="cb/genbuild.js?v=29"></script>
-<script src="cb/machines.js?v=29"></script>
-<script src="cb/soldiers.js?v=29"></script>
-<script src="cb/cbmechdata.js?v=29"></script>
-<script src="cb/cbmech.js?v=29"></script>
-<script src="cb/cbnature.js?v=29"></script>
-<script src="cb/cbweather.js?v=29"></script>
+<script src="punch/punch.js?v=30"></script>
+<script src="punch/punch-lab.js?v=30"></script>
+<script src="cb/genbuild.js?v=30"></script>
+<script src="cb/machines.js?v=30"></script>
+<script src="cb/soldiers.js?v=30"></script>
+<script src="cb/cbmechdata.js?v=30"></script>
+<script src="cb/cbmech.js?v=30"></script>
+<script src="cb/cbnature.js?v=30"></script>
+<script src="cb/cbweather.js?v=30"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>

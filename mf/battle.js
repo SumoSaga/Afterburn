@@ -39,6 +39,40 @@ export const LIST_PTS = 100, GOAL = 400;
 export const LOAD = { side: "militia", weapon: "carbine", chassis: "vanguard", paint: "#c45a1e", doctrine: "manual", passive: "combined", kit: "grapple", anti: "rail", ord: "frag", v: 2, tags: { militia: {}, machine: {} }, list: { militia: ["assault", "breachers", "antiarmor", "skirmishers", "turret"], machine: ["assault", "breachers", "antiarmor", "aegis", "turret"] } };
 try { const s = JSON.parse(localStorage.getItem("mf-fps-load") || "null"); if (s) { if (s.v !== 2) { s.doctrine = "manual"; s.v = 2; } Object.assign(LOAD, s); LOAD.list = { ...LOAD.list, ...(s.list || {}) }; } } catch (e) {}
 for (const f in FACTIONS) { LOAD.list[f] = (LOAD.list[f] || []).filter((id) => FACTIONS[f].units[id]).slice(0, LIST_MAX); if (!LOAD.list[f].length) LOAD.list[f] = Object.keys(FACTIONS[f].units); } if (!PASSIVES[LOAD.passive]) LOAD.passive = "combined"; LOAD.tags = { militia: {}, machine: {}, ...(LOAD.tags || {}) }; if (!["grapple", "stim", "sonar", "phase", "decoy"].includes(LOAD.kit)) LOAD.kit = "grapple"; if (!["rail", "seeker", "mag", "arc"].includes(LOAD.anti)) LOAD.anti = "rail"; if (!["frag", "arc", "therm", "satchel"].includes(LOAD.ord)) LOAD.ord = "frag";
+/* ---------- mastery and tech (step 6) ----------
+   Every card earns Mastery XP when you use it: 10 for sending it in and 1 for each second one of its squads stands on a
+   point in the active sector. XP makes levels (1 to 10) and every level after the first gives a Tech Point for that
+   card. A card with a tree has two branches of three tiers; a tier costs 1, 1 and 2 points, so both branches can be
+   opened in time. One branch is worn at a time and it changes what the card is, sideways and not simply upward.
+   Kept in the browser under ab-mastery, and in the save file with everything else. */
+export const TECH = {
+  assault: { a: { name: "Storm Breachers", tiers: ["Two of the four carry shotguns.", "Each counts a fifth more on a point.", "Their drop pod lands in smoke."] }, b: { name: "Line Holders", tiers: ["Two of the four carry marksman rifles with half again the reach.", "72 health each, up from 60.", "A shield on each that stops 80 from the front."] } },
+  breachers: { a: { name: "Juggernaut Push", tiers: ["Both carry shotguns.", "230 health each, up from 200.", "Each counts a quarter more on a point."] }, b: { name: "Suppressor Squad", tiers: ["Both carry machine guns.", "220 health each.", "A chest shield on each that stops 100 from the front."] } },
+  turret: { a: { name: "Long Watch", tiers: ["Sees 30 metres, up from 25.", "Sees 34 metres, with 320 health.", "Sees 38 metres."] }, b: { name: "Suppression Sentry", tiers: ["400 health, up from 350.", "450 health.", "500 health, and sees 27 metres."] } },
+  beacon: { a: { name: "Rapid Assault Beacon", tiers: ["Brings in four squads, up from three.", "Five squads.", "Six squads."] }, b: { name: "Hardened Relay", tiers: ["420 health, up from 350.", "500 health.", "600 health."] } } };
+const TIER_COST = [1, 1, 2];
+export const MAST = { xp: {}, tiers: {}, pick: {} }; try { Object.assign(MAST, JSON.parse(localStorage.getItem("ab-mastery") || "{}")); } catch (e) {} MAST.xp = MAST.xp || {}; MAST.tiers = MAST.tiers || {}; MAST.pick = MAST.pick || {};
+export const saveMast = () => { try { localStorage.setItem("ab-mastery", JSON.stringify(MAST)); } catch (e) {} };
+const xpFor = (L) => 60 * L * (L - 1) / 2;   // level 2 at 60, 3 at 180, 4 at 360 ... 10 at 2,700
+export const levelOf = (id) => { let L = 1; while (L < 10 && (MAST.xp[id] || 0) >= xpFor(L + 1)) L++; return L; };
+export const xpNext = (id) => { const L = levelOf(id); return L >= 10 ? null : [Math.floor((MAST.xp[id] || 0) - xpFor(L)), xpFor(L + 1) - xpFor(L)]; };
+const spentOn = (id) => { const t = MAST.tiers[id] || {}; let n = 0; for (const b of ["a", "b"]) for (let i = 0; i < (t[b] || 0); i++) n += TIER_COST[i]; return n; };
+export const tpFree = (id) => levelOf(id) - 1 - spentOn(id);
+export function buyTier(id, br) { const t = MAST.tiers[id] || (MAST.tiers[id] = { a: 0, b: 0 }), n = t[br] || 0; if (!TECH[id] || n >= 3 || tpFree(id) < TIER_COST[n]) return false; t[br] = n + 1; if (!MAST.pick[id]) MAST.pick[id] = br; saveMast(); return true; }
+export function pickBranch(id, br) { MAST.pick[id] = MAST.pick[id] === br ? "" : br; saveMast(); }
+let xpDirty = 0; export function addXP(id, n) { if (!id || !(n > 0)) return; const L0 = levelOf(id); MAST.xp[id] = (MAST.xp[id] || 0) + n; xpDirty += n; if (levelOf(id) > L0 && B.hooks.say) { const d = Object.values(FACTIONS).map((f) => f.units[id]).find(Boolean); B.hooks.say((d ? d.name : "A card") + " reached level " + levelOf(id) + ". It has a Tech Point to spend.", 3.5); } if (xpDirty >= 20) { xpDirty = 0; saveMast(); } }
+// what you are wearing, as it is sent to a host: { card: "a2" } means branch a to tier 2
+export const wornTech = () => { const o = {}; for (const id in TECH) { const br = MAST.pick[id], n = br && MAST.tiers[id] ? MAST.tiers[id][br] || 0 : 0; if (n > 0) o[id] = br + n; } return o; };
+function techDef(base, id, worn) { if (!worn || !TECH[id]) return base; const br = worn[0], n = +worn.slice(1) || 0; if (!n) return base; const d = { ...base, veh: base.veh ? { ...base.veh } : undefined, tech: TECH[id][br].name }, k = id + br;
+  if (k === "assaulta") { d.guns = ["shotgun", "rifle", "shotgun", "rifle"]; if (n > 1) d.capw = base.capw * 1.2; if (n > 2) d.smoke = true; }
+  else if (k === "assaultb") { d.guns = ["dmr", "rifle", "dmr", "rifle"]; if (n > 1) d.hp = 72; if (n > 2) d.shield = 80; }
+  else if (k === "breachersa") { d.guns = ["shotgun", "shotgun"]; if (n > 1) d.hp = 230; if (n > 2) d.capw = base.capw * 1.25; }
+  else if (k === "breachersb") { d.guns = ["lmg", "lmg"]; if (n > 1) d.hp = 220; if (n > 2) d.shield = 100; }
+  else if (k === "turreta") { d.veh.range = [30, 34, 38][n - 1]; if (n > 1) d.veh.hp = 320; }
+  else if (k === "turretb") { d.veh.hp = [400, 450, 500][n - 1]; if (n > 2) d.veh.range = 27; }
+  else if (k === "beacona") { d.veh.drops = 3 + n; }
+  else if (k === "beaconb") { d.veh.hp = [420, 500, 600][n - 1]; }
+  return d; }
 export const saveLoad = () => { try { localStorage.setItem("mf-fps-load", JSON.stringify(LOAD)); } catch (e) {} };
 
 export const GRUNTS = [], ALLIES = [], VEH = [], SQUADS = [], POINTS = [];
@@ -137,7 +171,7 @@ function assetModel(kind, side) { const g = new THREE.Group(), body = new THREE.
   else { bx(1.1, 1.5, 1.1, 0, .85, 0, body); bx(1.2, .16, 1.2, 0, 1.2, 0, lit); bx(.7, .3, .7, 0, 1.75, 0, dark); bx(.06, 1.6, .06, .3, 2.6, .3, dark); bx(.9, .06, .5, 0, 2.1, 0, dark, .5, .4); }
   return g; }
 function mkVeh(sq, x, z) { const side = sq.side, def = sq.def, v = { veh: true, side, sq, def, pos: V3(x, 0, z), yaw: side === "you" ? 0 : Math.PI, hp: def.veh.hp, r: def.veh.r, alive: true, tgt: null, think: rnd(), cd: 1 + rnd(), flow: null, flowT: 0, dest: null };
-  if (def.veh.mach && MACH) { v.mid = "veh" + sq.id; v.group = placeMachine(v.mid, def.veh.model, x * U, z * U, v.yaw + Math.PI).group; } else { v.group = def.veh.build ? assetModel(def.veh.build, side) : genModel(def.veh.model); scene.add(v.group); } if (def.veh.beacon) v.drops = 3; if (def.veh.hover) { v.bob = rnd() * 6; v.laid = 0; v.leg = 0; if (def.veh.drone) sq.auto = true; }
+  if (def.veh.mach && MACH) { v.mid = "veh" + sq.id; v.group = placeMachine(v.mid, def.veh.model, x * U, z * U, v.yaw + Math.PI).group; } else { v.group = def.veh.build ? assetModel(def.veh.build, side) : genModel(def.veh.model); scene.add(v.group); } if (def.veh.beacon) v.drops = def.veh.drops || 3; if (def.veh.hover) { v.bob = rnd() * 6; v.laid = 0; v.leg = 0; if (def.veh.drone) sq.auto = true; }
   const tag = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL[side]) })); tag.position.y = 62; v.group.add(tag); sq.veh = v; VEH.push(v); return v; }
 function mkSoldier(sq, i, x, z, id) { const side = sq.side, def = sq.def, gun = def.guns[i], mil = sq.fac === "militia";
   const s = SOL.make({ x: x * U, z: z * U, y: groundH(x, z) * U, yaw: side === "you" ? Math.PI : 0, weapon: gun, role: gun === "lmg" ? "gunner" : gun === "dmr" ? "marksman" : "rifleman", camo: mil ? (i % 2 ? "multicam" : "ranger") : "urban", seed: 100 + sq.id * 7 + i });
@@ -147,7 +181,7 @@ function mkSoldier(sq, i, x, z, id) { const side = sq.side, def = sq.def, gun = 
 function beaconFor(side) { const live = POINTS.filter((p) => p.sector === OP.sector), cx = live.reduce((t, p) => t + p.x, 0) / (live.length || 1), cz = live.reduce((t, p) => t + p.z, 0) / (live.length || 1); let best = null, bd = 1e9; for (const v of VEH) if (v.alive && v.side === side && v.def.veh.beacon && v.drops > 0 && !(v.stun > 0)) { const d = Math.hypot(v.pos.x - cx, v.pos.z - cz); if (d < bd) { bd = d; best = v; } } return best; }
 export function deploy(who, id, paid = true, at = null, plain = false) { const side = sideOf(who), bc = !at && !plain && B.mp !== "guest" ? beaconFor(side) : null, home = at || (bc ? [bc.pos.x + 2, bc.pos.z + 2] : BASE[side]);
   if (B.mp === "guest") { B.hooks.net("dep", id); return null; }   // the guest asks; the host's battle decides
-  const def = FACTIONS[B.fac[who]].units[id]; if (!def || B.over) return null; if (paid) { if (B.supply[who] < def.cost || !room(who, def)) return null; B.supply[who] -= def.cost; }
+  const def = techDef(FACTIONS[B.fac[who]].units[id], id, B.tech && B.tech[who] && B.tech[who][id]); if (!def || B.over) return null; if (who === "you") addXP(id, 10); if (paid) { if (B.supply[who] < def.cost || !room(who, def)) return null; B.supply[who] -= def.cost; }
   const sq = mkSquad(side, id, def, ++B.n, home, at, who); if (at) { sq.auto = false; sq.order = { type: "move", pos: V3(at[0], 0, at[1]) }; }
   if (def.veh) { const [x, z] = spotFree(home[0] + (at ? 0 : 10), home[1], def.veh.r + .3); mkVeh(sq, x, z); }
   else def.guns.forEach((gun, i) => { const [x, z] = spotFree(home[0] + (i - def.guns.length / 2) * 1.5, home[1], .5); mkSoldier(sq, i, x, z); });
@@ -275,7 +309,7 @@ function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null, rps
   for (const p of POINTS) { const n = { you: 0, foe: 0 }, w = { you: 0, foe: 0 }, ai = { you: 0, foe: 0 }, aura = { you: false, foe: false }, far = (x, z) => Math.hypot(x - p.x, z - p.z);
     const pilot = (side, x, z, titan) => { const d = far(x, z); if (d < 20) aura[side] = true; if (d < 9) { n[side]++; w[side] += titan ? (p.roof ? 0 : 1.5) : 1; } };   // a pilot counts 1, a Titan 1.5 and only in the open
     if (pl && pl.alive) pilot("you", pl.at.x, pl.at.z, pl.titan); for (const rp of rps) if (!rp.decoy && (rp.ok || rp.inTitan)) pilot(rp.side, rp.pos.x, rp.pos.z, rp.inTitan);
-    for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && far(g.s.root.position.x / U, g.s.root.position.z / U) < 9) { const gx = g.s.root.position.x / U, gz = g.s.root.position.z / U, op = passive(g.sq.owner) === "combined" ? cmdPilot(g.sq.owner) : null; n[side]++; ai[side] += (g.sq.def.capw || .3) * (op && Math.hypot(op.x - gx, op.z - gz) < 20 ? 1.25 : 1); } for (const v of VEH) if (v.alive && !v.def.veh.static && !v.def.veh.nocap && v.side === side && far(v.pos.x, v.pos.z) < 9) { n[side]++; ai[side] += .4; } }
+    for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && far(g.s.root.position.x / U, g.s.root.position.z / U) < 9) { const gx = g.s.root.position.x / U, gz = g.s.root.position.z / U, op = passive(g.sq.owner) === "combined" ? cmdPilot(g.sq.owner) : null; if (g.sq.owner === "you" && side === "you") g.sq.onPt = B.time; n[side]++; ai[side] += (g.sq.def.capw || .3) * (op && Math.hypot(op.x - gx, op.z - gz) < 20 ? 1.25 : 1); } for (const v of VEH) if (v.alive && !v.def.veh.static && !v.def.veh.nocap && v.side === side && far(v.pos.x, v.pos.z) < 9) { n[side]++; ai[side] += .4; } }
     for (const t of tis) if (t.alive && !t.piloted && t.remote == null && far(t.pos.x, t.pos.z) < 9) { n[t.team]++; if (!p.roof) w[t.team] += 1.5; }
     for (const side of ["you", "foe"]) w[side] += ai[side] * (aura[side] ? 1.25 : 1);   // troops count 0.3 each, a quarter more with a pilot of theirs within 20 m
     p.n = n; p.w = w; if (p.sector !== OP.sector || OP.phase !== "fight") continue;
@@ -294,7 +328,7 @@ function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[
   if (B.supply[side] >= def.cost) { deploy(side, id); B.turn[side]++; B.ai[side] = .4; } }
 let tick = 0;
 let escT = 0;
-export function stepBattle(dt) { if (B.mp === "guest") return stepGuest(dt); if (B.over) return; B.time += dt; PIL = B.hooks.pilots ? B.hooks.pilots() : [];
+export function stepBattle(dt) { if (B.mp === "guest") return stepGuest(dt); if (B.over) return; B.time += dt; if (Math.floor(B.time) !== Math.floor(B.time - dt)) for (const q of SQUADS) if (!q.dead && q.owner === "you" && q.onPt > B.time - 1.2) addXP(q.defId, 1); PIL = B.hooks.pilots ? B.hooks.pilots() : [];
   escT += dt; if (escT >= 5) { escT = 0; for (const p of PIL) { const live = POINTS.filter((q) => q.sector === OP.sector); if (arr(p.side).some((g) => g.s.dead < 0 && Math.hypot(g.s.root.position.x / U - p.x, g.s.root.position.z / U - p.z) < 20 && live.some((q) => Math.hypot(g.s.root.position.x / U - q.x, g.s.root.position.z / U - q.z) < 9))) credit(p.key, 15); } }   // staying with your troops on a point pays
   for (const g of GRUNTS) stepSoldier(g, dt); for (const g of ALLIES) stepSoldier(g, dt); for (const v of VEH) stepVeh(v, dt);
   for (const L of [GRUNTS, ALLIES]) for (let i = L.length - 1; i >= 0; i--) if (L[i].gone) L.splice(i, 1);
@@ -309,8 +343,8 @@ export function resetBattle() { for (const L of [GRUNTS, ALLIES]) { for (const g
   for (const p of POINTS) { p.owner = other(ATK); p.prog = p.owner === "you" ? 1 : -1; ownerChanged(p, true); }
   GH.sq.clear(); GH.g.clear(); B.cmds = []; B.side = {}; B.away = {};
   const add = (key, side, fac, list, doc) => { fac = FACTIONS[fac] ? fac : "militia"; B.cmds.push(key); B.side[key] = side; B.fac[key] = fac; B.list[key] = (list || []).filter((id) => FACTIONS[fac].units[id]); B.doctrine[key] = DOCTRINES[doc] ? doc : "mixed"; B.supply[key] = CP0; B.passive = B.passive || {}; B.passive[key] = key === "you" ? LOAD.passive : (B.roster || []).find((r) => r.key === key)?.passive || null; B.turn[key] = 0; B.ai[key] = 2; B.cd[key] = cd0(); };
-  { const f = B.mp === "guest" && FACTIONS[B.myFac] ? B.myFac : LOAD.side; add("you", "you", f, LOAD.list[f].slice(), LOAD.doctrine); B.assets = (LOAD.assets[f] || []).slice(); }
-  if (B.mp === "host") { const mine = LOAD.side, theirs = mine === "militia" ? "machine" : "militia"; for (const r of B.roster || []) if (r.key !== "you") { const f = r.side === "you" ? mine : theirs; add(r.key, r.side, f, (r.lists && r.lists[f]) || (r.fac === f ? r.list : Object.keys(FACTIONS[f].units)), r.doctrine); } }   // every other player is a commander too, on one side or the other
+  { const f = B.mp === "guest" && FACTIONS[B.myFac] ? B.myFac : LOAD.side; add("you", "you", f, LOAD.list[f].slice(), LOAD.doctrine); B.assets = (LOAD.assets[f] || []).slice(); B.tech = { you: wornTech() }; }
+  if (B.mp === "host") { const mine = LOAD.side, theirs = mine === "militia" ? "machine" : "militia"; for (const r of B.roster || []) if (r.key !== "you") { const f = r.side === "you" ? mine : theirs; add(r.key, r.side, f, (r.lists && r.lists[f]) || (r.fac === f ? r.list : Object.keys(FACTIONS[f].units)), r.doctrine); B.tech[r.key] = r.tech || {}; } }   // every other player is a commander too, on one side or the other
   else if (!B.mp) { const f = LOAD.side === "militia" ? "machine" : "militia"; add("foe", "foe", f, Object.keys(FACTIONS[f].units).filter((id) => !["technical", "jumps"].includes(id)), "mixed"); }
   B.cap = B.duo ? { inf: 10, veh: 2 } : { inf: 18, veh: 3 }; B.share = B.duo ? .6 : 1; B.score.you = B.score.foe = 0; B.time = 0; B.over = null;
   if (B.mp !== "guest") for (const w of B.cmds) { const inf = B.list[w].filter((id) => !FACTIONS[B.fac[w]].units[id].veh); for (let i = 0; i < 0 && inf.length; i++) deploy(w, inf[i % inf.length], false); }
@@ -353,6 +387,7 @@ export function useUtil(kind, g, unit, who = "you", ghost = false) { if (B.over)
   if (mine && B.hooks.say) B.hooks.say(u.name + " on the way.", 2); tell(); return true; }
 function landed(f) { const gy = groundH(f.x, f.z), at = V3(f.x, gy, f.z), mine = f.side === "you";
   if (f.kind === "bomb") { scene.remove(f.mesh); if (B.hooks.blast) B.hooks.blast(at, 6, f.ghost ? {} : { team: f.side, titan: 110, pilot: 70 }); return false; }
+  if (f.kind === "pod" && !f.ghost) { const dT = techDef(FACTIONS[B.fac[f.who]].units[f.unit], f.unit, B.tech && B.tech[f.who] && B.tech[f.who][f.unit]); if (dT && dT.smoke) { const dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(7 * U, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#8a8780", transparent: true, opacity: .5, depthWrite: false, side: THREE.DoubleSide }))); dome.position.set(f.x * U, (gy - 1) * U, f.z * U); scene.add(dome); DOMES.push({ x: f.x, z: f.z, r: 7, side: f.side, t: 10, smoke: true, mesh: dome, box: new THREE.Object3D() }); } }
   if (f.kind === "pod") { if (B.hooks.blast) B.hooks.blast(at, 3, f.ghost ? {} : { team: f.side, titan: 60, pilot: 40 }); if (!f.ghost) { const sq = deploy(f.who, f.unit, false, [f.x, f.z]); if (sq && f.who === "you" && MAP.on) MAP.sels = [sq]; } f.husk = 10; return true; }
   if (f.kind === "shield") { const col = mine ? "#6fd8ff" : "#ff8a6a", dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(8 * U, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
     dome.position.set(f.x * U, (gy - 1) * U, f.z * U); scene.add(dome); DOMES.push({ x: f.x, z: f.z, r: 8, side: f.side, t: 25, mesh: dome, box: f.mesh }); ringFx(toU(at).setY((gy + .3) * U), col, 8 * U, .7); flash(toU(at).setY((gy + 3) * U), col, 2600, .4); return false; }
