@@ -49,6 +49,12 @@ export const TECH = {
   assault: { a: { name: "Storm Breachers", tiers: ["Two of the four carry shotguns.", "Each counts a fifth more on a point.", "Their drop pod lands in smoke."] }, b: { name: "Line Holders", tiers: ["Two of the four carry marksman rifles with half again the reach.", "72 health each, up from 60.", "A shield on each that stops 80 from the front."] } },
   breachers: { a: { name: "Juggernaut Push", tiers: ["Both carry shotguns.", "230 health each, up from 200.", "Each counts a quarter more on a point."] }, b: { name: "Suppressor Squad", tiers: ["Both carry machine guns.", "220 health each.", "A chest shield on each that stops 100 from the front."] } },
   turret: { a: { name: "Long Watch", tiers: ["Sees 30 metres, up from 25.", "Sees 34 metres, with 320 health.", "Sees 38 metres."] }, b: { name: "Suppression Sentry", tiers: ["400 health, up from 350.", "450 health.", "500 health, and sees 27 metres."] } },
+  antiarmor: { a: { name: "Tank Hunters", tiers: ["A third trooper with a rifle to cover the two.", "110 health each, up from 90.", "Each counts double on a point."] }, b: { name: "Dug-in Battery", tiers: ["110 health each.", "130 health each.", "A shield on each that stops 80 from the front."] } },
+  skirmishers: { a: { name: "Raiders", tiers: ["All three carry shotguns.", "90 health each, up from 75.", "Each counts a quarter more on a point."] }, b: { name: "Scouts", tiers: ["Two carry marksman rifles.", "85 health each.", "A fourth saboteur joins them."] } },
+  aegis: { a: { name: "Phalanx", tiers: ["Shields stop 300, up from 250.", "Shields stop 350.", "140 health each, up from 120."] }, b: { name: "Assault Line", tiers: ["One carries a machine gun.", "Each counts a fifth more on a point.", "A fourth trooper joins them."] } },
+  drones: { a: { name: "Armoured Pair", tiers: ["240 health, up from 200.", "280 health.", "320 health."] }, b: { name: "Fast Pair", tiers: ["A sixth faster.", "A third faster.", "Half again as fast."] } },
+  miner: { a: { name: "Armoured Layer", tiers: ["150 health, up from 120.", "180 health.", "220 health."] }, b: { name: "Fast Layer", tiers: ["A sixth faster.", "A third faster.", "Half again as fast."] } },
+  recon: { a: { name: "Hardened Pod", tiers: ["460 health, up from 400.", "520 health.", "600 health."] }, b: { name: "Cheap Pod", tiers: ["Costs 160 Command Points, down from 180.", "Costs 140.", "Costs 120."] } },
   beacon: { a: { name: "Rapid Assault Beacon", tiers: ["Brings in four squads, up from three.", "Five squads.", "Six squads."] }, b: { name: "Hardened Relay", tiers: ["420 health, up from 350.", "500 health.", "600 health."] } } };
 const TIER_COST = [1, 1, 2];
 export const MAST = { xp: {}, tiers: {}, pick: {} }; try { Object.assign(MAST, JSON.parse(localStorage.getItem("ab-mastery") || "{}")); } catch (e) {} MAST.xp = MAST.xp || {}; MAST.tiers = MAST.tiers || {}; MAST.pick = MAST.pick || {};
@@ -72,6 +78,15 @@ function techDef(base, id, worn) { if (!worn || !TECH[id]) return base; const br
   else if (k === "turretb") { d.veh.hp = [400, 450, 500][n - 1]; if (n > 2) d.veh.range = 27; }
   else if (k === "beacona") { d.veh.drops = 3 + n; }
   else if (k === "beaconb") { d.veh.hp = [420, 500, 600][n - 1]; }
+  else if (k === "antiarmora") { d.guns = ["at", "at", "rifle"]; if (n > 1) d.hp = 110; if (n > 2) d.capw = base.capw * 2; }
+  else if (k === "antiarmorb") { d.hp = n > 1 ? 130 : 110; if (n > 2) d.shield = 80; }
+  else if (k === "skirmishersa") { d.guns = ["shotgun", "shotgun", "shotgun"]; if (n > 1) d.hp = 90; if (n > 2) d.capw = base.capw * 1.25; }
+  else if (k === "skirmishersb") { d.guns = ["dmr", "dmr", "rifle"]; if (n > 1) d.hp = 85; if (n > 2) d.guns = ["dmr", "dmr", "rifle", "rifle"]; }
+  else if (k === "aegisa") { d.shield = [300, 350, 350][n - 1]; if (n > 2) d.hp = 140; }
+  else if (k === "aegisb") { d.guns = ["lmg", "rifle", "rifle"]; if (n > 1) d.capw = base.capw * 1.2; if (n > 2) d.guns = ["lmg", "rifle", "rifle", "rifle"]; }
+  else if (k === "dronesa") { d.veh.hp = [240, 280, 320][n - 1]; } else if (k === "dronesb") { d.veh.speed = base.veh.speed * [1.17, 1.33, 1.5][n - 1]; }
+  else if (k === "minera") { d.veh.hp = [150, 180, 220][n - 1]; } else if (k === "minerb") { d.veh.speed = base.veh.speed * [1.17, 1.33, 1.5][n - 1]; }
+  else if (k === "recona") { d.veh.hp = [460, 520, 600][n - 1]; } else if (k === "reconb") { d.cost = [160, 140, 120][n - 1]; }
   return d; }
 export const saveLoad = () => { try { localStorage.setItem("mf-fps-load", JSON.stringify(LOAD)); } catch (e) {} };
 

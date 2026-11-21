@@ -8,6 +8,7 @@
   const KINDS = [["clear", "Clear"], ["overcast", "Overcast"], ["rain", "Rain"], ["storm", "Storm"], ["snow", "Snow"], ["fog", "Fog"]];
   // how each one changes the light: the sun, the sky's light, the haze; and what falls (count, speed, slant)
   const LOOK = {
+    day: { sun: 1.45, sky: 1.7, fog: .6, rain: 0, snow: 0 },
     clear: { sun: 1, sky: 1, fog: 1, rain: 0, snow: 0 },
     overcast: { sun: .42, sky: .92, fog: 1.2, rain: 0, snow: 0 },
     rain: { sun: .3, sky: .78, fog: 1.45, rain: 1, snow: 0 },

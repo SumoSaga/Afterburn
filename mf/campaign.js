@@ -20,6 +20,7 @@ const LAYOUT = [   // id, name, type, x, y on the map (0 to 100), lanes
   ["aegis", "Aegis Prime", "capital", 7, 50, ["astra", "helios"]], ["astra", "Port Astra", "shipyard", 27, 22, ["aegis", "vulcan", "aether"]], ["helios", "Helios Refinery", "supply", 27, 78, ["aegis", "vulcan", "prometheus"]],
   ["vulcan", "Vulcan-4", "foundry", 50, 50, ["astra", "helios", "aether", "prometheus"]], ["aether", "Aether Array", "comms", 51, 13, ["astra", "vulcan", "bastion9"]], ["prometheus", "Prometheus Station", "tech", 51, 87, ["helios", "vulcan", "veridian"]],
   ["bastion9", "Bastion-9", "fortress", 74, 24, ["aether", "haven"]], ["veridian", "Veridian Colony", "colony", 74, 76, ["prometheus", "haven"]], ["haven", "Haven Outpost", "capital", 93, 50, ["bastion9", "veridian"]]];
+const WX = { aegis: "day", astra: "overcast", helios: "fog", vulcan: "storm", aether: "snow", prometheus: "rain", bastion9: "overcast", veridian: "day", haven: "clear" };   // each world has its own weather, and a battle there is fought in it
 const START = { machine: ["aegis", "astra", "helios"], militia: ["haven", "bastion9", "veridian"] }, CAPITAL = { machine: "aegis", militia: "haven" };
 export const CARDS = {
   garrison: { name: "Garrison Reinforcements", desc: tk(60) + " more tickets when you attack, or 150 more Command Points when you defend." },
@@ -36,7 +37,7 @@ try { CAMP.s = JSON.parse(localStorage.getItem(KEY) || "null"); if (CAMP.s && CA
 export const saveCamp = () => { try { if (CAMP.s) localStorage.setItem(KEY, JSON.stringify(CAMP.s)); else localStorage.removeItem(KEY); } catch (e) {} };
 const S = () => CAMP.s, held = (f) => Object.values(S().nodes).filter((n) => n.owner === f), fleetsOf = (f) => S().fleets.filter((q) => q.f === f), log = (t) => S().log.unshift(t);
 export const fleetCap = (f) => 2 + held(f).filter((n) => n.type === "shipyard").length;
-export function newCampaign(fac) { const nodes = {}; for (const [id, name, type, x, y, adj] of LAYOUT) nodes[id] = { id, name, type, x, y, adj, owner: START.machine.includes(id) ? "machine" : START.militia.includes(id) ? "militia" : "", gar: type === "fortress" || type === "capital" ? 2 : 1 };
+export function newCampaign(fac) { const nodes = {}; for (const [id, name, type, x, y, adj] of LAYOUT) nodes[id] = { id, name, type, x, y, adj, wx: WX[id] || "clear", owner: START.machine.includes(id) ? "machine" : START.militia.includes(id) ? "militia" : "", gar: type === "fortress" || type === "capital" ? 2 : 1 };
   CAMP.s = { v: 2, fac, turn: 1, phase: "you", moved: false, credits: { machine: 150, militia: 150 }, nodes, fleets: [{ id: 1, f: "machine", at: "aegis", dep: false }, { id: 2, f: "militia", at: "haven", dep: false }], nid: 2, cards: { machine: [], militia: [] }, play: "", ripple: {}, dom: { machine: 0, militia: 0 }, pending: null, threat: null, sel: "", fsel: 0, log: [], over: "" };
   log("The war begins. Each side holds its capital and two systems, with one Strike Fleet at the capital. Three systems between you belong to nobody."); const got = income(fac); log("Turn 1. You collected " + got + " War Credits."); saveCamp(); return CAMP.s; }
 function income(f) { const n = held(f); let got = 40 + n.length * 25 + n.filter((q) => q.type === "capital").length * 150; if (f === "machine") got = Math.round(got * 1.1); S().credits[f] += got; return got; }
@@ -94,7 +95,7 @@ export function resolve(won, frac = .5, sector = 0) { const s = S(); if (!s || !
   saveCamp(); return msg; }
 export const pendingFor = (mapKey) => (S() && S().pending && S().pending.key === mapKey ? S().pending : null);
 /* Everything the campaign changes about the battle that is about to be fought, for your side. */
-export function battleSetup() { const s = S(), p = s.pending, t = held(s.fac).map((n) => n.type), has = (x) => t.includes(x), atk = p.role === "a", c = p.card, fl = s.fleets.find((q) => q.id === p.fleet), o = { meter: 0, cp: 0, tickets: 0, assets: 1, core: 0, rate: 1, dmg: 1, turrets: 0, strike: false, notes: [] };
+export function battleSetup() { const s = S(), p = s.pending, t = held(s.fac).map((n) => n.type), has = (x) => t.includes(x), atk = p.role === "a", c = p.card, fl = s.fleets.find((q) => q.id === p.fleet), o = { weather: s.nodes[p.id].wx || WX[p.id] || "", meter: 0, cp: 0, tickets: 0, assets: 1, core: 0, rate: 1, dmg: 1, turrets: 0, strike: false, notes: [] };
   if (has("foundry")) { o.meter += 15; o.notes.push("Foundry: meter at 15"); } if (has("comms")) { o.assets *= .8; o.notes.push("Relay: assets a fifth sooner"); } if (has("shipyard")) { o.strike = true; o.notes.push("Shipyard: one free Orbital Strike"); }
   if (has("supply")) { o.rate *= 1.15; if (atk) o.tickets += tk(40); o.notes.push("Depot: faster Command Points" + (atk ? ", " + tk(40) + " more tickets" : "")); } if (has("colony") && atk) { o.tickets += tk(50); o.notes.push("Colony: " + tk(50) + " more tickets"); }
   if (has("tech")) { o.core = .25; o.notes.push("Enclave: core a quarter charged"); } if (has("fortress") && !atk) { o.turrets = Math.max(o.turrets, 1); o.notes.push("Fortress: turrets at the first sector"); }

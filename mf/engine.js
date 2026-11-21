@@ -160,7 +160,7 @@ export const post = new THREE.ShaderMaterial({
         for (int i = 0; i < 8; i++) { vec3 q = camPos + dir * (dt * (float(i) + jit));
           float den = fogDen * exp(-max(q.y, 0.0) / 42.0) * (0.45 + 1.1 * vnoise(q.xz * 0.011 + vec2(time * 0.05, time * 0.03)));
           fogA += den * dt; sh += den * dt * (hasShadow > 0.5 ? sunlit(q) : 1.0); }
-        lin = mix(lin, fogCol, (1.0 - exp(-fogA)) * (sky ? 0.3 : 0.55) * fogMix) + sunCol * shaftK * (1.0 - exp(-sh * 1.4)) * 0.34; }
+        lin = mix(lin, fogCol, min(0.85, (1.0 - exp(-fogA)) * (sky ? 0.3 : 0.55) * fogMix)) + sunCol * shaftK * (1.0 - exp(-sh * 1.4)) * 0.34 * min(1.0, fogMix); }
       // glow: anything brighter than white spills onto the pixels round it
       vec3 bl = vec3(0.0);
       ivec2 o1[4] = ivec2[4](ivec2(2,0), ivec2(-2,0), ivec2(0,2), ivec2(0,-2)), o2[4] = ivec2[4](ivec2(3,3), ivec2(-3,3), ivec2(3,-3), ivec2(-3,-3)), o3[4] = ivec2[4](ivec2(6,0), ivec2(-6,0), ivec2(0,6), ivec2(0,-6));
@@ -189,7 +189,7 @@ export const post = new THREE.ShaderMaterial({
         c = bc;
       } else c = floor(c * 26.0 + bayer(p)) / 26.0;   // a limited range of each colour, dithered
       vec2 uv2 = gl_FragCoord.xy / (lowSize * px); float rim = smoothstep(0.38, 1.0, length((uv2 - 0.5) * vec2(1.25, 1.0)) * 1.25);
-      c *= 1.0 - 0.42 * rim;
+      c *= 1.0 - 0.16 * rim;
       c = mix(c, vec3(0.69, 0.19, 0.16), clamp(hurt, 0.0, 1.0) * (0.15 + 0.6 * rim));
       c = mix(c, vec3(0.56, 0.88, 0.94), clamp(cool, 0.0, 1.0) * rim * 0.5);
       gl_FragColor = vec4(c, 1.0);
@@ -529,11 +529,14 @@ const wxGroup = new THREE.Group(); scene.add(wxGroup);   // rain and snow are ke
 if (window.CBWEATHER) window.CBWEATHER.start({ THREE, scene: wxGroup, game: WEATHER, size: () => [100 * U, 100 * U], target: () => cam.position, sun, hemi, post, tod: () => TOD, fxLayer, flash });
 
 /* ---------- drawing a frame ---------- */
+/* How much of the haze each kind of weather shows. On a clear day the air is nearly clean: the old look laid a pale veil over
+   everything past about 80 metres and dimmed the edges of the view, which Hayden asked to have taken off. Fog keeps it. */
+const HAZE = { day: .12, clear: .25, overcast: .45, rain: .6, storm: .75, snow: .7, fog: 1.4 };
 const _pv = new THREE.Matrix4(); let frameN = -1;
 export function render(t, dt, hurt, cool, fromAbove) { if (ROOFS) ROOFS.visible = !fromAbove;
   tickFx(dt); tickAir(dt, t); if (NAT) NAT.WIND.uTime.value = t;
   sky.position.copy(cam.position); wxGroup.position.set(cam.position.x, Math.max(0, cam.position.y - 120 * U), cam.position.z); cam.updateMatrixWorld();
-  const u = post.uniforms; u.time.value = t; u.shaftK.value = fromAbove ? .12 : 1; u.fogMix.value = fromAbove ? .25 : 1; u.hurt.value = hurt; u.cool.value = cool || 0; u.useLine.value = CFG.outlines; u.usePal.value = CFG.palette; u.useBlock.value = CFG.blocks;
+  const u = post.uniforms; u.time.value = t; const hz = HAZE[WEATHER.state.weather] ?? .3; u.shaftK.value = fromAbove ? .12 : 1; u.fogMix.value = fromAbove ? .25 * hz : hz; u.hurt.value = clamp(hurt || 0, 0, 1); u.cool.value = clamp(cool || 0, 0, 1); u.useLine.value = CFG.outlines; u.usePal.value = CFG.palette; u.useBlock.value = CFG.blocks;
   _pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); u.invPV.value.copy(_pv).invert(); u.camPos.value.copy(cam.position);
   /* What a frame costs, and what is done about it:
      - the sun's shadow map covers the whole field and nearly all of it is still, so it is redrawn on one frame in three;
