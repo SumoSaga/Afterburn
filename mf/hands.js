@@ -22,16 +22,16 @@ const X = Math.PI / 2;
 
 /* ---------- the weapons, built along -z from the grip ---------- */
 function charger(mat = gunMat) { const g = new THREE.Group(); build(g, [B(.06, .09, .34, 0, .022, -.1, "gun"), Lf([[.1, .075, .085], [.4, .06, .07]], 0, .025, 0, "gun2", 8, .5, -X), C(.016, .3, 0, .03, -.55, "dark", "z", 8), ...[0, 1, 2, 3].map((i) => B(.085, .085, .012, 0, .03, -.3 - i * .045, "dark")),
-    C(.03, .08, 0, .03, -.7, "gun", "z", 10), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.044, .075, .2, 0, .004, .2, "gun2"), B(.048, .095, .03, 0, 0, .31, "dark"), B(.05, .05, .09, 0, .1, -.04, "dark"), B(.045, .1, .07, 0, -.05, -.1, "accent")], S, glow, mat);
+    C(.03, .08, 0, .03, -.7, "gun", "z", 10), B(.036, .095, .046, 0, -.058, .032, "dark", .3), B(.044, .075, .2, 0, .004, .2, "gun2"), B(.048, .095, .03, 0, 0, .31, "dark"), B(.03, .03, .06, 0, .1, -.04, "dark"), ...DOT(-.04, .04), B(.045, .1, .07, 0, -.05, -.1, "accent")], S, glow, mat);
   const coil = new THREE.Mesh(new THREE.BoxGeometry(.045, .045, .11), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.4, 3) })); coil.position.set(0, .03, -.62); g.add(coil);
-  g.userData = { coil, fore: new THREE.Vector3(0, -.01, -.3), well: new THREE.Vector3(0, -.09, -.1), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .03, -.75) }; return g; }
+  g.userData = { coil, sightY: .148, fore: new THREE.Vector3(0, -.01, -.3), well: new THREE.Vector3(0, -.09, -.1), top: new THREE.Vector3(.035, .05, .06), muzzle: new THREE.Vector3(0, .03, -.75) }; return g; }
 /* Every weapon is its own build, so each one reads at a glance: the rifle's long handguard, the SMG's wire stock and
    stick magazine, the shotgun's wooden pump, the launcher's drum. A gun is a body, a magazine (the piece that comes out
    or is fed on a reload) and a bolt (the piece that runs on each shot: a bolt, a slide, a pump), and it carries the
    marks the hands and the moves work from. The magazine that drops and the one in your hand are the gun's own. */
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]), WOOD = "#6b4a2c", TAN = "#94835f", OLIVE = "#56613f", BRASS = "#b38a3c", BLUE = "#33566f", RED = "#9a3226";
 const GRIP = () => B(.036, .095, .046, 0, -.058, .032, "dark", .3), TRIG = () => B(.012, .012, .07, 0, -.022, -.01, "dark");
-const DOT = (z = -.06, y = 0) => [B(.042, .008, .052, 0, .088 + y, z, "dark"), B(.005, .04, .03, -.02, .108 + y, z, "dark"), B(.005, .04, .03, .02, .108 + y, z, "dark"), B(.044, .005, .03, 0, .129 + y, z, "dark"), B(.004, .004, .002, 0, .108 + y, z, "glow")];
+const DOT = (z = -.06, y = 0) => [B(.042, .008, .052, 0, .088 + y, z, "dark"), B(.005, .04, .03, -.02, .108 + y, z, "dark"), B(.005, .04, .03, .02, .108 + y, z, "dark"), B(.044, .005, .03, 0, .129 + y, z, "dark"), B(.0055, .0055, .002, 0, .108 + y, z, "glow")];
 const SCOPE = (len, r, z) => [C(r, len, 0, .118, z, "dark", "z", 10), C(r + .007, .04, 0, .118, z - len / 2, "gun", "z", 10), C(r + .004, .03, 0, .118, z + len / 2, "gun", "z", 10), B(.02, .03, .03, 0, .092, z - .05, "dark"), B(.02, .03, .03, 0, .092, z + .05, "dark")];
 function mk(mat, body, o) { const g = new THREE.Group(); build(g, body, S, glow, mat);
   const d = { sightY: o.sightY || .108, fore: V(o.fore), well: V(o.well || [0, -.09, -.07]), top: V(o.top || [.035, .05, .06]), muzzle: V(o.muzzle), magLen: o.magLen || 0 }; if (o.grip) d.grip = V(o.grip);
@@ -50,7 +50,7 @@ const MAKE = {
     B(.008, .008, .2, -.022, .045, .17, "steel"), B(.008, .008, .2, .022, .045, .17, "steel"), B(.052, .075, .012, 0, .02, .275, "dark"), B(.03, .085, .034, 0, -.052, -.17, "dark", -.1), B(.02, .02, .03, .04, .05, -.1, "steel"), GRIP(), TRIG(), ...DOT(-.04)],
     { fore: [0, -.05, -.17], muzzle: [0, .028, -.33], magLen: .17, drops: true, magTilt: 0, magAt: [0, -.07], mag: [B(.026, .17, .04, 0, -.085, 0, "mag"), B(.03, .014, .044, 0, -.168, 0, "accent"), B(.028, .01, .042, 0, -.03, 0, "steel")] }),
   // Shotgun: a barrel over a tube, a wooden stock and a wooden pump that runs on every shot, shells in a rack on the side
-  shotgun: (m) => mk(m, [B(.054, .08, .24, 0, .022, -.04, "gun"), C(.02, .44, 0, .046, -.38, "dark", "z", 8), C(.017, .36, 0, .004, -.34, "gun2", "z", 8), B(.05, .074, .02, 0, .025, -.53, "steel"), B(.01, .008, .42, 0, .07, -.36, "dark"), B(.006, .008, .006, 0, .078, -.58, "glow"),
+  shotgun: (m) => mk(m, [B(.054, .08, .24, 0, .022, -.04, "gun"), C(.02, .44, 0, .046, -.38, "dark", "z", 8), C(.017, .36, 0, .004, -.34, "gun2", "z", 8), B(.05, .074, .02, 0, .025, -.53, "steel"), B(.01, .008, .42, 0, .07, -.36, "dark"), B(.007, .009, .007, 0, .082, -.58, "glow"), B(.04, .006, .012, 0, .066, .06, "dark"), B(.006, .03, .012, -.017, .082, .06, "dark"), B(.006, .03, .012, .017, .082, .06, "dark"), B(.04, .006, .012, 0, .098, .06, "dark"),
     B(.044, .078, .24, 0, -.008, .21, WOOD, -.08), B(.048, .1, .03, 0, -.02, .33, "dark"), B(.036, .095, .046, 0, -.058, .032, WOOD, .3), TRIG(), B(.012, .05, .13, -.033, .03, -.04, "dark"), ...[0, 1, 2, 3].map((i) => C(.009, .046, -.043, .03, -.085 + i * .03, RED, "y", 6))],
     { sightY: .082, fore: [0, -.02, -.33], muzzle: [0, .046, -.6], magLen: .035, magTilt: 0, magAt: [0, -.06], mag: [B(.03, .01, .07, 0, -.004, 0, "steel")], bolt: [B(.052, .05, .14, 0, .002, -.33, WOOD), ...[0, 1, 2].map((i) => B(.056, .052, .012, 0, .002, -.29 - i * .04, "dark"))] }),
   // Marksman Rifle: a slim long barrel, a scope, a stock with a hole for the thumb, a folded bipod
@@ -68,7 +68,7 @@ const MAKE = {
   // Sidearm: all slide. The slide runs back on each shot and the magazine comes out of the grip
   pistol: (m) => mk(m, [B(.032, .03, .17, 0, .02, -.05, "gun"), C(.01, .03, 0, .046, -.16, "dark", "z", 8), B(.01, .008, .06, 0, -.02, -.03, "dark"), B(.01, .03, .008, 0, -.006, -.06, "dark"), B(.02, .012, .06, 0, .0, -.1, "dark"), B(.034, .1, .05, 0, -.05, .035, "dark", .3), B(.038, .06, .03, 0, -.05, .035, TAN, .3)],
     { sightY: .078, fore: [-.012, -.07, .03], muzzle: [0, .046, -.18], well: [0, -.12, .07], top: [.03, .05, 0], magLen: .1, drops: true, magTilt: .3, magAt: [0, .03], mag: [B(.026, .1, .034, 0, -.05, 0, "mag"), B(.032, .012, .044, 0, -.1, 0, "steel")],
-      bolt: [B(.036, .036, .2, 0, .052, -.05, "gun2"), B(.038, .008, .06, 0, .052, .02, "dark"), B(.004, .008, .004, 0, .074, -.14, "glow"), B(.02, .008, .006, 0, .074, .04, "dark"), B(.038, .012, .05, 0, .045, -.1, "accent")] }),
+      bolt: [B(.036, .036, .2, 0, .052, -.05, "gun2"), B(.038, .008, .06, 0, .052, .02, "dark"), B(.005, .012, .005, 0, .078, -.14, "glow"), B(.008, .016, .006, -.012, .078, .04, "dark"), B(.008, .016, .006, .012, .078, .04, "dark"), B(.038, .012, .05, 0, .045, -.1, "accent")] }),
   // Magnetic Grenade Launcher: two fat tubes one over the other, ringed with orange magnets
   maglauncher: (m) => mk(m, [B(.06, .1, .18, 0, .025, -.03, "gun"), C(.028, .3, 0, .056, -.27, "gun2", "z", 8), C(.028, .3, 0, -.004, -.27, "gun2", "z", 8), ...[0, 1, 2].map((i) => B(.07, .104, .016, 0, .026, -.2 - i * .07, "accent")), C(.031, .02, 0, .056, -.42, "dark", "z", 8), C(.031, .02, 0, -.004, -.42, "dark", "z", 8),
     B(.062, .01, .1, 0, .05, -.03, "glow"), B(.04, .06, .12, 0, .005, .14, "gun2"), B(.05, .1, .03, 0, .0, .21, "dark"), GRIP(), TRIG(), ...DOT(-.04, .006)],
@@ -76,12 +76,12 @@ const MAKE = {
   charge: (m) => charger(m),
   // Arc Disruptor Cannon: two coiled prongs with the charge held between them, tanks along the top
   arccannon: (m) => mk(m, [B(.07, .09, .3, 0, .025, -.08, "gun"), B(.016, .03, .32, -.04, .03, -.38, "steel"), B(.016, .03, .32, .04, .03, -.38, "steel"), ...[0, 1, 2].flatMap((i) => [-.04, .04].map((x) => C(.024, .03, x, .03, -.3 - i * .07, BRASS, "z", 6))),
-    C(.026, .18, -.022, .098, -.06, BLUE, "z", 8), C(.026, .18, .022, .098, -.06, BLUE, "z", 8), B(.01, .01, .2, .04, -.02, -.1, "dark"), B(.072, .012, .2, 0, .0, -.08, "accent"), B(.044, .075, .18, 0, .004, .19, "gun2"), B(.05, .1, .03, 0, 0, .29, "dark"), GRIP(), TRIG()],
-    { fore: [0, -.03, -.2], muzzle: [0, .03, -.56], coil: [0, .03, -.5, .04] }),
+    C(.026, .18, -.022, .098, -.06, BLUE, "z", 8), C(.026, .18, .022, .098, -.06, BLUE, "z", 8), B(.01, .01, .2, .04, -.02, -.1, "dark"), B(.072, .012, .2, 0, .0, -.08, "accent"), B(.044, .075, .18, 0, .004, .19, "gun2"), B(.05, .1, .03, 0, 0, .29, "dark"), GRIP(), TRIG(), B(.02, .06, .03, 0, .072, -.14, "dark"), ...DOT(-.14, .04)],
+    { sightY: .148, fore: [0, -.03, -.2], muzzle: [0, .03, -.56], coil: [0, .03, -.5, .04] }),
   // Seeker Launcher: a square tube on the shoulder, a sight box on its left with a lamp that comes up as it locks
-  seeker: (m) => mk(m, [B(.09, .09, .62, 0, .05, -.15, OLIVE), B(.11, .11, .05, 0, .05, -.47, "dark"), B(.1, .1, .05, 0, .05, .17, "dark"), C(.03, .05, 0, .05, -.51, RED, "z", 8, .006), B(.092, .02, .05, 0, .05, -.3, "accent"), B(.092, .02, .05, 0, .05, 0, "accent"),
-    B(.03, .06, .11, -.065, .09, -.1, "gun"), B(.022, .04, .004, -.065, .09, -.157, "glow"), B(.032, .085, .036, 0, -.04, -.26, "dark", -.1), B(.036, .095, .046, 0, -.045, .032, "dark", .3), TRIG()],
-    { sightY: .09, fore: [0, -.04, -.26], grip: [0, -.05, .04], muzzle: [0, .05, -.54], coil: [-.065, .128, -.1, .014] }) };
+  seeker: (m) => mk(m, [B(.09, .09, .62, 0, .05, -.15, OLIVE), B(.11, .11, .05, 0, .05, -.47, "dark"), B(.1, .07, .05, 0, .035, .17, "dark"), C(.03, .05, 0, .05, -.51, RED, "z", 8, .006), B(.092, .02, .05, 0, .05, -.3, "accent"), B(.092, .02, .05, 0, .05, 0, "accent"),
+    B(.03, .06, .11, -.065, .09, -.1, "gun"), B(.022, .04, .004, -.065, .09, -.157, "glow"), B(.032, .085, .036, 0, -.04, -.26, "dark", -.1), B(.036, .095, .046, 0, -.045, .032, "dark", .3), TRIG(), B(.03, .03, .05, 0, .11, -.2, "dark"), ...DOT(-.2, .03)],
+    { sightY: .138, fore: [0, -.04, -.26], grip: [0, -.05, .04], muzzle: [0, .05, -.54], coil: [-.065, .128, -.1, .014] }) };
 /* The assault rifle is a model (models/rifle.glb): one mesh, no moving parts of its own. Its magazine is cut away from the
    rest by where its triangles lie (below the well, between the grip and the front of the well), so it can come out, and
    it is given a top so it looks whole in the hand. The model is 1 unit long with its muzzle toward +z; here it is turned

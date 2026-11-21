@@ -47,6 +47,16 @@
   #secban { position: absolute; left: 0; right: 0; top: 20%; display: none; text-align: center; padding: 14px 0 16px; text-shadow: 0 2px 4px #000; animation: secin .35s ease-out; background: linear-gradient(90deg, transparent, rgba(8,10,12,.85) 25%, rgba(8,10,12,.85) 75%, transparent); border-top: 2px solid; border-bottom: 2px solid; border-image: linear-gradient(90deg, transparent, currentColor 30%, currentColor 70%, transparent) 1; }
   #secban.won { color: #7fe3f5; } #secban.lost { color: #ff6a4a; } #secban b { display: block; font-size: 44px; letter-spacing: .3em; text-transform: uppercase; } #secban span { display: block; font-size: 17px; color: #f1ead9; letter-spacing: .04em; }
   @keyframes secin { from { opacity: 0; transform: scaleX(1.3); } to { opacity: 1; transform: none; } }
+  /* the scope picture: a round glass, dark round it, a fine cross with heavy posts and a lit centre */
+  .hudp, #mini, #compass, #capbox, #oob, #secban, #msg { z-index: 2; }
+  #scope { position: absolute; inset: -20px; z-index: 1; display: none; pointer-events: none; background: radial-gradient(circle at 50% 50%, transparent 0, transparent 38vh, rgba(0,0,0,.55) 39vh, rgba(4,5,6,.97) 40.5vh, #030405 46vh); }
+  #scope:before { content: ""; position: absolute; left: 50%; top: 50%; width: 80vh; height: 80vh; margin: -40vh 0 0 -40vh; border-radius: 50%; box-shadow: inset 0 0 6vh rgba(0,0,0,.55), inset 0 0 0 2px rgba(0,0,0,.8); }
+  #scope i { position: absolute; left: 50%; top: 50%; background: rgba(8,10,12,.9); }
+  #scope .h { width: 80vh; height: 1px; margin: 0 0 0 -40vh; } #scope .v { width: 1px; height: 80vh; margin: -40vh 0 0 0; }
+  #scope .pl, #scope .pr { width: 26vh; height: 5px; margin-top: -2px; } #scope .pl { margin-left: -40vh; } #scope .pr { margin-left: 14vh; } #scope .pb { width: 5px; height: 26vh; margin: 14vh 0 0 -2px; }
+  #scope b { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #ff4a2a; box-shadow: 0 0 6px #ff4a2a; border-radius: 50%; }
+  #scope s { position: absolute; left: 50%; top: 50%; width: 30vh; height: 1px; margin-left: -15vh; background: repeating-linear-gradient(90deg, transparent 0 calc(3vh - 2px), rgba(8,10,12,.9) calc(3vh - 2px) 3vh); }
+  #scope.hv s { height: 22vh; width: 1px; margin: 0 0 0 0; background: repeating-linear-gradient(180deg, transparent 0 calc(2.8vh - 2px), rgba(8,10,12,.9) calc(2.8vh - 2px) 2.8vh); } #scope.hv s:after { content: ""; position: absolute; left: -6px; width: 13px; top: 0; bottom: 0; background: repeating-linear-gradient(180deg, transparent 0 calc(5.6vh - 1px), rgba(8,10,12,.9) calc(5.6vh - 1px) 5.6vh); }
   #oob { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); display: none; text-align: center; padding: 12px 26px; background: rgba(60,8,4,.82); border-top: 3px solid #ff4a2a; border-bottom: 3px solid #ff4a2a; text-shadow: 0 1px 3px #000; }
   #oob b { display: block; font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: #ff9a7a; } #oob span { display: block; font-size: 15px; color: #f1ead9; margin-top: 2px; } #oob em { display: block; font-style: normal; font-size: 56px; font-weight: 700; color: #fff; line-height: 1.1; }
   #mini { position: absolute; left: 18px; top: 18px; width: 200px; height: 200px; border-radius: 50%; background: rgba(10,12,15,.6); box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 6px 18px rgba(0,0,0,.4); }
@@ -214,7 +224,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "44";
+  window.AB_BUILD = "45";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -244,7 +254,7 @@
     <div id="ck-frame"><i class="scan"></i><i class="sl"></i><i class="sr"></i><i class="ft"></i><i class="fd"></i><i class="fe"></i></div>
     <div id="ck2"><div id="ck-vit"></div></div>
   </div>
-  <div id="ptmarks"></div><canvas id="mini" width="200" height="200"></canvas><div id="compass"><s></s></div><div id="capbox"></div><div id="oob"></div><div id="secban"></div>
+  <div id="ptmarks"></div><canvas id="mini" width="200" height="200"></canvas><div id="compass"><s></s></div><div id="capbox"></div><div id="scope"><i class="h"></i><i class="v"></i><i class="pl"></i><i class="pr"></i><i class="pb"></i><b></b><s></s></div><div id="oob"></div><div id="secban"></div>
   <div id="cross"><i></i><i></i><i></i><i></i></div>
   <div id="state"></div>
   <div id="tl" class="hudp"><div id="kills"></div><div class="chips"><span>Command Points<b id="h-cp">0</b></span><span>Squads out<b id="h-sup">0</b></span><span class="dim" id="timer"></span></div></div>
@@ -276,7 +286,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 44 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 45 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -380,15 +390,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=44"></script>
-<script src="punch/punch-lab.js?v=44"></script>
-<script src="cb/genbuild.js?v=44"></script>
-<script src="cb/machines.js?v=44"></script>
-<script src="cb/soldiers.js?v=44"></script>
-<script src="cb/cbmechdata.js?v=44"></script>
-<script src="cb/cbmech.js?v=44"></script>
-<script src="cb/cbnature.js?v=44"></script>
-<script src="cb/cbweather.js?v=44"></script>
+<script src="punch/punch.js?v=45"></script>
+<script src="punch/punch-lab.js?v=45"></script>
+<script src="cb/genbuild.js?v=45"></script>
+<script src="cb/machines.js?v=45"></script>
+<script src="cb/soldiers.js?v=45"></script>
+<script src="cb/cbmechdata.js?v=45"></script>
+<script src="cb/cbmech.js?v=45"></script>
+<script src="cb/cbnature.js?v=45"></script>
+<script src="cb/cbweather.js?v=45"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
