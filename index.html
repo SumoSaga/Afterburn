@@ -129,7 +129,7 @@
   #m-nav button:hover { color: #f6efe0; padding-left: 22px; } #m-nav button.on { color: #f6efe0; border-left-color: #f2a046; background: linear-gradient(90deg, rgba(242,160,70,.22), rgba(242,160,70,0)); }
   #m-side .m-foot { margin-top: auto; font-size: 11px; color: #7d7364; letter-spacing: .06em; } #m-side .m-foot button { font-size: 12px; margin-bottom: 8px; }
   #m-main { flex: 1; max-width: 760px; padding: 52px 40px 40px 34px; overflow-y: auto; font-size: 15px; }
-  #m-main [data-pane] { display: none; } #m-main.tab-play [data-pane="play"], #m-main.tab-faction [data-pane="faction"], #m-main.tab-pilot [data-pane="pilot"], #m-main.tab-titan [data-pane="titan"], #m-main.tab-group [data-pane="group"], #m-main.tab-field [data-pane="field"], #m-main.tab-controls [data-pane="controls"] { display: block; }
+  #m-main [data-pane] { display: none; } #m-main.tab-play [data-pane="play"], #m-main.tab-faction [data-pane="faction"], #m-main.tab-campaign [data-pane="campaign"], #m-main.tab-pilot [data-pane="pilot"], #m-main.tab-titan [data-pane="titan"], #m-main.tab-group [data-pane="group"], #m-main.tab-field [data-pane="field"], #m-main.tab-controls [data-pane="controls"] { display: block; }
   #m-main h2 { font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: #f6efe0; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(242,160,70,.5); font-weight: 600; } #m-main section h2:not(:first-child) { margin-top: 30px; }
   #m-main h2 .pts { float: none; display: block; font-size: 13px; color: #8fe0f0; letter-spacing: .08em; margin-top: 2px; }
   #m-main .note { color: #b3a68f; font-size: 14px; line-height: 1.45; margin: 6px 0 0; } #m-main .m-now { color: #8fe0f0; font-size: 14px; margin: 14px 0 0; }
@@ -160,9 +160,9 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "31";
+  window.AB_BUILD = "32";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
-    ["battle", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
+    ["battle", "campaign", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
 </script>
 </head>
@@ -218,13 +218,14 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 31 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 32 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
       <button data-tab="pilot">Pilot</button>
       <button data-tab="titan">Titan</button>
       <button data-tab="group">Battlegroup</button>
+      <button data-tab="campaign">Campaign</button>
       <button data-tab="field">Field</button>
       <button data-tab="controls">Controls</button>
       <button id="m-settings">Settings</button>
@@ -248,6 +249,7 @@
       <div id="mp-roster" style="display:flex;gap:28px;margin-top:6px"></div>
       <div class="row"><button id="mp-team" style="display:none">Switch sides</button><button id="mp-start" class="go" style="display:none">Start the match</button></div>
     </section>
+    <section data-pane="campaign"><div id="camp"></div></section>
     <section data-pane="field">
       <h2>The field</h2>
       <p class="note">Every field is made from a kind and a number, so the same pair always makes the same field. Each one is walked by a test before you see it, and made again if troops could not reach a point. Building a field loads this page again.</p>
@@ -314,15 +316,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=31"></script>
-<script src="punch/punch-lab.js?v=31"></script>
-<script src="cb/genbuild.js?v=31"></script>
-<script src="cb/machines.js?v=31"></script>
-<script src="cb/soldiers.js?v=31"></script>
-<script src="cb/cbmechdata.js?v=31"></script>
-<script src="cb/cbmech.js?v=31"></script>
-<script src="cb/cbnature.js?v=31"></script>
-<script src="cb/cbweather.js?v=31"></script>
+<script src="punch/punch.js?v=32"></script>
+<script src="punch/punch-lab.js?v=32"></script>
+<script src="cb/genbuild.js?v=32"></script>
+<script src="cb/machines.js?v=32"></script>
+<script src="cb/soldiers.js?v=32"></script>
+<script src="cb/cbmechdata.js?v=32"></script>
+<script src="cb/cbmech.js?v=32"></script>
+<script src="cb/cbnature.js?v=32"></script>
+<script src="cb/cbweather.js?v=32"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
