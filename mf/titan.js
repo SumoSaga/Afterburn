@@ -104,14 +104,20 @@ export function makeRig(team, o = {}) {
     B(.16, .5, .2, 0, -.44, -.62, "dark", .3), 
     C(.2, 1.1, 0, .02, -2.3, "plate2", "z", 10), B(.14, .4, .18, 0, -.36, -2.15, "dark", -.15), C(.11, 1.5, 0, .02, -3.4, "dark", "z", 10), C(.17, .32, 0, .02, -4.1, "frame", "z", 10), C(.19, .06, 0, .02, -3.98, "steel", "z", 10),
     C(.045, 1.6, 0, -.14, -2.9, "steel", "z", 6), B(.08, .12, .9, 0, .4, -1.2, "dark"), B(.1, .16, .14, 0, .5, -.9, "dark"), B(.1, .2, .1, 0, .5, -1.56, "dark"), [.05, .05, .02, 0, .52, -1.62, "glow"], Lf([[-.14, .3, .34], [.14, .3, .34]], 0, 0, -.3, "canvas", 8, .5, Math.PI / 2), B(.04, .2, 1.9, .2, -.1, -1.4, "dark"), C(.2, .2, .26, .0, -1.2, "plate2", "x", 10)], S, glowMat);
-  /* Each mech's primary gets pieces of its own on top of the plain rifle, so you can tell them apart across a field:
-     rail-carbine (long, lit rails), Vulcan (a ring of barrels and a belt box), flak-shotgun (two short fat barrels),
-     plasma repeater (lit coils), slag launcher (a wide tube and a tank). The Centurion keeps the plain autocannon. */
+  /* Each primary gets pieces of its own on top of the plain rifle, so you can tell them apart across a field:
+     rail-carbine (long, lit rails), Vulcan (a ring of barrels and a belt box), flak (two short fat barrels), splitter (lit
+     coils), slag launcher (a wide tube and a tank), arc-repeater (a thin barrel ringed in light), tracker (a heavy barrel
+     with a scope), howitzer (one huge short barrel). The autocannon keeps the plain rifle with a small sight. */
+  const PRIMK = { kestrel: "rail", bastion: "vulcan", jackal: "flak", nomad: "splitter", furnace: "slag", centurion: "auto" }, prim = (o.lo && o.lo.prim) || PRIMK[o.mech] || "auto";
   { const X = { kestrel: [C(.07, 2.2, 0, .02, -4.9, "dark", "z", 8), B(.05, .05, 2.6, -.16, .12, -3.4, "glow"), B(.05, .05, 2.6, .16, .12, -3.4, "glow"), B(.12, .3, .5, 0, .34, -1.3, "dark")],
       bastion: [...[0, 1, 2, 3, 4, 5].map((i) => C(.075, 2.4, Math.cos(i * 1.047) * .2, .02 + Math.sin(i * 1.047) * .2, -3.6, "dark", "z", 6)), C(.34, .3, 0, .02, -2.5, "frame", "z", 10), C(.34, .16, 0, .02, -4.6, "steel", "z", 10), B(.7, .7, .9, -.5, -.3, -1.1, "plate2"), B(.72, .1, .92, -.5, .02, -1.1, "accent")],
       jackal: [C(.2, 1.1, -.17, .02, -3.2, "dark", "z", 8), C(.2, 1.1, .17, .02, -3.2, "dark", "z", 8), B(.8, .5, .7, 0, -.05, -2.3, "frame"), B(.82, .08, .3, 0, .22, -2.3, "accent")],
       nomad: [...[0, 1, 2].map((i) => C(.24, .12, 0, .02, -2.7 - i * .45, "glow", "z", 10)), B(.2, .2, .5, 0, .34, -1.4, "accent")],
-      furnace: [C(.36, 2.0, 0, .02, -3.3, "dark", "z", 10), C(.4, .2, 0, .02, -4.2, "steel", "z", 10), C(.4, 1.0, .0, .62, -1.5, "plate2", "z", 10), C(.41, .12, 0, .62, -1.5, "accent", "z", 10), B(.1, .1, .1, 0, .02, -4.32, "glow")] }[o.mech];
+      furnace: [C(.36, 2.0, 0, .02, -3.3, "dark", "z", 10), C(.4, .2, 0, .02, -4.2, "steel", "z", 10), C(.4, 1.0, .0, .62, -1.5, "plate2", "z", 10), C(.41, .12, 0, .62, -1.5, "accent", "z", 10), B(.1, .1, .1, 0, .02, -4.32, "glow")],
+      arcrep: [C(.12, 1.7, 0, .02, -3.6, "dark", "z", 8), ...[0, 1, 2, 3].map((i) => C(.21, .07, 0, .02, -2.5 - i * .38, "glow", "z", 10)), B(.34, .3, .5, 0, -.32, -1.6, "plate2")],
+      tracker: [C(.27, 1.8, 0, .02, -3.4, "dark", "z", 10), C(.31, .22, 0, .02, -4.3, "steel", "z", 10), B(.3, .32, .8, 0, .44, -1.6, "plate2"), [.08, .08, .03, 0, .48, -2.02, "glow"]],
+      howitzer: [C(.44, 1.5, 0, .02, -3.0, "dark", "z", 12), C(.5, .32, 0, .02, -3.8, "frame", "z", 12), C(.52, .14, 0, .02, -2.3, "accent", "z", 12), B(.64, .52, 1.0, 0, -.12, -1.5, "plate2")],
+      auto: [B(.14, .2, .4, 0, .42, -1.5, "dark"), [.05, .05, .02, 0, .44, -1.71, "glow"]] }[{ rail: "kestrel", vulcan: "bastion", flak: "jackal", splitter: "nomad", slag: "furnace" }[prim] || prim];
     if (X) build(gun, X, S, glowMat); }
   const drumG = new THREE.Group(); gun.add(drumG); build(drumG, [C(.34, .34, 0, -.36, -1.2, "plate", "x", 12), C(.35, .08, 0, -.36, -1.2, "accent", "x", 12), B(.2, .16, .3, 0, -.14, -1.2, "dark")], S, glowMat);   // the drum, a piece of its own so a reload can take it off
   const muzzle = joint(gun, 0, .02, -4.3), flash = new THREE.Mesh(new THREE.BoxGeometry(.6, .6, .8), hot); flash.visible = false; muzzle.add(flash);
@@ -142,6 +148,32 @@ export function makeRig(team, o = {}) {
     let ty = -9, by = 9; for (const r of MB.parts.torso) if (Math.abs(r[0] * g) < .45 && r[2] * g < fz + g * 2.5) { ty = Math.max(ty, (r[1] + r[3] - .5) * g); by = Math.min(by, (r[1] - .5) * g); }
     const hh = clamp(ty - by, .7, 1.3), hw = Math.min(1.1, SH_X * 1.1);
     hatch.position.set(0, ty, fz - g * .75); build(hatch, [B(hw, hh, g * .5, 0, -hh / 2, 0, "c" + Math.max(0, MB.palette.length - 3)), B(hw * .8, .1, g * .6, 0, -.2, -.02, "accent"), B(hw * .45, .07, g * .7, 0, -hh + .2, -.02, "glow")], S2, glowMat); }
+  /* The rest of the loadout on the body, so a pilot can read it in half a second: the ordnance on the left shoulder,
+     the defensive kit on the left forearm (or the back, or the legs), each lit in its own colour. */
+  if (o.lo) { const T0 = MB.parts.torso, g0 = MB.g, xs = T0.map((r) => r[0] * g0), ys = T0.map((r) => (r[1] + r[3]) * g0), zs = T0.map((r) => r[2] * g0), top = Math.max(...ys), back = Math.max(...zs), left = Math.min(...xs);
+    const lit = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) }), LIT = { arc: lit(.6, 2.2, 3.4), fire: lit(3.4, 1.4, .4), red: lit(3.4, .5, .3), cyan: lit(.5, 2.6, 3.2), violet: lit(1.8, 1.1, 3.2), white: lit(2.6, 2.6, 2.4) };
+    const QM = { cluster: ["fire", [B(.8, .62, .9, 0, 0, 0, "plate2"), ...[-.2, .2].flatMap((x) => [-.15, .15].map((y) => C(.14, .3, x, y + .31, -.5, "dark", "z", 8))), B(.82, .08, .92, 0, .62, 0, "accent")]],
+      arcwave: ["arc", [B(.2, .5, .2, 0, 0, 0, "dark"), C(.34, .12, 0, .62, -.1, "steel", "z", 12), C(.36, .05, 0, .62, -.18, "glow", "z", 12), C(.08, .2, 0, .62, -.25, "glow", "z", 8)]],
+      tether: ["fire", [C(.3, .55, 0, .3, 0, "dark", "x", 10), C(.31, .12, 0, .3, 0, "accent", "x", 10), B(.09, .09, .8, 0, .3, -.6, "steel"), [.12, .12, .1, 0, .3, -1.02, "glow"]]],
+      salvo: ["fire", [B(.72, .6, 1.15, 0, 0, 0, "plate2"), ...[-.22, 0, .22].flatMap((x) => [.14, .42].map((y) => C(.08, .12, x, y, -.58, "dark", "z", 8))), B(.74, .06, 1.17, 0, .6, 0, "accent")]],
+      laser: ["red", [B(.4, .4, .55, 0, 0, 0, "frame"), C(.12, 1.4, 0, .22, -.9, "dark", "z", 8), C(.15, .07, 0, .22, -1.62, "glow", "z", 10)]],
+      siphon: ["cyan", [B(.34, .34, .62, 0, 0, 0, "frame"), ...[-1, 0, 1].map((s) => B(.07, .07, .45, s * .12, .17 + Math.abs(s) * .05, -.5, "steel", 0, s * .3)), [.1, .1, .1, 0, .17, -.75, "glow"]]],
+      gas: ["fire", [B(.7, .12, .5, 0, 0, 0, "dark"), C(.2, .72, -.17, .48, 0, "accent", "y", 10), C(.2, .72, .17, .48, 0, "accent", "y", 10), C(.21, .06, -.17, .7, 0, "dark", "y", 10), C(.21, .06, .17, .7, 0, "dark", "y", 10)]],
+      power: ["white", [B(.5, .5, .6, 0, 0, 0, "plate2"), C(.3, .8, 0, .26, -.6, "dark", "z", 12), C(.34, .2, 0, .26, -.98, "steel", "z", 12), [.18, .18, .04, 0, .26, -1.1, "glow"]]],
+      smokeb: ["white", [B(.75, .4, .6, 0, 0, 0, "plate2"), ...[-.24, 0, .24].flatMap((x) => [-.12, .14].map((z) => C(.09, .5, x, .45, z, "dark", "y", 8, .09, [-.35, 0])))]] }[o.lo.q];
+    if (QM) { const j = new THREE.Object3D(); j.position.set(-SH_X - .05, SH_Y + .42, .05); torso.add(j); build(j, QM[1], S, LIT[QM[0]]); }
+    const EM = { buckler: ["arm", "arc", [B(.12, 1.05, .82, -.42, -A2 * .55, 0, "plate"), [.04, 1.05, .04, -.49, -A2 * .55, -.4, "glow"], [.04, 1.05, .04, -.49, -A2 * .55, .4, "glow"]]],
+      vortex: ["arm", "arc", [C(.5, .1, -.44, -A2 * .55, 0, "steel", "x", 14), C(.52, .05, -.5, -A2 * .55, 0, "glow", "x", 14), C(.14, .08, -.53, -A2 * .55, 0, "glow", "x", 8)]],
+      pwall: ["arm", "cyan", [B(.34, .56, .56, -.42, -A2 * .55, 0, "frame"), [.06, .4, .06, -.6, -A2 * .55, 0, "glow"], B(.36, .06, .58, -.42, -A2 * .55 + .3, 0, "accent")]],
+      furnace: ["arm", "fire", [B(.78, 1.1, .86, 0, -A2 * .55, 0, "plate2"), [.8, .06, .88, 0, -A2 * .55 + .3, 0, "glow"], [.8, .06, .88, 0, -A2 * .55 - .3, 0, "glow"]]],
+      gunshield: ["gun", "arc", [B(1.1, 1.0, .12, 0, .3, -2.3, "plate"), [1.1, .05, .14, 0, .82, -2.3, "glow"], B(.1, .5, .3, 0, -.1, -2.15, "dark")]],
+      phase: ["back", "violet", [C(.2, .5, -.35, 0, 0, "glow", "x", 10), C(.2, .5, .35, 0, 0, "glow", "x", 10), B(1.0, .3, .3, 0, 0, -.05, "frame")]],
+      vtol: ["back", "fire", [C(.26, .7, -.45, -.2, .1, "dark", "y", 10, .2), C(.26, .7, .45, -.2, .1, "dark", "y", 10, .2), [.3, .06, .3, -.45, -.56, .1, "glow"], [.3, .06, .3, .45, -.56, .1, "glow"]]],
+      sonar: ["back", "red", [C(.05, 1.8, .3, .9, 0, "dark", "y", 6), C(.3, .06, .3, 1.5, 0, "steel", "y", 10), [.1, .1, .1, .3, 1.85, 0, "glow"]]],
+      anchor: ["legs", "white", [B(.14, 1.0, .14, 0, -.7, .38, "steel", -.35), B(.2, .2, .2, 0, -1.2, .58, "dark"), [.05, .3, .05, 0, -.5, .45, "glow"]]] }[o.lo.e];
+    if (EM) { const at = EM[0], mat = LIT[EM[1]], put2 = (par, x, y, z) => { const j = new THREE.Object3D(); j.position.set(x, y, z); par.add(j); build(j, EM[2], S, mat); };
+      if (at === "arm") put2(armL.fore, 0, 0, 0); else if (at === "gun") put2(gun, 0, 0, 0); else if (at === "back") put2(torso, 0, SH_Y - .2, back + .1); else for (const L of legs) put2(L.shin, 0, 0, 0); }
+    if (o.lo.kit === "coax") { const j = new THREE.Object3D(); j.position.set(SH_X + .05, SH_Y + .42, .1); torso.add(j); build(j, [B(.3, .3, .4, 0, 0, 0, "frame"), C(.06, .6, 0, .15, -.45, "dark", "z", 6), [.05, .05, .03, 0, .15, -.76, "glow"]], S, LIT.white); } }
   const rig = { root, hips, torso, hatch, muzzle, pod, flash, gun, hold: HOLD, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
     pose(dt, s) {
       const sp = Math.abs(s.speed || 0), sg = (s.speed || 0) < 0 ? -1 : 1, amt = clamp(sp / 1.4, 0, 1), kn = clamp(s.kneel || 0, 0, 1), limp = s.limp ? 1 : 0;

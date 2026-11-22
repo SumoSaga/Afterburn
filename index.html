@@ -199,6 +199,17 @@
   #m-main table { border-collapse: collapse; font-size: 13px; } #m-main td { padding: 5px 12px 5px 0; vertical-align: top; border-top: 1px solid #3a2e22; color: #cdbb98; } #m-main td:first-child { color: #f2c46a; white-space: nowrap; }
   @media (max-width: 820px) { #m-side { width: 190px; padding-left: 20px; } #m-side h1 { font-size: 28px; } #m-nav button { font-size: 18px; } #m-main { padding: 30px 16px; } .tiles { grid-template-columns: 1fr; } }
 
+  /* the Titan tab */
+  .tch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #m-main .tch button { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: rgba(20,23,26,.82); border: 1px solid rgba(255,255,255,.14); border-bottom: 3px solid transparent; }
+  #m-main .tch button b { font-size: 18px; letter-spacing: .12em; text-transform: uppercase; color: #efe2c8; font-weight: 600; } #m-main .tch button span { font-size: 12px; color: #b4ac9c; letter-spacing: .04em; }
+  #m-main .tch button em { font-style: normal; font-size: 12px; color: #8fe0f0; } #m-main .tch button i { font-style: normal; font-size: 12px; color: #f2a046; letter-spacing: .04em; }
+  #m-main .tch button.on { background: rgba(60,42,20,.85); border-color: rgba(242,160,70,.5); border-bottom-color: #f2a046; }
+  .tsl { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; margin-top: 8px; }
+  #m-main .tsl button { text-align: left; padding: 8px 10px; background: rgba(20,23,26,.78); border: 1px solid rgba(255,255,255,.12); border-left: 3px solid rgba(255,255,255,.2); display: flex; flex-direction: column; gap: 3px; }
+  #m-main .tsl button b { font-size: 13.5px; color: #fff; font-weight: 600; letter-spacing: .03em; } #m-main .tsl button span { font-size: 12px; color: #b9b1a0; letter-spacing: 0; line-height: 1.35; }
+  #m-main .tsl button.on { border-left-color: #f2a046; background: rgba(60,42,20,.85); border-color: rgba(242,160,70,.45); } #m-main .tsl button.on b { color: #f6c868; }
+  #tcode { width: 100%; height: 120px; box-sizing: border-box; font: 11px/1.4 ui-monospace, monospace; background: #0e0c0a; color: #cfc4ab; border: 1px solid #6b5438; padding: 8px; resize: vertical; }
   /* the deck builder: faction tabs on top, the collection in the middle with what each card does, and your deck docked along the bottom */
   .ptbar { height: 6px; background: rgba(255,255,255,.1); margin: 10px 0 12px; } .ptbar div { height: 100%; background: #f2a046; }
   .dk-facs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -277,9 +288,9 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "55";
+  window.AB_BUILD = "56";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
-    ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
+    ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
 </script>
 </head>
@@ -340,7 +351,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 55 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 56 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -392,7 +403,7 @@
     <tr><td>Left Ctrl</td><td>Slide while you are sprinting, crouch while you are slow (C works too)</td></tr>
     <tr><td>Mouse</td><td>Look, and hold the left button to fire</td></tr>
     <tr><td>1, 2, 3</td><td>Your primary, the rail-charge rifle, your sidearm</td></tr>
-    <tr><td>Right mouse</td><td>Aim down the sights. In a Titan it fires the rocket pod</td></tr>
+    <tr><td>Right mouse</td><td>Aim down the sights. In a Titan it is your primary's other fire if it has one (the Splitter splits, the Vulcan changes barrels), and otherwise your ordnance</td></tr>
     <tr><td>Q</td><td>Your tactical kit: the grapple hook or the stim. Q again, or a jump, lets go of the grapple</td></tr>
     <tr><td>R</td><td>Reload</td></tr>
     <tr><td>X</td><td>Your ordnance. Hold to cook a frag and let go to throw it; an arc grenade is thrown at once</td></tr>
@@ -401,7 +412,7 @@
     <tr><td>F</td><td>Knife on foot</td></tr>
     <tr><td>V</td><td>Call your Titan down where you are looking</td></tr>
     <tr><td>E</td><td>Climb into your mech when you are beside it. Beside an enemy mech, climb on and tear its battery out. Carrying a battery, fit it to a friendly mech</td></tr>
-    <tr><td>In a mech</td><td>Left button fires. Q (or the right button), E and F are your mech's three abilities and X is its core once charged. C sets off electric smoke. V is the melee. Shift sprints and Space dashes. Press B to get out</td></tr>
+    <tr><td>In a mech</td><td>Left button fires your primary. Q is your ordnance, E your defensive kit and X your core once it has charged; you pick all three, with the primary and a chassis kit, in the Titan tab. C sets off electric smoke. V is the melee. Shift sprints and Space dashes. B gets you out</td></tr>
     <tr><td>On the map</td><td>Left click a squad's card to pick it, or drag a box round several. Left click the ground or a point to send them there. Hold Shift and click to add stops on the way, then let go of Shift and click where they should end up. Right drag moves the map, middle drag turns it.</td></tr>
   </table>
     </section>
@@ -444,15 +455,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=55"></script>
-<script src="punch/punch-lab.js?v=55"></script>
-<script src="cb/genbuild.js?v=55"></script>
-<script src="cb/machines.js?v=55"></script>
-<script src="cb/soldiers.js?v=55"></script>
-<script src="cb/cbmechdata.js?v=55"></script>
-<script src="cb/cbmech.js?v=55"></script>
-<script src="cb/cbnature.js?v=55"></script>
-<script src="cb/cbweather.js?v=55"></script>
+<script src="punch/punch.js?v=56"></script>
+<script src="punch/punch-lab.js?v=56"></script>
+<script src="cb/genbuild.js?v=56"></script>
+<script src="cb/machines.js?v=56"></script>
+<script src="cb/soldiers.js?v=56"></script>
+<script src="cb/cbmechdata.js?v=56"></script>
+<script src="cb/cbmech.js?v=56"></script>
+<script src="cb/cbnature.js?v=56"></script>
+<script src="cb/cbweather.js?v=56"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
