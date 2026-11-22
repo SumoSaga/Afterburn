@@ -36,7 +36,7 @@ export const PASSIVES = { combined: ["Combined Arms", "Your troops within 20 met
 export const TPP = 10, SECREFUND = 5, CP0 = 150, CPMAX = 600, CPRATE = 4.5, HPK = 1.4, SUPCAP = 10, LIST_MAX = 6;
 export const DOCTRINES = { manual: ["Manual", "You bring in every squad yourself and they wait for your orders."], rush: ["Infantry rush", "Infantry as fast as Command Points allow, sent at the nearest point you do not hold."], armor: ["Armor support", "Vehicles first, with infantry to hold what they take."], mixed: ["Mixed", "Two squads of infantry for every vehicle."] };
 export const LIST_PTS = 100, GOAL = 400;
-export const LOAD = { side: "militia", weapon: "carbine", chassis: "vanguard", paint: "#c45a1e", doctrine: "manual", passive: "combined", kit: "grapple", anti: "rail", ord: "frag", v: 2, tags: { militia: {}, machine: {} }, list: { militia: ["assault", "breachers", "antiarmor", "skirmishers", "turret"], machine: ["assault", "breachers", "antiarmor", "aegis", "turret"] } };
+export const LOAD = { side: "militia", weapon: "carbine", sidearm: "pistol", chassis: "vanguard", paint: "#c45a1e", doctrine: "manual", passive: "combined", kit: "grapple", anti: "rail", ord: "frag", v: 2, tags: { militia: {}, machine: {} }, list: { militia: ["assault", "breachers", "antiarmor", "skirmishers", "turret"], machine: ["assault", "breachers", "antiarmor", "aegis", "turret"] } };
 try { const s = JSON.parse(localStorage.getItem("mf-fps-load") || "null"); if (s) { if (s.v !== 2) { s.doctrine = "manual"; s.v = 2; } Object.assign(LOAD, s); LOAD.list = { ...LOAD.list, ...(s.list || {}) }; } } catch (e) {}
 for (const f in FACTIONS) { LOAD.list[f] = (LOAD.list[f] || []).filter((id) => FACTIONS[f].units[id]).slice(0, LIST_MAX); if (!LOAD.list[f].length) LOAD.list[f] = Object.keys(FACTIONS[f].units); } if (!PASSIVES[LOAD.passive]) LOAD.passive = "combined"; LOAD.tags = { militia: {}, machine: {}, ...(LOAD.tags || {}) }; if (!["grapple", "stim", "sonar", "phase", "decoy"].includes(LOAD.kit)) LOAD.kit = "grapple"; if (!["rail", "seeker", "mag", "arc"].includes(LOAD.anti)) LOAD.anti = "rail"; if (!["frag", "arc", "therm", "satchel"].includes(LOAD.ord)) LOAD.ord = "frag";
 /* ---------- mastery and tech (step 6) ----------
@@ -246,12 +246,13 @@ export const utilCost = (who, k) => Math.round(UTILS[k].cost * (passive(who) ===
 const posOf = (u) => (u.veh ? V3(u.pos.x, groundH(u.pos.x, u.pos.z) + 1.2, u.pos.z) : V3(u.s.root.position.x / U, u.s.root.position.y / U + 1, u.s.root.position.z / U));
 
 const wreckVeh = (u) => { u.alive = false; const p = V3(u.pos.x, groundH(u.pos.x, u.pos.z) + 1, u.pos.z); if (B.hooks.blast) B.hooks.blast(p, 3.2, {}); if (u.mid) { mfx({ id: u.mid, act: "wreck" }); const id = u.mid; setTimeout(() => removeMachine(id), 1500); } else scene.remove(u.group); };
-export function damage(u, n, fromU, zone = "chest", byPlayer = false) {
-  if (!u) return; if (B.mp === "guest") { B.hooks.net("hit", [u.veh ? -u.sq.id : u.id, Math.round(n), zone]); if (fromU && !u.veh && u.s.dead < 0 && rnd() < .5) u.s.hit(fromU, 1); return; } if (fromU && DOMES.length) { const ux = u.veh ? u.pos.x : u.s.root.position.x / U, uz = u.veh ? u.pos.z : u.s.root.position.z / U; if (domeAt(ux, uz, u.side) && !domeAt(fromU.x / U, fromU.z / U, u.side)) n *= .3; }   // under a shield dome, what comes from outside does much less
+export function damage(u, n, fromU, zone = "chest", byPlayer = false, pin = 0) {
+  if (!u) return; if (B.mp === "guest") { B.hooks.net("hit", [u.veh ? -u.sq.id : u.id, Math.round(n), zone, pin]); if (fromU && !u.veh && u.s.dead < 0 && rnd() < .5) u.s.hit(fromU, 1); return; } if (fromU && DOMES.length) { const ux = u.veh ? u.pos.x : u.s.root.position.x / U, uz = u.veh ? u.pos.z : u.s.root.position.z / U; if (domeAt(ux, uz, u.side) && !domeAt(fromU.x / U, fromU.z / U, u.side)) n *= .3; }   // under a shield dome, what comes from outside does much less
   const by = byPlayer === true ? "you" : byPlayer || null;
   if (u.veh) { if (!u.alive) return; u.hp -= n; if (u.hp <= 0) { wreckVeh(u); credit(by, 25); if (byPlayer === true && B.hooks.onKill) B.hooks.onKill(15); } return; }
   if (u.s.dead >= 0) return; const ow = u.sq.owner, op = passive(ow) === "combined" ? cmdPilot(ow) : null, ux = u.s.root.position.x / U, uz = u.s.root.position.z / U; if (op && Math.hypot(op.x - ux, op.z - uz) < 20) n *= .85;
   if (u.sh > 0 && fromU && zone !== "blast") { const yaw = u.s.root.rotation.y, fx = Math.sin(yaw), fz = Math.cos(yaw), dx = fromU.x / U - ux, dz = fromU.z / U - uz, dl = Math.hypot(dx, dz) || 1; if ((fx * dx + fz * dz) / dl > .35) { const a = Math.min(u.sh, n); u.sh -= a; n -= a; if (n <= 0) return; } }   // an energy shield stops what comes from the front until it is spent
+  if (pin > 0) for (const m of u.sq.members) if (m.s.dead < 0) m.pin = Math.max(m.pin || 0, B.time + pin);   // pinned: the whole squad keeps its head down
   u.hp -= n; if (u.hp <= 0) { u.s.die(fromU, { zone, force: zone === "blast" ? 2 : 1 }); credit(by, u.sq.def.hp >= 150 ? 25 : 10); if (byPlayer === true && B.hooks.onKill) B.hooks.onKill(9); } else if (rnd() < .5) u.s.hit(fromU, 1); }
 // the nearest thing on one side that a line from o along d strikes
 export function rayUnits(o, d, best, side) { let who = null;
@@ -279,7 +280,7 @@ function stepSoldier(g, dt) { const s = g.s, rp = s.root.position;
   const t = g.tgt;
   if (t && tgtAlive(t)) { const p = tgtPos(t); s.aimAt(V3(p.x * U + g.err.x, p.y * U + g.err.y, p.z * U + g.err.z)); g.cd -= dt;
     if (g.cd <= 0 && !s.busy) { if (s.ammo <= 0) s.doReload(); else { const d = t.d, pl = isP(t) ? pilotOf(t) : null;
-      g.c = isP(t) ? .5 * clamp(1 - pl.speed / 16, .2, 1) * (pl.grounded ? 1 : .6) * clamp(1.25 - d / 60, .3, 1) : t.kind === "inf" ? g.W.acc * clamp(1.15 - d / g.W.range * .6, .3, 1) * (t.ref.s.crouch ? .7 : 1) * (t.ref.s.moving ? .75 : 1) : .8;
+      g.c = ((g.pin || 0) > B.time ? .45 : 1) * (isP(t) ? .5 * clamp(1 - pl.speed / 16, .2, 1) * (pl.grounded ? 1 : .6) * clamp(1.25 - d / 60, .3, 1) : t.kind === "inf" ? g.W.acc * clamp(1.15 - d / g.W.range * .6, .3, 1) * (t.ref.s.crouch ? .7 : 1) * (t.ref.s.moving ? .75 : 1) : .8);
       const miss = (1 - g.c) * 30; g.err.set((rnd() - .5) * miss, (rnd() - .3) * miss * .6, (rnd() - .5) * miss); if (s.cover) { const p2 = tgtPos(t); s.peekFire(V3(p2.x * U + g.err.x, p2.y * U + g.err.y, p2.z * U + g.err.z), g.W.burst); } else s.fire(g.W.burst); g.cd = lerp(g.W.cd[0], g.W.cd[1], rnd()); } } }
   // Going where the squad is going. Each member has its own place round the spot, but where there is something to get
   // behind, it takes that instead: at the end of the way, and on the way too once rounds are coming in (it runs from one
@@ -354,7 +355,7 @@ function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null, rps
   for (const p of POINTS) { const n = { you: 0, foe: 0 }, w = { you: 0, foe: 0 }, ai = { you: 0, foe: 0 }, aura = { you: false, foe: false }, far = (x, z) => Math.hypot(x - p.x, z - p.z);
     const pilot = (side, x, z, titan) => { const d = far(x, z); if (d < 20) aura[side] = true; if (d < 9) { n[side]++; w[side] += titan ? (p.roof ? 0 : 1.5) : 1; } };   // a pilot counts 1, a Titan 1.5 and only in the open
     if (pl && pl.alive) pilot("you", pl.at.x, pl.at.z, pl.titan); for (const rp of rps) if (!rp.decoy && (rp.ok || rp.inTitan)) pilot(rp.side, rp.pos.x, rp.pos.z, rp.inTitan);
-    for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && far(g.s.root.position.x / U, g.s.root.position.z / U) < 9) { const gx = g.s.root.position.x / U, gz = g.s.root.position.z / U, op = passive(g.sq.owner) === "combined" ? cmdPilot(g.sq.owner) : null; if (g.sq.owner === "you" && side === "you") g.sq.onPt = B.time; n[side]++; ai[side] += (g.sq.def.capw || .3) * (op && Math.hypot(op.x - gx, op.z - gz) < 20 ? 1.25 : 1); } for (const v of VEH) if (v.alive && !v.def.veh.static && !v.def.veh.nocap && v.side === side && far(v.pos.x, v.pos.z) < 9) { n[side]++; ai[side] += .4; } }
+    for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && far(g.s.root.position.x / U, g.s.root.position.z / U) < 9) { const gx = g.s.root.position.x / U, gz = g.s.root.position.z / U, op = passive(g.sq.owner) === "combined" ? cmdPilot(g.sq.owner) : null; if (g.sq.owner === "you" && side === "you") g.sq.onPt = B.time; n[side]++; ai[side] += (g.sq.def.capw || .3) * ((g.pin || 0) > B.time ? .3 : 1) * (op && Math.hypot(op.x - gx, op.z - gz) < 20 ? 1.25 : 1); } for (const v of VEH) if (v.alive && !v.def.veh.static && !v.def.veh.nocap && v.side === side && far(v.pos.x, v.pos.z) < 9) { n[side]++; ai[side] += .4; } }
     for (const t of tis) if (t.alive && !t.piloted && t.remote == null && far(t.pos.x, t.pos.z) < 9) { n[t.team]++; if (!p.roof) w[t.team] += 1.5; }
     for (const side of ["you", "foe"]) w[side] += ai[side] * (aura[side] ? 1.25 : 1);   // troops count 0.3 each, a quarter more with a pilot of theirs within 20 m
     p.n = n; p.w = w; if (p.sector !== OP.sector || OP.phase !== "fight") continue;
@@ -502,7 +503,7 @@ export const netIn = {
   order: (a, who) => { const g = V3(a[1], 0, a[2]); g.ping = a[4] | 0; orderTo(g, !!a[3], theirs(a[0], who), true); },
   act: (a, who) => squadAct(a[0], theirs(a[1], who), true),
   util: (a, who) => { useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, who); },
-  hit: (a, who, fromU) => { const sd = B.side[who], u = a[0] < 0 ? VEH.find((v) => v.sq.id === -a[0] && v.side !== sd) : [...ALLIES, ...GRUNTS].find((g) => g.id === a[0] && g.side !== sd); if (u) damage(u, Math.min(a[1], 9999), fromU, a[2] || "chest", who); } };
+  hit: (a, who, fromU) => { const sd = B.side[who], u = a[0] < 0 ? VEH.find((v) => v.sq.id === -a[0] && v.side !== sd) : [...ALLIES, ...GRUNTS].find((g) => g.id === a[0] && g.side !== sd); if (u) damage(u, Math.min(a[1], 9999), fromU, a[2] || "chest", who, Math.min(+a[3] || 0, 5)); } };
 
 /* ---------- small pictures of each kind of unit, for the cards ---------- */
 const THUMB = {}, tScene = new THREE.Scene(), tCam = new THREE.PerspectiveCamera(28, .8, 1, 4000), tRT = new THREE.WebGLRenderTarget(96, 120);

@@ -200,6 +200,9 @@
   .ccard { display: grid; grid-template-columns: 60px 1fr; gap: 4px 10px; padding: 8px; background: rgba(20,23,26,.85); border: 1px solid rgba(255,255,255,.14); border-left: 3px solid rgba(255,255,255,.25); align-items: start; } .ccard.in { border-left-color: #f2a046; background: rgba(60,42,20,.7); } .ccard.full:not(.in) { opacity: .6; }
   .ccard .pc-art { margin: 0; grid-row: span 2; } .cc-body { display: flex; flex-direction: column; } .ccard strong { font-size: 15px; color: #fff; } .ccard strong u { text-decoration: none; font-size: 11px; color: #14100a; background: #f2a046; padding: 0 5px; margin-left: 4px; letter-spacing: .06em; text-transform: uppercase; } .ccard em { font-style: normal; color: #7fe3f5; font-size: 13px; } .cc-desc { font-size: 13px; color: #c9c1b0; line-height: 1.35; margin-top: 2px; } .cc-desc em { color: #b4ac9c; }
   .ccard > button { grid-column: 2; justify-self: start; font-size: 13px; padding: 4px 12px; }
+  .roles { display: flex; gap: 22px; margin: 10px 0 4px; } .roles span { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #b4ac9c; } .roles b { font-weight: 600; }
+  .roles i { font-style: normal; letter-spacing: 2px; font-size: 15px; color: #f2a046; } .roles span + span i { color: #7fe3f5; } .roles s { text-decoration: none; color: rgba(255,255,255,.14); } .roles.big i { font-size: 20px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; } .facts span { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); padding: 3px 9px; font-size: 14px; color: #fff; } .facts em { font-style: normal; color: #b4ac9c; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; margin-right: 6px; }
   #m-main.tab-group { max-width: 1040px; } #m-main.tab-editor { max-width: 1000px; }
   .ed-wrap { display: flex; gap: 14px; margin-top: 12px; align-items: flex-start; } #ed-tools { width: 210px; flex: none; display: flex; flex-direction: column; gap: 3px; max-height: 690px; overflow-y: auto; padding-right: 4px; } #ed-tools h3 { margin: 10px 0 2px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #f2a046; } #ed-tools h3:first-child { margin-top: 0; }
   #m-main #ed-tools button { text-align: left; font-size: 13px; padding: 4px 8px; } #ed-cv { border: 1px solid rgba(255,255,255,.25); cursor: crosshair; max-width: 100%; height: auto; background: #222; }
@@ -224,7 +227,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "48";
+  window.AB_BUILD = "49";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -286,7 +289,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 48 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 49 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -390,15 +393,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=48"></script>
-<script src="punch/punch-lab.js?v=48"></script>
-<script src="cb/genbuild.js?v=48"></script>
-<script src="cb/machines.js?v=48"></script>
-<script src="cb/soldiers.js?v=48"></script>
-<script src="cb/cbmechdata.js?v=48"></script>
-<script src="cb/cbmech.js?v=48"></script>
-<script src="cb/cbnature.js?v=48"></script>
-<script src="cb/cbweather.js?v=48"></script>
+<script src="punch/punch.js?v=49"></script>
+<script src="punch/punch-lab.js?v=49"></script>
+<script src="cb/genbuild.js?v=49"></script>
+<script src="cb/machines.js?v=49"></script>
+<script src="cb/soldiers.js?v=49"></script>
+<script src="cb/cbmechdata.js?v=49"></script>
+<script src="cb/cbmech.js?v=49"></script>
+<script src="cb/cbnature.js?v=49"></script>
+<script src="cb/cbweather.js?v=49"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
