@@ -42,7 +42,7 @@ function modelGun(team, mat0) { let src = null; TRIFLE.scene.traverse((o) => { i
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeRig(team, o = {}) {
-  const MB = MECH_BLOCKS[o.cls] || MECH_BLOCKS.medium, MD = MB.dims, L1 = MD.L1, L2 = MD.L2, ANK = MD.ANK, HIP_Y = MD.ANK + MD.L1 + MD.L2 - .1, HIP_X = MD.HIP_X, SH_X = MD.SH_X, SH_Y = MD.SH_Y, A1 = MD.A1, A2 = MD.A2;   // each frame has its own body, cut from its own model
+  const MB = MECH_BLOCKS[o.cls] || MECH_BLOCKS.medium, MD = MB.dims, L1 = MD.L1, L2 = MD.L2, ANK = MD.ANK, HIP_Y = MD.ANK + MD.L1 + MD.L2 - .1, HV = o.cls === "heavy", HIP_X = MD.HIP_X * (HV ? 1.55 : 1), SH_X = MD.SH_X * (HV ? 1.45 : 1), SH_Y = MD.SH_Y, A1 = MD.A1, A2 = MD.A2;   // each frame has its own body, cut from its own model
   const S = { ...(SCHEMES[team] || SCHEMES.you), grit: .85, gritScale: 1.9, ...o }, Sm = { ...S, mud: .75 }, glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) }), hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.9, .7) });
   const size = 1, bulk = 1, gsc = o.cls === "light" ? .84 : o.cls === "heavy" ? 1.08 : 1; const root = new THREE.Group(); root.scale.setScalar(U * size);   // a light is smaller and leaner, a heavy bigger and broader
   // hips: a pelvis girdle with ball joints, a plate in front, guards at the sides, a bedroll slung behind
@@ -141,12 +141,27 @@ export function makeRig(team, o = {}) {
     const inKeep = (m) => { for (let q = m; q; q = q.parent) if (q === gun || q === bladeHand) return true; return false; }; root.traverse((m) => { if (m.isMesh && !inKeep(m)) m.visible = false; }); bladeBack.scale.setScalar(.001);
     const tone = (hex, k) => "#" + new THREE.Color(hex).multiplyScalar(k).getHexString(), S2 = { ...S, grit: .3, gritScale: 1.2 }; MB.palette.forEach((c, i) => { S2["c" + i] = tone(c, team === "foe" ? 1.05 : 1.5); }); if (MB.accent >= 0) S2["c" + MB.accent] = S.accent;   // a body whose model has a small bright trim takes the paint there; one without keeps its own colours
     const g = MB.g, put = (j, runs) => build(j, runs.map(([x, y, z, n, ci]) => B(g * 1.02, n * g * 1.01, g * 1.02, x * g, (y + (n - 1) / 2) * g, z * g, "c" + ci)), S2, glowMat);
-    put(hips, MB.parts.hips); put(torso, MB.parts.torso); legs.forEach((L) => { const s = L.sd < 0 ? "L" : "R"; put(L.thigh, MB.parts["thigh" + s]); put(L.shin, MB.parts["shin" + s]); put(L.foot, MB.parts["foot" + s]); });
+    const TB = new THREE.Object3D(), HB = new THREE.Object3D(); torso.add(TB); hips.add(HB); if (HV) { TB.scale.set(1.32, 1, 1.14); HB.scale.set(1.45, 1, 1.15); } put(HB, MB.parts.hips); put(TB, MB.parts.torso); legs.forEach((L) => { const s = L.sd < 0 ? "L" : "R"; put(L.thigh, MB.parts["thigh" + s]); put(L.shin, MB.parts["shin" + s]); put(L.foot, MB.parts["foot" + s]); });
     for (const A of [armR, armL]) { const s = A.sd < 0 ? "L" : "R"; put(A.up, MB.parts["up" + s]); put(A.fore, MB.parts["fore" + s]); }
     // the hatch: a plate on the chest's front, hinged along its top, that swings up when a pilot climbs in
-    let fz = 0; for (const r of MB.parts.torso) if (Math.abs(r[0] * g) < .45) fz = Math.min(fz, r[2] * g);
+    let fz = 0; for (const r of MB.parts.torso) if (Math.abs(r[0] * g) < .45) fz = Math.min(fz, r[2] * g); fz *= TB.scale.z;
     let ty = -9, by = 9; for (const r of MB.parts.torso) if (Math.abs(r[0] * g) < .45 && r[2] * g < fz + g * 2.5) { ty = Math.max(ty, (r[1] + r[3] - .5) * g); by = Math.min(by, (r[1] - .5) * g); }
     const hh = clamp(ty - by, .7, 1.3), hw = Math.min(1.1, SH_X * 1.1);
+    if (HV) { /* Heavy armour: layered pauldrons, yokes over the shoulders, chest slabs either side of the hatch, an armoured
+       back pack, a skirt of plates over the hips, thigh plates, greaves with knee caps, and wide sabatons. Light plate over
+       mid plate over dark, with the paint and a little glow in the seams. */
+      const A = "c4", M = "c2", D = "c1", ext = (R) => { const xs = R.map((r) => r[0] * g), zs = R.map((r) => r[2] * g), ye = R.map((r) => (r[1] + r[3]) * g); return { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs), y1: Math.max(...ye) }; };
+      const te = ext(MB.parts.torso), front = te.z0 * TB.scale.z, back = te.z1 * TB.scale.z, tw = Math.max(-te.x0, te.x1) * TB.scale.x, he = ext(MB.parts.hips);
+      for (const Ar of [armR, armL]) { const sd = Ar.sd; build(Ar.up, [B(1.05, .72, 1.3, sd * .14, .22, 0, A), B(1.08, .1, 1.33, sd * .14, .6, 0, "accent"), B(.96, .42, 1.2, sd * .2, -.28, 0, M), B(.86, .34, 1.1, sd * .24, -.62, 0, D), B(.12, .9, .9, sd * .66, -.1, 0, A)], S2, glowMat);
+        build(Ar.fore, [B(.66, .9, .74, 0, -A2 * .45, 0, M), B(.7, .08, .78, 0, -A2 * .45 + .45, 0, "accent")], S2, glowMat); }
+      build(torso, [...[-1, 1].flatMap((sd) => [B(.78, .5, 1.5, sd * (SH_X - .25), SH_Y + .32, .12, A), B(.8, .08, 1.52, sd * (SH_X - .25), SH_Y + .6, .12, "accent"),
+          B(Math.max(.4, tw - .52), 1.15, .22, sd * (.5 + Math.max(.4, tw - .52) / 2), SH_Y - .45, front - .1, A), B(Math.max(.4, tw - .52), .3, .26, sd * (.5 + Math.max(.4, tw - .52) / 2), SH_Y - 1.15, front - .06, M),
+          [.06, .7, .05, sd * .47, SH_Y - .45, front - .22, "glow"]]),
+        B(1.2, .34, .5, 0, SH_Y + .55, front + .35, M), B(1.9, 1.6, .5, 0, SH_Y - .55, back + .2, A), B(1.7, .4, .56, 0, SH_Y - 1.45, back + .22, M), ...[-.55, -.18, .18, .55].map((x) => [.16, .5, .06, x, SH_Y - .2, back + .48, "glow"]), C(.22, .9, -.7, SH_Y + .55, back + .3, D, "y", 8), C(.22, .9, .7, SH_Y + .55, back + .3, D, "y", 8)], S2, glowMat);
+      build(hips, [...[-1, 1].flatMap((sd) => [B(.62, .85, .14, sd * .38, -.42, he.z0 * HB.scale.z - .1, A, -.12), B(.14, .9, 1.0, sd * (HIP_X + .58), -.38, 0, A, 0, sd * .12), B(.16, .1, 1.02, sd * (HIP_X + .58), .08, 0, "accent")]), B(1.4, .18, .9, 0, .25, he.z0 * HB.scale.z + .2, M)], S2, glowMat);
+      for (const L of legs) { const sd = L.sd; build(L.thigh, [B(.9, 1.05, .16, 0, -.62, -.72, A), B(.16, 1.1, .9, sd * .62, -.6, 0, M), B(.92, .08, .18, 0, -.08, -.74, "accent")], S2, glowMat);
+        build(L.shin, [B(.82, 1.3, .22, 0, -.75, -.72, A), B(.9, .5, .5, 0, .05, -.62, M), B(.16, 1.2, .8, sd * .5, -.7, 0, D), [.5, .06, .05, 0, -.3, -.85, "glow"]], S2, glowMat);
+        build(L.foot, [B(1.15, .32, 1.75, sd * .06, -.2, -.38, M), B(1.2, .12, .5, sd * .06, -.02, -1.0, A), B(.5, .2, .5, sd * .06, -.22, .55, D)], S2, glowMat); } }
     hatch.position.set(0, ty, fz - g * .75); build(hatch, [B(hw, hh, g * .5, 0, -hh / 2, 0, "c" + Math.max(0, MB.palette.length - 3)), B(hw * .8, .1, g * .6, 0, -.2, -.02, "accent"), B(hw * .45, .07, g * .7, 0, -hh + .2, -.02, "glow")], S2, glowMat); }
   /* The rest of the loadout on the body, so a pilot can read it in half a second: the ordnance on the left shoulder,
      the defensive kit on the left forearm (or the back, or the legs), each lit in its own colour. */
@@ -178,14 +193,14 @@ export function makeRig(team, o = {}) {
     pose(dt, s) {
       const sp = Math.abs(s.speed || 0), sg = (s.speed || 0) < 0 ? -1 : 1, amt = clamp(sp / 1.4, 0, 1), kn = clamp(s.kneel || 0, 0, 1), limp = s.limp ? 1 : 0;
       rig.phase = (rig.phase + sp * dt / 3.6) % 1;
-      const stride = clamp(sp / 5, 0, 1) * 2.0 * sg, bob = Math.abs(Math.sin(rig.phase * Math.PI * 2)) * .1 * amt, hipY = HIP_Y - .06 - KNEEL * kn - bob - limp * .5, w = Math.sin(rig.phase * Math.PI * 2);
+      const stride = clamp(sp / 5, 0, 1) * 2.0 * sg, bob = Math.abs(Math.sin(rig.phase * Math.PI * 2)) * .1 * amt, hipY = HIP_Y - .06 - (HV ? .24 : 0) - KNEEL * kn - bob - limp * .5, w = Math.sin(rig.phase * Math.PI * 2);
       hips.position.y = hipY; hips.rotation.z = w * .045 * amt; hips.rotation.x = -kn * .08; hips.rotation.y = w * .07 * amt;
       legs.forEach((L, i) => { const p = (rig.phase + i * .5) % 1; let f, lift = 0;
         if (p < .62) f = stride / 2 - stride * (p / .62); else { const u = (p - .62) / .38, e = u * u * (3 - 2 * u); f = -stride / 2 + stride * e; lift = Math.sin(Math.PI * u) * .6 * amt; }
         f = lerp(f, i ? .75 : -.85, kn);   // kneeling: one foot forward, one knee toward the ground
         const fy = -(hipY - ANK) + lift, d = clamp(Math.hypot(f, fy), .5, L1 + L2 - .01), dir = Math.atan2(f, -fy);
         const k1 = Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1)), k2 = Math.acos(clamp((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2), -1, 1));
-        L.thigh.rotation.x = dir + k1; L.thigh.rotation.z = L.sd * .05; L.shin.rotation.x = -(Math.PI - k2); L.foot.rotation.x = -(L.thigh.rotation.x + L.shin.rotation.x) + (lift > 0 ? -.25 * Math.sin(Math.PI * clamp((p - .62) / .38, 0, 1)) : 0) - (i ? 0 : kn * .5); });
+        L.thigh.rotation.x = dir + k1; L.thigh.rotation.z = L.sd * (HV ? .13 : .05); L.foot.rotation.z = HV ? -L.sd * .13 : 0; L.shin.rotation.x = -(Math.PI - k2); L.foot.rotation.x = -(L.thigh.rotation.x + L.shin.rotation.x) + (lift > 0 ? -.25 * Math.sin(Math.PI * clamp((p - .62) / .38, 0, 1)) : 0) - (i ? 0 : kn * .5); });
       // it turns to its aim heavily, a little behind the pilot's hand
       const kY = 1 - Math.exp(-dt * 6.5); rig.aimYaw += ((s.aimYaw || 0) - rig.aimYaw) * kY; rig.aimPitch += ((s.aimPitch || 0) - rig.aimPitch) * kY;
       const H = rig.hold, BLADE = H.blade, re = H.mag && s.reload >= 0 && !limp ? s.reload : -1, rec = s.recoil || 0, pu = s.punch || 0, lowTo = Math.max(limp, kn * .85); rig.low += (lowTo - rig.low) * (1 - Math.exp(-dt * 5)); const low = rig.low, up = 1 - low;
