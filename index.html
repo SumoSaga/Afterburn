@@ -188,11 +188,13 @@
 
   /* the deck builder: your deck as a row of cards on top, the collection underneath */
   .ptbar { height: 6px; background: rgba(255,255,255,.1); margin: 10px 0 12px; } .ptbar div { height: 100%; background: #f2a046; }
-  .deck { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; } @media (max-width: 1100px) { .deck { grid-template-columns: repeat(3, 1fr); } }
+  .deck { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 12px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.1); } @media (max-width: 900px) { .deck { grid-template-columns: repeat(2, 1fr); } }
+  .pcard[draggable="true"], .ccard[draggable="true"] { cursor: grab; } .pcard.drag, .ccard.drag { opacity: .35; } #setup.dragging .pcard.empty { border-color: rgba(242,160,70,.6); } .pcard.over, #coll.over { outline: 2px solid #f6c868; outline-offset: 2px; } #setup.dragging #deck .pcard.in { outline: 1px dashed rgba(246,200,104,.45); }
+  .ccard { position: relative; } .cc-cost { position: absolute; left: 8px; top: 8px; z-index: 1; background: #f6c868; color: #14100a; font-size: 13px; font-weight: 700; padding: 0 5px; line-height: 19px; } .ccard em b { font-weight: 600; }
   .pcard { display: flex; flex-direction: column; min-height: 196px; background: linear-gradient(180deg, #23272c, #15181b); border: 1px solid rgba(255,255,255,.2); border-top: 3px solid #f2a046; } .pcard.asset { border-top-color: #7fe3f5; }
   .pcard.empty { border: 2px dashed rgba(255,255,255,.18); background: rgba(255,255,255,.03); align-items: center; justify-content: center; color: #7d776b; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; }
   .pc-main { all: unset; cursor: pointer; position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 6px 6px; flex: 1; } .pc-main:hover { background: rgba(255,90,58,.14); } .pc-main:hover:after { content: "Take out"; position: absolute; left: 0; right: 0; top: 42px; color: #ff9a7a; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; text-shadow: 0 0 4px #000, 0 0 4px #000; }
-  .pc-cost { position: absolute; left: 0; top: 0; background: #f6c868; color: #14100a; font-size: 17px; font-weight: 700; padding: 0 6px; line-height: 24px; } .pc-cost small { font-size: 10px; margin-left: 2px; } .pcard.asset .pc-cost { background: #7fe3f5; }
+  .pc-cost { position: absolute; left: 0; top: 0; background: #f6c868; color: #14100a; font-size: 17px; font-weight: 700; padding: 0 6px; line-height: 24px; } .pc-cost:after { content: " CP"; font-size: 10px; } .pcard.asset .pc-cost { background: #7fe3f5; }
   .pc-art { display: block; width: 60px; height: 74px; margin: 4px 0 6px; background: #0e1012; border: 1px solid rgba(255,255,255,.15); flex: none; } .pc-art img { width: 100%; height: 100%; image-rendering: pixelated; display: block; } .pc-art b { display: block; line-height: 74px; text-align: center; font-size: 30px; color: #f6c868; }
   .pcard strong { font-size: 14px; color: #fff; line-height: 1.15; } .pcard em { font-style: normal; font-size: 12px; color: #b4ac9c; } .pcard i { font-style: normal; font-size: 12px; color: #f2a046; margin-top: auto; }
   #m-main .pc-tag { font-size: 11px; padding: 3px 2px; border: 0; border-top: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.05); color: #b4ac9c; text-align: center; } #m-main .pc-tag.on { color: #14100a; background: #f6c868; } .pc-tag.none { opacity: .6; }
@@ -227,7 +229,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "50";
+  window.AB_BUILD = "51";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -289,7 +291,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 50 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 51 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -393,15 +395,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=50"></script>
-<script src="punch/punch-lab.js?v=50"></script>
-<script src="cb/genbuild.js?v=50"></script>
-<script src="cb/machines.js?v=50"></script>
-<script src="cb/soldiers.js?v=50"></script>
-<script src="cb/cbmechdata.js?v=50"></script>
-<script src="cb/cbmech.js?v=50"></script>
-<script src="cb/cbnature.js?v=50"></script>
-<script src="cb/cbweather.js?v=50"></script>
+<script src="punch/punch.js?v=51"></script>
+<script src="punch/punch-lab.js?v=51"></script>
+<script src="cb/genbuild.js?v=51"></script>
+<script src="cb/machines.js?v=51"></script>
+<script src="cb/soldiers.js?v=51"></script>
+<script src="cb/cbmechdata.js?v=51"></script>
+<script src="cb/cbmech.js?v=51"></script>
+<script src="cb/cbnature.js?v=51"></script>
+<script src="cb/cbweather.js?v=51"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
