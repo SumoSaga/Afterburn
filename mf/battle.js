@@ -207,6 +207,15 @@ export function bounds() { if (B.over || (OP.phase !== "fight" && OP.phase !== "
   const atk = zn === null ? null : zs + dir * Math.max(far + 26, Math.abs(zn - zs) / 2), retreat = OP.phase === "retreat" && atk !== null;
   // in a retreat the defenders' line is the far edge of the sector they lost, and they have 8 seconds to be past it
   return { dir, atk, def: retreat ? atk : home + dir * Math.min(24, gap * .4), retreat, grace: retreat ? Math.max(0, OP.t - 12) : 0 }; }
+export const liveSector = () => Math.min(OP.sector + (OP.phase === "retreat" ? 1 : 0), SECN - 1);   // the sector whose points are being fought over (during a retreat, the one being fallen back to)
+// who a squad belongs to, as the colour it is drawn in: yours blue, each teammate their own green or orange, the enemy red
+export const TINT = { me: "#4f9dff", mate0: "#6fe07a", mate1: "#ffa04a", foe: "#ff6a4a" };
+const slotKey = (k) => (k === "you" ? 0 : /^p\d+$/.test(k) ? +k.slice(1) : -1);
+export const mateTint = (slot) => { const i = (B.mates || []).indexOf(slot); return i < 0 ? "mate0" : "mate" + (i % 2); };
+export const tintOf = (sq) => (sq.side !== "you" ? "foe" : sq.owner === "you" ? "me" : mateTint(sq.mslot != null ? sq.mslot : slotKey(sq.owner)));
+// a point out of play keeps a dim, greyed lamp so the live ones stand out
+function tintPoint(p) { const live = !POINTS.length || p.sector === liveSector(), k = (p.owner || "none") + live; if (p._tk === k) return; p._tk = k; let c = COL[p.owner || "none"]; if (!live) c = c.map((v) => v * .06 + .26); p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); p.light.intensity = live ? (p._li ?? (p._li = p.light.intensity)) : (p._li ?? (p._li = p.light.intensity)) * .3; }
+export const tintPoints = () => { for (const p of POINTS) tintPoint(p); };
 export const opLine = () => { const a = OP.atk === "you", pts = POINTS.filter((p) => p.sector === Math.min(OP.sector + (OP.phase === "retreat" ? 1 : 0), SECN - 1)).map((p) => `<i class="${p.owner || "none"}" title="${p.roof ? "Roofed: pilots and troops only" : "Open air"}">${p.name}${p.roof ? "&#9650;" : ""}</i>`).join("");
   return `<span class="${a ? "you" : "foe"}">${a ? "ATTACK" : "DEFEND"}</span> Sector ${Math.min(OP.sector + (OP.phase === "retreat" ? 2 : 1), SECN)}/${SECN} ${pts} <span class="${a ? "you" : "foe"}">${OP.phase === "retreat" ? "opens in " + Math.ceil(OP.t) : OP.phase === "regroup" ? "battalion 2 in " + Math.ceil(OP.t) : OP.tickets + " tickets" + (OP.batt > 1 ? " · last battalion" : "")}</span>`; };
 
@@ -391,7 +400,7 @@ function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null, rps
     const was = p.owner; if (p.prog >= 1) p.owner = "you"; else if (p.prog <= -1) p.owner = "foe"; else if ((p.owner === "you" && p.prog <= 0) || (p.owner === "foe" && p.prog >= 0)) p.owner = null;
     if (was !== p.owner) ownerChanged(p); }
   if (OP.phase === "fight" && !B.over && POINTS.every((p) => p.sector !== OP.sector || p.owner === OP.atk)) sectorFalls(); }
-function ownerChanged(p, quiet) { if (!quiet && p.owner === "you" && B.hooks.onCap) B.hooks.onCap(p); const c = COL[p.owner || "none"]; p.lamp.material.color.setRGB(...c); p.light.color.setRGB(c[0] / 3, c[1] / 3, c[2] / 3); if (!quiet && p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
+function ownerChanged(p, quiet) { if (!quiet && p.owner === "you" && B.hooks.onCap) B.hooks.onCap(p); p._tk = null; tintPoint(p); if (!quiet && p.owner && B.hooks.say) B.hooks.say(p.owner === "you" ? "Your side has taken point " + p.name + "." : "The enemy has taken point " + p.name + ".", 2.5); }
 
 // a commander that plays by a doctrine: what to bring in next, as supply allows
 function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[side] = 1.5; const doc = B.doctrine[side]; if (doc === "manual" || B.away[side]) return;
@@ -402,7 +411,7 @@ function command(side, dt) { B.ai[side] -= dt; if (B.ai[side] > 0) return; B.ai[
   if (B.supply[side] >= def.cost) { deploy(side, id); B.turn[side]++; B.ai[side] = .4; } }
 let tick = 0;
 let escT = 0;
-export function stepBattle(dt) { if (B.mp === "guest") return stepGuest(dt); if (B.over) return; B.time += dt; if (Math.floor(B.time) !== Math.floor(B.time - dt)) for (const q of SQUADS) if (!q.dead && q.owner === "you" && q.onPt > B.time - 1.2) addXP(q.defId, 1); PIL = B.hooks.pilots ? B.hooks.pilots() : [];
+export function stepBattle(dt) { tintPoints(); if (B.mp === "guest") return stepGuest(dt); if (B.over) return; B.time += dt; if (Math.floor(B.time) !== Math.floor(B.time - dt)) for (const q of SQUADS) if (!q.dead && q.owner === "you" && q.onPt > B.time - 1.2) addXP(q.defId, 1); PIL = B.hooks.pilots ? B.hooks.pilots() : [];
   escT += dt; if (escT >= 5) { escT = 0; for (const p of PIL) { const live = POINTS.filter((q) => q.sector === OP.sector); if (arr(p.side).some((g) => g.s.dead < 0 && Math.hypot(g.s.root.position.x / U - p.x, g.s.root.position.z / U - p.z) < 20 && live.some((q) => Math.hypot(g.s.root.position.x / U - q.x, g.s.root.position.z / U - q.z) < 9))) credit(p.key, 15); } }   // staying with your troops on a point pays
   for (const g of GRUNTS) stepSoldier(g, dt); for (const g of ALLIES) stepSoldier(g, dt); for (const v of VEH) stepVeh(v, dt);
   for (const L of [GRUNTS, ALLIES]) for (let i = L.length - 1; i >= 0; i--) if (L[i].gone) L.splice(i, 1);
@@ -493,7 +502,7 @@ const r1 = (v) => Math.round(v * 10) / 10, GH = { sq: new Map(), g: new Map() },
 export function snapshot(who) { const my = B.side[who], rel = (sd) => (sd === my ? 1 : 0), cd = B.cd[who], sg = my === "you" ? 1 : -1;
   return { t: r1(B.time), sc: [r1(B.score[my]), r1(B.score[other(my)])], sup: Math.floor(B.supply[who]), cd: Object.keys(UTILS).map((k) => Math.ceil(cd[k] || 0)), ov: B.over ? (B.over === my ? 1 : 2) : 0, mn: MINES.map((m) => [r1(m.x), r1(m.z), m.side === my ? 1 : 0]), op: [OP.sector, OP.tickets, OP.max, OP.batt, ["fight", "retreat", "regroup"].indexOf(OP.phase), Math.ceil(OP.t), OP.atk === my ? 1 : 0],
     p: POINTS.map((p) => [Math.round(p.prog * 100 * sg), p.owner ? (p.owner === my ? 1 : 2) : 0, p.n[my], p.n[other(my)]]),
-    q: SQUADS.map((q) => { const f = q.owner === who, o = q.order, v = q.veh; return [q.id, rel(q.side) | (f ? 2 : 0), FACS.indexOf(q.fac), q.defId, q.auto ? 1 : 0, q.state, f ? q.path.map((n) => [r1(n.x), r1(n.z), n.stop ? 1 : 0]) : 0, f && o ? [o.type === "point" ? o.i : -1, o.pos ? r1(o.pos.x) : 0, o.pos ? r1(o.pos.z) : 0, o.pos ? 1 : 0] : 0, v ? [r1(v.pos.x), r1(v.pos.z), r1(v.yaw), v.alive ? Math.ceil(v.hp) : 0] : 0]; }),
+    q: SQUADS.map((q) => { const f = q.owner === who, o = q.order, v = q.veh; return [q.id, rel(q.side) | (f ? 2 : 0), FACS.indexOf(q.fac), q.defId, q.auto ? 1 : 0, q.state, f ? q.path.map((n) => [r1(n.x), r1(n.z), n.stop ? 1 : 0]) : 0, f && o ? [o.type === "point" ? o.i : -1, o.pos ? r1(o.pos.x) : 0, o.pos ? r1(o.pos.z) : 0, o.pos ? 1 : 0] : 0, v ? [r1(v.pos.x), r1(v.pos.z), r1(v.yaw), v.alive ? Math.ceil(v.hp) : 0] : 0, slotKey(q.owner)]; }),
     s: [...ALLIES, ...GRUNTS].filter((g) => !g.gone).map((g) => { const p = g.s.root.position, t = g.s.dead < 0 && g.tgt && tgtAlive(g.tgt) ? tgtPos(g.tgt) : null; return [g.id, g.sq.id, g.slot, r1(p.x / U), r1(p.z / U), (g.s.dead >= 0 ? 1 : 0) | (g.s.crouch ? 2 : 0), g.shots, t ? [r1(t.x), r1(t.y), r1(t.z)] : 0]; }) }; }
 export function applySnap(o) { const now = performance.now();
   B.time = o.t; B.score.you = o.sc[0]; B.score.foe = o.sc[1]; B.supply.you = o.sup; Object.keys(UTILS).forEach((k, i) => { B.cd.you[k] = o.cd[i] || 0; });
@@ -504,7 +513,7 @@ export function applySnap(o) { const now = performance.now();
   const seenQ = new Set(), seenG = new Set();
   for (const a of o.q) { let q = GH.sq.get(a[0]); const side = a[1] & 1 ? "you" : "foe", mine = !!(a[1] & 2);
     if (!q) { const fac = FACS[a[2]], def = FACTIONS[fac] && FACTIONS[fac].units[a[3]]; if (!def) continue; q = mkSquad(side, a[3], def, a[0], [0, 0], null, mine ? "you" : side === "you" ? "ally" : "foe", fac); q.order = null; GH.sq.set(a[0], q); SQUADS.push(q); if (mine && MAP.want && now - MAP.want < 5000) { MAP.sels = [q]; MAP.want = 0; } if (a[8]) { mkVeh(q, a[8][0], a[8][1]); q.c.set(a[8][0], 0, a[8][1]); } }
-    seenQ.add(a[0]); q.state = a[5]; if (mine && !(q.holdT > now)) { q.auto = !!a[4]; q.path = a[6] ? a[6].map((n) => { const v = V3(n[0], 0, n[1]); if (n[2]) v.stop = true; return v; }) : []; q.order = a[7] ? { type: a[7][0] >= 0 ? "point" : "move", i: a[7][0], pos: a[7][3] ? V3(a[7][1], 0, a[7][2]) : null } : null; }
+    seenQ.add(a[0]); q.mslot = a[9] ?? -1; q.state = a[5]; if (mine && !(q.holdT > now)) { q.auto = !!a[4]; q.path = a[6] ? a[6].map((n) => { const v = V3(n[0], 0, n[1]); if (n[2]) v.stop = true; return v; }) : []; q.order = a[7] ? { type: a[7][0] >= 0 ? "point" : "move", i: a[7][0], pos: a[7][3] ? V3(a[7][1], 0, a[7][2]) : null } : null; }
     if (q.veh && a[8]) { q.veh.net = a[8]; q.veh.hp = a[8][3]; if (!a[8][3] && q.veh.alive) wreckVeh(q.veh); } }
   for (const a of o.s) { let g = GH.g.get(a[0]); const q = GH.sq.get(a[1]); if (!q) continue; if (!g) { if (a[5] & 1) continue; g = mkSoldier(q, a[2], a[3], a[4], a[0]); GH.g.set(a[0], g); g.shots = a[6]; } seenG.add(a[0]); g.net = a; }
   for (const [id, g] of GH.g) if (!seenG.has(id)) { g.gone = true; try { g.s.remove(); } catch (e) {} GH.g.delete(id); }
@@ -572,9 +581,9 @@ function mark(key, x, y, z, cls, html) { const [sx, sy, ok] = scr(x, y, z); let 
   live.add(key); el.style.display = ""; if (el._c !== cls) { el.className = "mk " + cls; el._c = cls; } if (el._h !== html) { el.innerHTML = html; el._h = html; } el.style.left = (sx | 0) + "px"; el.style.top = (sy | 0) + "px"; return [sx, sy]; }
 export function mapFrame(dt) { cam.updateMatrixWorld(); live = new Set(); const way = !!(MAP.keys.ShiftLeft || MAP.keys.ShiftRight) && MAP.sels.length > 0;
   const arm = MAP.arm; $("map-mode").style.display = way || arm ? "block" : "none"; $("map-mode").textContent = arm ? (arm.kind === "pod" ? "Click where the drop pod should land." : UTILS[arm.kind].ask) + " Esc to call it off." : "Stops: each click adds a stop on the way. Let go of Shift and click where they should end up."; mapEl.style.cursor = arm ? "copy" : way ? "cell" : "crosshair";
-  for (const p of POINTS) mark("p" + p.name, p.x, 6, p.z, "pt " + (p.owner || "none"), `<b>${p.name}</b><span class="pl">${p.label}</span><i><u style="width:${Math.round(Math.abs(p.prog) * 100)}%;background:${p.prog > 0 ? "#8fe0f0" : "#e05a3a"}"></u></i>`);
+  for (const p of POINTS) mark("p" + p.name, p.x, 6, p.z, "pt " + (p.owner || "none") + (p.sector === liveSector() ? "" : " off"), `<b>${p.name}</b><span class="pl">${p.label}</span><i><u style="width:${Math.round(Math.abs(p.prog) * 100)}%;background:${p.prog > 0 ? "#8fe0f0" : "#e05a3a"}"></u></i>`);
   for (const sq of SQUADS) { if (!spotted(sq)) continue; const sel = MAP.sels.includes(sq), mine = sq.owner === "you", th = thumbOf(sq.fac, sq.defId, sq.side);
-    const at = mark("s" + sq.id, sq.c.x, sq.veh ? 3.2 : 2.7, sq.c.z, "card " + sq.side + (sel ? " sel" : "") + (sq.side === "you" && !mine ? " ally" : ""), `${th ? `<img src="${th}">` : `<b>${sq.def.icon}</b>`}<span><strong>${sq.name}</strong>${sq.veh ? "" : ` <q>${"▮".repeat(sq.n)}</q>`}${mine ? `<em>${sq.state}</em>` : ""}</span>`); sq.scr = at; }
+    const at = mark("s" + sq.id, sq.c.x, sq.veh ? 3.2 : 2.7, sq.c.z, "card " + tintOf(sq) + (sel ? " sel" : ""), `${th ? `<img src="${th}">` : `<b>${sq.def.icon}</b>`}<span><strong>${sq.name}</strong>${sq.veh ? "" : ` <q>${"▮".repeat(sq.n)}</q>`}${mine ? `<em>${sq.state}</em>` : ""}</span>`); sq.scr = at; }
   const pl = B.hooks.pilot(); if (pl.alive) mark("hero", pl.at.x, 2.4, pl.at.z, "hero", `<b>◆</b><span>You${pl.titan ? ", in your Titan" : ""}</span>`);
   for (const t of B.hooks.titans()) if (t.alive && !t.piloted && (t.team === "you" || spotted({ side: "foe", c: t.pos }))) mark("t" + t.team, t.pos.x, 6.5, t.pos.z, t.team + " veh", `<b>▲</b><span>${t.team === "you" ? "Your Titan, standing guard" : "Enemy Titan"}</span>`);
   for (const [k, el] of marks) if (!live.has(k)) { el.remove(); marks.delete(k); }
