@@ -52,7 +52,7 @@ const MIX = { colony: ["works", "airfield", "works", "works"], city: ["works", "
 
 export function planMap(key, api) {
   const kp = key.split("-"), DZ = kp[0] === "custom" ? DESIGN(kp[1]) : null, theme = THEMES[kp[0]] ? (kp[0] === "custom" && !DZ ? "colony" : kp[0]) : "mixed", size = (kp[2] || "sa")[0], flip = (kp[2] || "sa")[1] === "d", R = rng(hashStr(kp[0] + "-" + kp[1] + "-" + size + (api.salt ? "~" + api.salt : ""))), wear = R.range(.25, .7);
-  const plan = { key, theme, zones: [], sites: [], districts: [], roads: [], prims: [], gens: [], trees: [], bushes: [], rocks: [], paint: [], yards: [], lit: 0 };
+  const plan = { key, theme, zones: [], sites: [], districts: [], roads: [], prims: [], gens: [], trees: [], bushes: [], rocks: [], paint: [], yards: [], halls: [], lit: 0 };   // halls: the roofed buildings, [x0, z0, x1, z1, height], which no mech may enter
   const P = plan.prims, occ = [], keep = [], count = {}, COLONY = theme === "colony", CITY = theme === "city" || COLONY, URB = CITY, SHIP = theme === "ship", CUSTOM = theme === "custom", FLAT = CITY || SHIP || CUSTOM, mz = (z) => ((kp[2] || "sa")[1] === "d" ? -42 - z : z); plan.indoor = SHIP;   // City blocks and Ship boarding are built on level ground for pilots: see the urban layer below
   const fits = (x0, z0, x1, z1, m = 0, lists = [occ, keep]) => { if (CUSTOM) return true; for (const L of lists) for (const o of L) if (x0 - m < o[2] && x1 + m > o[0] && z0 - m < o[3] && z1 + m > o[1]) return false; return true; };
   const S = (x, z, w, h, d, col, o, dy = 0) => P.push(["s", x, z, w, h, d, col, o || { stripe: false, base: col, cap: col }, dy]), D = (x, z, w, h, d, col, dy = 0, roof = 0) => P.push(["d", x, z, w, h, d, col, dy, roof]), G = (x, z, w, h, d, dy = 0) => P.push(["g", x, z, w, h, d, dy]);
@@ -135,7 +135,7 @@ export function planMap(key, api) {
     bx(-10.5, 4.6, -1.5, 7.6, 2.8, .3, WOOD2); dc(-10.5, 4.5, -1.5, 4.62, 3.1, .9, "#3c4046"); bx(-1.4, 5.2, .2, 7, .001, 1.9, DRAB); bx(.3, 5.4, 1.7, 6.8, .001, 1, DRAB2);   // a gallery along one wall, and crates to climb to it
     for (const [u, v, w, dd, h, c] of [[-6, -3.5, 3, .5, 1.2, CON2], [6, 3.2, .5, 3, 1.2, CON2], [5.5, -4.5, 1.4, 1.4, 1.3, DRAB], [-4, 1.6, 1.3, 1.3, 1.1, WOOD2], [8.5, -1, 1.2, 2.4, 1, DRAB2], [-8.5, -5.5, 2.6, 1.2, 1.3, STEEL]]) bx(u - w / 2, v - dd / 2, u + w / 2, v + dd / 2, .001, h, c);
     for (const sd of [-1, 1]) { const q = rect(sd * dl - 1.5, sd * (HW + .3), sd * dl + 1.5, sd * (HW + .5)); G((q[0] + q[2]) / 2, (q[1] + q[3]) / 2, q[2] - q[0], .16, q[3] - q[1], DH + .2); }
-    occ.push(rect(-HL - .6, -HW - .6, HL + .6, HW + .6)); for (const sd of [-1, 1]) keep.push(rect(sd * dl - 3, sd * HW, sd * dl + 3, sd * (HW + 6)), rect(sd * HL, -3, sd * (HL + 6), 3)); }
+    occ.push(rect(-HL - .6, -HW - .6, HL + .6, HW + .6)); { const q = rect(-HL, -HW, HL, HW); plan.halls.push([Math.min(q[0], q[2]), Math.min(q[1], q[3]), Math.max(q[0], q[2]), Math.max(q[1], q[3]), (d.h || 0) + H]); } for (const sd of [-1, 1]) keep.push(rect(sd * dl - 3, sd * HW, sd * dl + 3, sd * (HW + 6)), rect(sd * HL, -3, sd * (HL + 6), 3)); }
 
 
   /* ---------- frontier pieces: what a colony world is built from ----------

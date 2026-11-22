@@ -5,6 +5,7 @@
    The Frontier Militia are the Table's soldiers; the Machine's infantry are the Table's machine troopers (cb/cbmech.js) on
    the same skeleton. Vehicles are the Table's generated models; the Machine's walk and track on their own rigs.
    Everything here is in metres; the engine draws at U. */
+import { CHASSIS } from "./loadout.js";
 import { THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, SITES, PLAN, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
 
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
@@ -393,12 +394,13 @@ function stepSquad(sq, dt) {
   const where = o.type === "point" ? POINTS[o.i].name + ", the " + POINTS[o.i].label.toLowerCase() : null;
   sq.state = sq.eng ? (where ? (sq.arrived ? "Fighting on " : "Fighting on the way to ") + where : "Fighting") : sq.arrived ? (where ? (POINTS[o.i].owner === sq.side ? "Holding " : "Taking ") + where : "Holding position") : where ? "Moving to " + where + (sq.path.some((p) => p.stop) ? " by your stops" : "") : "Moving";
 }
+const tcap = (cls) => (CHASSIS[cls] || CHASSIS.medium).capW;
 function stepPoints(dt) { const pl = B.hooks.pilot ? B.hooks.pilot() : null, rps = B.hooks.rpilots ? B.hooks.rpilots() : [], tis = B.hooks.titans ? B.hooks.titans() : [];
   for (const p of POINTS) { const n = { you: 0, foe: 0 }, w = { you: 0, foe: 0 }, ai = { you: 0, foe: 0 }, aura = { you: false, foe: false }, far = (x, z) => Math.hypot(x - p.x, z - p.z);
-    const pilot = (side, x, z, titan) => { const d = far(x, z); if (d < 20) aura[side] = true; if (d < 9) { n[side]++; w[side] += titan ? (p.roof ? 0 : 1.5) : 1; } };   // a pilot counts 1, a Titan 1.5 and only in the open
-    if (pl && pl.alive) pilot("you", pl.at.x, pl.at.z, pl.titan); for (const rp of rps) if (!rp.decoy && (rp.ok || rp.inTitan)) pilot(rp.side, rp.pos.x, rp.pos.z, rp.inTitan);
+    const pilot = (side, x, z, titan) => { const d = far(x, z); if (d < 20) aura[side] = true; if (d < 9) { n[side]++; w[side] += titan ? (p.roof ? 0 : tcap(titan)) : 1; } };   /* Layer A: a pilot counts 1; a Titan counts by its chassis (Recon 1.5, Vanguard 1.75, Siege 2) and only on an open point. Under a roof (Layer B) it counts nothing. */
+    if (pl && pl.alive) pilot("you", pl.at.x, pl.at.z, pl.titan && (pl.tcls || "medium")); for (const rp of rps) if (!rp.decoy && (rp.ok || rp.inTitan)) pilot(rp.side, rp.pos.x, rp.pos.z, rp.inTitan && ((rp.titan && rp.titan.cls) || "medium"));
     for (const side of ["you", "foe"]) { for (const g of arr(side)) if (g.s.dead < 0 && far(g.s.root.position.x / U, g.s.root.position.z / U) < 9) { const gx = g.s.root.position.x / U, gz = g.s.root.position.z / U, op = passive(g.sq.owner) === "combined" ? cmdPilot(g.sq.owner) : null; if (g.sq.owner === "you" && side === "you") g.sq.onPt = B.time; n[side]++; ai[side] += (g.sq.def.capw || .3) * ((g.pin || 0) > B.time ? .3 : 1) * (op && Math.hypot(op.x - gx, op.z - gz) < 20 ? 1.25 : 1) * (uplinked(side, gx, gz) ? 1.25 : 1); } for (const v of VEH) if (v.alive && !v.def.veh.static && !v.def.veh.nocap && v.side === side && far(v.pos.x, v.pos.z) < 9) { n[side]++; ai[side] += .4; } }
-    for (const t of tis) if (t.alive && !t.piloted && t.remote == null && far(t.pos.x, t.pos.z) < 9) { n[t.team]++; if (!p.roof) w[t.team] += 1.5; }
+    for (const t of tis) if (t.alive && !t.piloted && t.remote == null && far(t.pos.x, t.pos.z) < 9) { n[t.team]++; if (!p.roof) w[t.team] += tcap(t.cls); }
     for (const side of ["you", "foe"]) w[side] += ai[side] * (aura[side] ? 1.25 : 1);   // troops count 0.3 each, a quarter more with a pilot of theirs within 20 m
     p.n = n; p.w = w; if (p.sector !== OP.sector || OP.phase !== "fight") continue;
     const net = w.you - w.foe; if (Math.abs(net) > .01) p.prog = clamp(p.prog + Math.sign(net) * Math.min(Math.abs(net), 2.5) / 12 * dt, -1, 1); else if (!n.you && !n.foe && p.owner) p.prog = clamp(p.prog + (p.owner === "you" ? 1 : -1) * .03 * dt, -1, 1);

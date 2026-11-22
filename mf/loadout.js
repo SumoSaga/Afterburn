@@ -7,13 +7,13 @@
    bar of hull is 2,500. */
 
 export const CHASSIS = {
-  light: { name: "Recon / Interceptor", short: "Recon", hull: 7500, dash: 3, dashCd: 4.5, speed: 8.5, trait: "optics",
+  light: { name: "Recon / Interceptor", short: "Recon", hull: 7500, dash: 3, dashCd: 4.5, speed: 8.5, capW: 1.5, trait: "optics",
     traitName: "Predator Optics", traitDesc: "Pilots and troops moving within 25 metres of you are marked for you, and you hear a pilot climb onto your hull a second sooner.",
     role: "Hunts flanking pilots, picks off drop beacons and breaks into the enemy's snipers and artillery at the back." },
-  medium: { name: "Vanguard / Line-Breaker", short: "Vanguard", hull: 10000, dash: 2, dashCd: 6, speed: 6.5, trait: "uplink",
+  medium: { name: "Vanguard / Line-Breaker", short: "Vanguard", hull: 10000, dash: 2, dashCd: 6, speed: 6.5, capW: 1.75, trait: "uplink",
     traitName: "Combined-Arms Uplink", traitDesc: "Your side's troops within 20 metres of you shoot 15 percent truer and take points a quarter faster.",
     role: "Walks in with the troops, contests open points and changes its answer mid-fight between armour and infantry." },
-  heavy: { name: "Siege / Anchor", short: "Siege", hull: 12500, dash: 1, dashCd: 8, speed: 4.8, trait: "bulkhead",
+  heavy: { name: "Siege / Anchor", short: "Siege", hull: 12500, dash: 1, dashCd: 8, speed: 4.8, capW: 2, trait: "bulkhead",
     traitName: "Reactive Bulkhead", traitDesc: "Blasts that hit you from the front do a quarter less, and nothing knocks you back while you are dug in.",
     role: "Shuts down narrow lanes with fire and suppression, breaks walls and turrets, and holds the final sector." } };
 
@@ -96,7 +96,7 @@ const ID = { light: "RECON_INTERCEPTOR", medium: "VANGUARD_LINEBREAKER", heavy: 
 const up = (s) => s.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
 export function loadoutSchema(cls, lo, name = "") { const c = CHASSIS[cls], a = AIROLE[cls];
   return { titanLoadoutSchema: { loadoutId: "titan_" + cls + "_" + up(name || buildOf(cls, lo)).toLowerCase(), chassisClass: ID[cls],
-    frameStats: { maxHullHp: c.hull, segmentHp: 2500, doomedHp: 2500, dashCharges: c.dash, dashRechargeSec: c.dashCd, sprintSpeedMps: c.speed, passiveTrait: TR[c.trait] },
+    frameStats: { maxHullHp: c.hull, segmentHp: 2500, doomedHp: 2500, dashCharges: c.dash, dashRechargeSec: c.dashCd, sprintSpeedMps: c.speed, captureWeightOpenAir: c.capW, passiveTrait: TR[c.trait] },
     hardpoints: { primaryWeapon: "WPN_" + up(PRIM[lo.prim].name), ordnanceSlotQ: "ORD_" + up(ORDQ[lo.q].name), defensiveSlotE: "DEF_" + up(DEFE[lo.e].name), coreUltimateX: "CORE_" + up(CORES[lo.x].name), universalKit: "KIT_" + up(UKITS[lo.kit].name) },
     aiBehaviorProfile: { engagementRangeMeters: { min: a.min, optimal: a.opt, max: a.max }, pilotPriority: a.pilots } } }; }
 
