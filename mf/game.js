@@ -8,7 +8,7 @@ import { GARAGE, GARAGE_FOV } from "./garage.js";
 import { makeRig, TITAN, cockpitRifle } from "./titan.js";
 import "./editor.js";
 import { B, GRUNTS, ALLIES, VEH, SQUADS, POINTS, FACTIONS, DOCTRINES, LIST_PTS, LIST_MAX, PASSIVES, SUPCAP, supUsed, squadsOut, thumbOf, bounds, income, outnumbered, credit, nearAI, pingTo, fieldTest, stunAt, addDome, GOAL, OP, SECN, homeOf, setHomes, spend, opLine, LOAD, saveLoad, MAP, setMap, mapCamera, mapFrame, deploy, damage, rayUnits, blastUnits, nearestEnemy, stepBattle, resetBattle, buildPass, flowTo, flowDir, domeAt, useUtil, snapshot, applySnap, netIn, UTILS, utilsFor, layMine, refund, TECH, MAST, saveMast, levelOf, xpNext, tpFree, buyTier, pickBranch, wornTech } from "./battle.js";
-import { NET, onMsg, send, host, join, leave, cut } from "./net.js";
+import { NET, RETRY, onMsg, send, host, join, leave, cut } from "./net.js";
 import { makeFigure } from "./figure.js";
 import { CAMP, TYPES as CTYPES, CARDS as CCARDS, newCampaign, cost as campCost, fleetCap, buyFleet, fortify, buyCard, resupply, setCard, reach as fleetReach, canMove, moveFleet, endTurn as campEndTurn, startDefence, autoDefend, resolve as campResolve, pendingFor, battleSetup, standing, endCampaign, other as otherFac } from "./campaign.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -952,7 +952,7 @@ function showRoster() { const el = $("mp-roster"); if (!ROSTER.length) { el.inne
   $("mp-team").style.display = started ? "none" : ""; $("mp-start").style.display = NET.role === "host" && !started ? "" : "none"; }
 const lobbyOut = () => { for (const r of ROSTER) if (r.id) send("lobby", { you: r.slot, map: MAPKEY, salt: SALT, players: ROSTER.map(({ slot, name, team, here }) => ({ slot, name, team, here })) }, true, r.id); showRoster(); };
 const startMsg = (r, back) => ({ fac: r.team === ROSTER[0].team ? LOAD.side : LOAD.side === "militia" ? "machine" : "militia", map: MAPKEY, salt: SALT, slot: r.slot, duo: B.duo, south: r.team === ROSTER[0].team, back: !!back, roster: ROSTER.map(({ slot, name, team, kit, here }) => ({ slot, name, team, kit, here })) });
-function mpBegin(role) { B.mp = role; mpOn = true; B.flip = !MY.south; if (role === "host") B.roster = ROSTER.map((r) => ({ key: keyOf(r.slot), side: r.team === ROSTER[0].team ? "you" : "foe", ...(r.kit || {}) })); begin(false); showRoster(); }
+function mpBegin(role) { B.mp = role; mpOn = true; RETRY.endless = role === "guest"; B.flip = !MY.south; if (role === "host") B.roster = ROSTER.map((r) => ({ key: keyOf(r.slot), side: r.team === ROSTER[0].team ? "you" : "foe", ...(r.kit || {}) })); begin(false); showRoster(); }
 function hostStart(again) { if (ROSTER.length < 2) { mpNote("Wait for at least one other player to join."); return; }
   { const want = ROSTER.length <= 2 ? "s" : ROSTER.length <= 4 ? "m" : "l", have = (MAPKEY.split("-")[2] || "sa")[0], nm = { s: "1v1", m: "2v2", l: "3v3" }; if (want !== have && !hostStart.warned && !again) { hostStart.warned = true; mpNote("This field is the " + nm[have] + " size and there are " + ROSTER.length + " of you. For the " + nm[want] + " size, load it from the Play tab and host again. Press Start once more to play on this one."); return; } } if (!ROSTER.some((r) => r.team !== ROSTER[0].team)) { mpNote("Both sides need at least one player. Someone has to switch sides."); return; }
   ROSTER[0].kit = myKit(); B.duo = ROSTER.length > 2; MY.slot = 0; MY.south = true; MY.team = ROSTER[0].team; const list = ROSTER; setRoster(list); for (const r of ROSTER) if (r.id) send(again ? "again" : "start", startMsg(r), true, r.id);
@@ -973,8 +973,8 @@ onMsg("start", (m) => { if (NET.role !== "guest" || wrongField(m.map, m.salt)) r
 onMsg("again", (m) => { if (B.mp !== "guest") return; MY.slot = m.slot; MY.south = m.south; B.duo = m.duo; B.flip = !MY.south; setRoster(m.roster); restart(); say("The host has started the match again.", 3); });
 const hello = () => send("hello", { token: MY.token, name: MY.name, kit: myKit() });
 onMsg("_open", () => { if (mpOn) hello(); });   // the link came back by itself: ask for the same place
-onMsg("_close", () => { if (B.mp === "guest" && started) say("The link to the host has dropped. Trying to get back in.", 0); else mpNote("The link to the host has dropped."); });
-onMsg("_retry", (secs) => { mpNote("Trying to get back in. " + secs + " seconds left."); });
+onMsg("_close", () => { if (B.mp === "guest" && started) say("The link to the host dropped. Getting you back in. Keep playing, the field is still here.", 0); else mpNote("The link to the host has dropped."); });
+onMsg("_retry", (n) => { if (RETRY.endless) { if (n > 1) say("Getting you back in to the host. Try " + n + ".", 0); } else mpNote("Trying to get back in. " + n + " seconds left."); });
 onMsg("_lost", () => { mpNote("Could not get back in."); if (B.mp && started) { say("Could not get back to the host. Press T to play on alone.", 0); B.over = B.over || "foe"; } });
 function again() { if (campDone) { location.reload(); return; } if (B.mp === "guest") { if (NET.open) { say("Only the host can start the match again.", 2.5); return; } leave(); B.mp = null; mpOn = false; B.duo = false; B.flip = false; setRoster([]); $("tr").textContent = "P: tuning   T: restart   Esc: free the mouse"; restart(); return; } if (B.mp === "host") { hostStart(true); return; } restart(); }
 const nameOf = () => { MY.name = ($("mp-name").value || "").trim().slice(0, 16); try { localStorage.setItem("afterburn-name", MY.name); } catch (e) {} };

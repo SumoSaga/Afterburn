@@ -213,6 +213,12 @@ function mkVeh(sq, x, z) { const side = sq.side, def = sq.def, v = { veh: true, 
   const tag = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL[side]) })); tag.position.y = 62; v.group.add(tag); sq.veh = v; VEH.push(v); return v; }
 function mkSoldier(sq, i, x, z, id) { const side = sq.side, def = sq.def, gun = def.guns[i], mil = sq.fac === "militia";
   const s = SOL.make({ x: x * U, z: z * U, y: groundH(x, z) * U, yaw: side === "you" ? Math.PI : 0, weapon: gun, role: gun === "lmg" ? "gunner" : gun === "dmr" ? "marksman" : "rifleman", camo: mil ? (i % 2 ? "multicam" : "ranger") : "urban", seed: 100 + sq.id * 7 + i });
+  /* one squad in a hundred has a trooper who has been eating well. The roll comes from the squad's number, so every
+     player in a match sees the same trooper. It changes nothing but the view. */
+  if (!def.mech && ((sq.id * 9301 + 49297) % 233280) / 233280 < (window.__bigSeat ?? .01) && i === sq.id % def.guns.length) {
+    const tr = s.pelvis.children.find((o) => o.isMesh), ca = tr && tr.geometry.getAttribute("color"), col = ca ? [ca.getX(0), ca.getY(0), ca.getZ(0)] : [.36, .35, .27], seat = new THREE.Group();   // cut from the same cloth as the trousers
+    for (const sd of [-1, 1]) { const geo = new THREE.SphereGeometry(.62, 14, 10), n = geo.getAttribute("position").count, cc = new Float32Array(n * 3); for (let k = 0; k < n; k++) cc.set(col, k * 3); geo.setAttribute("color", new THREE.BufferAttribute(cc, 3)); const ch = new THREE.Mesh(geo, tr ? tr.material : charMat); ch.position.x = sd * .72; ch.castShadow = true; seat.add(ch); }
+    seat.position.set(0, -1.9, -4.6); seat.scale.set(5.4, 5, 8.6); s.pelvis.add(seat); s.bigSeat = true; }
   if (def.mech && window.CBMech) { try { window.CBMech.dress(s, def.mech, THREE, charMat, { scheme: side === "you" ? "worn" : "steel" }); } catch (e) { console.warn("[mech]", e); } }
   if (side === "you") { const tag = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL.you) })); tag.position.y = 36; s.root.add(tag); }
   const g = { id: id || ++B.n, s, side, sq, hp: def.hp, sh: def.shield || 0, W: WPN[gun], tgt: null, think: rnd() * .4, cd: 1 + rnd(), moveT: rnd(), err: V3(), c: .3, slot: i, deadT: 0, gone: false, shots: 0 }; s.onShot = () => shot(g); sq.members.push(g); arr(side).push(g); return g; }
