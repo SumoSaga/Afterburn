@@ -295,7 +295,7 @@ function aiAbility(t, dt) { t.abT = (t.abT == null ? 5 + rnd() * 5 : t.abT) - dt
   if (m === "centurion") { t.vortex = 6; } else if (m === "bastion") { t.ward = 3500; t.wardT = 6; } else if (m === "kestrel") { t.ward = 1500; t.wardT = 2.5; if (o.remote == null) o.markT = 5; }
   else if (m === "jackal") { if (o.remote == null && d < 30) { o.shield = 0; ringFx(toU(V3(t.pos.x, t.pos.y + 1, t.pos.z)), "#9fd8ff", 30 * U, .6); if (mine) say("An arc wave took your shield.", 2); } }
   else if (m === "nomad") { if (B.mp !== "guest") for (let i = 0; i < 3; i++) layMine(o.pos.x + (rnd() - .5) * 7, o.pos.z + (rnd() - .5) * 7, t.team, true); }
-  else if (m === "furnace") { addFire(o.pos.x, o.pos.z, 4, 4, 400, t.team); blast(V3(o.pos.x, o.pos.y + .5, o.pos.z), 3, {}); } }
+  else if (m === "furnace") { if (B.mp !== "guest") addFire(o.pos.x, o.pos.z, 4, 4, 400, t.team); blast(V3(o.pos.x, o.pos.y + .5, o.pos.z), 3, {}); } }
 function stepTitanAI(t, dt) { aiAbility(t, dt);
   const chest = V3(t.pos.x, t.pos.y + t.h * .7, t.pos.z);
   // what it shoots at: the other side's Titan first, then the pilot or the nearest grunt it can see
@@ -462,7 +462,7 @@ function fireCannon(t) { const m = t.mech;
 function railShot(t) { const c = clamp(t.chg, 0, 1); t.chg = 0; t.ammo--; t.fireCd = .45; snd("charge_fire", { pitch: 1 + c * .3, gain: .9 + c * .5 }); kickMech(t, 1 + c * 2); mechPellet(t, 450 + 950 * c, .001, c > .9 ? "#d8f8ff" : "#8fe0f0", true); }
 /* fire on the ground: it burns mechs, troops and pilots of the other side that stand in it */
 const FIRES = [], CANS = []; let fireTick = 0;
-function addFire(x, z, r, sec, dps, team = "you", ghost = false) { FIRES.push({ x, z, r, t: sec, dps, team, ghost }); if (!ghost && team === "you" && B.mp) relay("fire", [r2(x), r2(z), r, sec, dps]); }   // a ghost is another player's fire: drawn here, and it burns this pilot, but the mechs and troops are its owner's to count
+function addFire(x, z, r, sec, dps, team = "you", ghost = false) { FIRES.push({ x, z, r, t: sec, dps, team, ghost }); if (!ghost && team === "you" && B.mp) relay("fire", [r2(x), r2(z), r, sec, dps]); else if (!ghost && B.mp === "host") send("fire2", [r2(x), r2(z), r, sec, dps, team]); }   // the host also sends the fires lit on the far side (the machine's flamers, an enemy mech's slag), so every guest sees them and burns in them   // a ghost is another player's fire: drawn here, and it burns this pilot, but the mechs and troops are its owner's to count
 function slagLand(at) { blast(at, 3.5, { team: "you", titan: 55, pilot: 120 }); addFire(at.x, at.z, 4, 3, 400); for (let i = CANS.length - 1; i >= 0; i--) { const c = CANS[i]; if (Math.hypot(c.x - at.x, c.z - at.z) < 6) { scene.remove(c.mesh); CANS.splice(i, 1); blast(V3(c.x, groundH(c.x, c.z) + 1, c.z), 5, { team: "you", titan: 40, pilot: 120 }); addFire(c.x, c.z, 7, 6, 500); } } }
 function stepFires(dt) { fireTick -= dt; const tick = fireTick <= 0; if (tick) fireTick = .25;
   for (let i = CANS.length - 1; i >= 0; i--) { const c = CANS[i]; c.t -= dt; if (c.t <= 0) { scene.remove(c.mesh); CANS.splice(i, 1); } }
@@ -988,6 +988,7 @@ onMsg("pp", (list) => { if (B.mp !== "guest") return; for (const [slot, pk] of l
 onMsg("snap", (o) => { if (B.mp === "guest") applySnap(o); });
 onMsg("util", (a, from) => { if (B.mp === "guest") useUtil(a[0], V3(a[1], 0, a[2]), a[3] || undefined, relSide(a[4]), true); else if (B.mp === "host" && slotOf(from) > 0) netIn.util(a, keyOf(slotOf(from))); });
 for (const k of ["dep", "doc", "order", "act"]) onMsg(k, (a, from) => { if (B.mp === "host" && slotOf(from) > 0) netIn[k](a, keyOf(slotOf(from))); });
+onMsg("fire2", (a) => { if (B.mp !== "guest" || !Array.isArray(a)) return; addFire(+a[0] || 0, +a[1] || 0, Math.min(+a[2] || 0, 12), Math.min(+a[3] || 0, 20), Math.min(+a[4] || 0, 600), relSide(a[5] === "you" ? "you" : "foe"), true); });   // a fire from the host's side of the battle: a ghost here, drawn and burning this pilot if it is the other side's
 onMsg("kdome", (a, from) => { const rp = RPS.get(slotOf(from)); if (B.mp === "host" && rp && Array.isArray(a)) addDome(rp.side, +a[0] || 0, +a[1] || 0, 6, 10); });   // a guest's field shield goes up on the host, who keeps the battle
 onMsg("hit", (a, from) => { const slot = slotOf(from), rp = RPS.get(slot); if (B.mp === "host" && rp) netIn.hit(a, keyOf(slot), V3(rp.pos.x * U, rp.pos.y * U, rp.pos.z * U)); });
 
@@ -1037,6 +1038,6 @@ try { const aj = JSON.parse(sessionStorage.getItem("ab-autojoin") || "null"); if
   const go = (n) => pickMap(kind.value + "-" + (String(n).replace(/\D/g, "").slice(0, 6) || "1") + "-" + size.value + role.value);
   $("map-go").onclick = () => go(num.value || "1"); $("map-new").onclick = () => go(1000 + Math.floor(Math.random() * 9000));
   $("map-now").textContent = "You are on " + MAPNAME + ", and you " + (OP.atk === "you" ? "attack" : "defend") + ". " + SECN + " sectors: " + POINTS.map((p) => p.name + " " + p.label.toLowerCase() + (p.roof ? " (roofed)" : "")).join(", ") + "."; }
-window.__mf = { addFire, useKit, HANDLING, cone, income, lastStep, GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+window.__mf = { FIRES, addFire, useKit, HANDLING, cone, income, lastStep, GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);
