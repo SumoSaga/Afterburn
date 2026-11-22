@@ -200,6 +200,17 @@
   #m-main table { border-collapse: collapse; font-size: 13px; } #m-main td { padding: 5px 12px 5px 0; vertical-align: top; border-top: 1px solid #3a2e22; color: #cdbb98; } #m-main td:first-child { color: #f2c46a; white-space: nowrap; }
   @media (max-width: 820px) { #m-side { width: 190px; padding-left: 20px; } #m-side h1 { font-size: 28px; } #m-nav button { font-size: 18px; } #m-main { padding: 30px 16px; } .tiles { grid-template-columns: 1fr; } }
 
+  /* picture cards on the Pilot and Titan tabs */
+  .gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+  #m-main .gc { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 0 0 8px; text-align: left; background: linear-gradient(180deg, #23282d, #15181b); border: 1px solid rgba(255,255,255,.13); border-bottom: 3px solid rgba(255,255,255,.12); overflow: hidden; transition: transform .12s, border-color .12s; }
+  #m-main .gc:hover { transform: translateY(-2px); border-color: rgba(246,200,104,.5); } #m-main .gc.on { border-color: rgba(242,160,70,.75); border-bottom-color: #f2a046; background: linear-gradient(180deg, #3b2c1a, #1b1510); }
+  .gi { display: flex; align-items: center; justify-content: center; height: 74px; background: radial-gradient(ellipse at 50% 60%, rgba(143,224,240,.12), rgba(0,0,0,.35) 70%); border-bottom: 1px solid rgba(255,255,255,.08); }
+  .gi img { max-width: 92%; max-height: 70px; image-rendering: pixelated; filter: drop-shadow(0 3px 4px rgba(0,0,0,.6)); } #m-main .gc.on .gi { background: radial-gradient(ellipse at 50% 60%, rgba(246,200,104,.22), rgba(0,0,0,.35) 70%); }
+  #m-main .gc.sm .gi img { max-height: 60px; } #m-main .gc b { padding: 0 9px; font-size: 13px; color: #fff; font-weight: 600; letter-spacing: .03em; } #m-main .gc.on b { color: #f6c868; }
+  .mr { display: grid; grid-template-columns: auto 1fr; gap: 2px 6px; padding: 0 9px; font-style: normal; align-items: center; } .mr em { font-style: normal; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #8a8170; }
+  .mr s { display: flex; gap: 2px; text-decoration: none; } .mr u { width: 12px; height: 5px; background: rgba(255,255,255,.12); text-decoration: none; } .mr u.on { background: #8fe0f0; } #m-main .gc.on .mr u.on { background: #f6c868; }
+  #m-main .tsl button { display: grid; grid-template-columns: 74px 1fr; column-gap: 10px; align-items: center; } #m-main .tsl button .ti { grid-row: span 2; height: 64px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 55%, rgba(143,224,240,.14), rgba(0,0,0,.4) 70%); }
+  #m-main .tsl button.on .ti { background: radial-gradient(circle at 50% 55%, rgba(246,200,104,.26), rgba(0,0,0,.4) 70%); } #m-main .tsl button .ti img { max-width: 70px; max-height: 60px; image-rendering: pixelated; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   /* the Titan tab */
   .tch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   #m-main .tch button { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: rgba(20,23,26,.82); border: 1px solid rgba(255,255,255,.14); border-bottom: 3px solid transparent; }
@@ -265,7 +276,7 @@
   .roles { display: flex; gap: 22px; margin: 10px 0 4px; } .roles span { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #b4ac9c; } .roles b { font-weight: 600; }
   .roles i { font-style: normal; letter-spacing: 2px; font-size: 15px; color: #f2a046; } .roles span + span i { color: #7fe3f5; } .roles s { text-decoration: none; color: rgba(255,255,255,.14); } .roles.big i { font-size: 20px; }
   .facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; } .facts span { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); padding: 3px 9px; font-size: 14px; color: #fff; } .facts em { font-style: normal; color: #b4ac9c; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; margin-right: 6px; }
-  #m-main.tab-group { max-width: 1180px; } #m-main.tab-editor { max-width: 1000px; }
+  #m-main.tab-group { max-width: 1180px; } #m-main.tab-pilot, #m-main.tab-titan { max-width: 690px; } #m-main.tab-editor { max-width: 1000px; }
   .ed-wrap { display: flex; gap: 14px; margin-top: 12px; align-items: flex-start; } #ed-tools { width: 210px; flex: none; display: flex; flex-direction: column; gap: 3px; max-height: 690px; overflow-y: auto; padding-right: 4px; } #ed-tools h3 { margin: 10px 0 2px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #f2a046; } #ed-tools h3:first-child { margin-top: 0; }
   #m-main #ed-tools button { text-align: left; font-size: 13px; padding: 4px 8px; } #ed-cv { border: 1px solid rgba(255,255,255,.25); cursor: crosshair; max-width: 100%; height: auto; background: #222; }
   .ed-card { display: inline-flex; } .ed-card button { font-size: 13px; padding: 4px 8px; } .ed-card.on button:first-child { background: rgba(242,160,70,.3); border-color: #f2a046; } .ed-card button + button { border-left: 0; }
@@ -289,9 +300,9 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "58";
+  window.AB_BUILD = "59";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
-    ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
+    ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "icons", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
 </script>
 </head>
@@ -352,7 +363,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 58 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 59 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -456,15 +467,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=58"></script>
-<script src="punch/punch-lab.js?v=58"></script>
-<script src="cb/genbuild.js?v=58"></script>
-<script src="cb/machines.js?v=58"></script>
-<script src="cb/soldiers.js?v=58"></script>
-<script src="cb/cbmechdata.js?v=58"></script>
-<script src="cb/cbmech.js?v=58"></script>
-<script src="cb/cbnature.js?v=58"></script>
-<script src="cb/cbweather.js?v=58"></script>
+<script src="punch/punch.js?v=59"></script>
+<script src="punch/punch-lab.js?v=59"></script>
+<script src="cb/genbuild.js?v=59"></script>
+<script src="cb/machines.js?v=59"></script>
+<script src="cb/soldiers.js?v=59"></script>
+<script src="cb/cbmechdata.js?v=59"></script>
+<script src="cb/cbmech.js?v=59"></script>
+<script src="cb/cbnature.js?v=59"></script>
+<script src="cb/cbweather.js?v=59"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>

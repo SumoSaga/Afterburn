@@ -165,6 +165,7 @@ export function makeRig(team, o = {}) {
     hatch.position.set(0, ty, fz - g * .75); build(hatch, [B(hw, hh, g * .5, 0, -hh / 2, 0, "c" + Math.max(0, MB.palette.length - 3)), B(hw * .8, .1, g * .6, 0, -.2, -.02, "accent"), B(hw * .45, .07, g * .7, 0, -hh + .2, -.02, "glow")], S2, glowMat); }
   /* The rest of the loadout on the body, so a pilot can read it in half a second: the ordnance on the left shoulder,
      the defensive kit on the left forearm (or the back, or the legs), each lit in its own colour. */
+  const MODS = {};   // where each hardpoint module sits, so the garage can point the camera at it and draw its picture
   if (o.lo) { const T0 = MB.parts.torso, g0 = MB.g, xs = T0.map((r) => r[0] * g0), ys = T0.map((r) => (r[1] + r[3]) * g0), zs = T0.map((r) => r[2] * g0), top = Math.max(...ys), back = Math.max(...zs), left = Math.min(...xs);
     const lit = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) }), LIT = { arc: lit(.6, 2.2, 3.4), fire: lit(3.4, 1.4, .4), red: lit(3.4, .5, .3), cyan: lit(.5, 2.6, 3.2), violet: lit(1.8, 1.1, 3.2), white: lit(2.6, 2.6, 2.4) };
     const QM = { cluster: ["fire", [B(.8, .62, .9, 0, 0, 0, "plate2"), ...[-.2, .2].flatMap((x) => [-.15, .15].map((y) => C(.14, .3, x, y + .31, -.5, "dark", "z", 8))), B(.82, .08, .92, 0, .62, 0, "accent")]],
@@ -176,7 +177,7 @@ export function makeRig(team, o = {}) {
       gas: ["fire", [B(.7, .12, .5, 0, 0, 0, "dark"), C(.2, .72, -.17, .48, 0, "accent", "y", 10), C(.2, .72, .17, .48, 0, "accent", "y", 10), C(.21, .06, -.17, .7, 0, "dark", "y", 10), C(.21, .06, .17, .7, 0, "dark", "y", 10)]],
       power: ["white", [B(.5, .5, .6, 0, 0, 0, "plate2"), C(.3, .8, 0, .26, -.6, "dark", "z", 12), C(.34, .2, 0, .26, -.98, "steel", "z", 12), [.18, .18, .04, 0, .26, -1.1, "glow"]]],
       smokeb: ["white", [B(.75, .4, .6, 0, 0, 0, "plate2"), ...[-.24, 0, .24].flatMap((x) => [-.12, .14].map((z) => C(.09, .5, x, .45, z, "dark", "y", 8, .09, [-.35, 0])))]] }[o.lo.q];
-    if (QM) { const j = new THREE.Object3D(); j.position.set(-SH_X - .05, SH_Y + .42, .05); torso.add(j); build(j, QM[1], S, LIT[QM[0]]); }
+    if (QM) { const j = new THREE.Object3D(); j.position.set(-SH_X - .05, SH_Y + .42, .05); torso.add(j); build(j, QM[1], S, LIT[QM[0]]); MODS.q = j; }
     const EM = { buckler: ["arm", "arc", [B(.12, 1.05, .82, -.42, -A2 * .55, 0, "plate"), [.04, 1.05, .04, -.49, -A2 * .55, -.4, "glow"], [.04, 1.05, .04, -.49, -A2 * .55, .4, "glow"]]],
       vortex: ["arm", "arc", [C(.5, .1, -.44, -A2 * .55, 0, "steel", "x", 14), C(.52, .05, -.5, -A2 * .55, 0, "glow", "x", 14), C(.14, .08, -.53, -A2 * .55, 0, "glow", "x", 8)]],
       pwall: ["arm", "cyan", [B(.34, .56, .56, -.42, -A2 * .55, 0, "frame"), [.06, .4, .06, -.6, -A2 * .55, 0, "glow"], B(.36, .06, .58, -.42, -A2 * .55 + .3, 0, "accent")]],
@@ -186,10 +187,10 @@ export function makeRig(team, o = {}) {
       vtol: ["back", "fire", [C(.26, .7, -.45, -.2, .1, "dark", "y", 10, .2), C(.26, .7, .45, -.2, .1, "dark", "y", 10, .2), [.3, .06, .3, -.45, -.56, .1, "glow"], [.3, .06, .3, .45, -.56, .1, "glow"]]],
       sonar: ["back", "red", [C(.05, 1.8, .3, .9, 0, "dark", "y", 6), C(.3, .06, .3, 1.5, 0, "steel", "y", 10), [.1, .1, .1, .3, 1.85, 0, "glow"]]],
       anchor: ["legs", "white", [B(.14, 1.0, .14, 0, -.7, .38, "steel", -.35), B(.2, .2, .2, 0, -1.2, .58, "dark"), [.05, .3, .05, 0, -.5, .45, "glow"]]] }[o.lo.e];
-    if (EM) { const at = EM[0], mat = LIT[EM[1]], put2 = (par, x, y, z) => { const j = new THREE.Object3D(); j.position.set(x, y, z); par.add(j); build(j, EM[2], S, mat); };
+    if (EM) { const at = EM[0], mat = LIT[EM[1]], put2 = (par, x, y, z) => { const j = new THREE.Object3D(); j.position.set(x, y, z); par.add(j); build(j, EM[2], S, mat); if (!MODS.e) MODS.e = j; };
       if (at === "arm") put2(armL.fore, 0, 0, 0); else if (at === "gun") put2(gun, 0, 0, 0); else if (at === "back") put2(torso, 0, SH_Y - .2, back + .1); else for (const L of legs) put2(L.shin, 0, 0, 0); }
-    if (o.lo.kit === "coax") { const j = new THREE.Object3D(); j.position.set(SH_X + .05, SH_Y + .42, .1); torso.add(j); build(j, [B(.3, .3, .4, 0, 0, 0, "frame"), C(.06, .6, 0, .15, -.45, "dark", "z", 6), [.05, .05, .03, 0, .15, -.76, "glow"]], S, LIT.white); } }
-  const rig = { root, hips, torso, hatch, muzzle, pod, flash, gun, hold: HOLD, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
+    if (o.lo.kit === "coax") { const j = new THREE.Object3D(); j.position.set(SH_X + .05, SH_Y + .42, .1); torso.add(j); build(j, [B(.3, .3, .4, 0, 0, 0, "frame"), C(.06, .6, 0, .15, -.45, "dark", "z", 6), [.05, .05, .03, 0, .15, -.76, "glow"]], S, LIT.white); MODS.kit = j; } }
+  const rig = { mods: MODS, armL, root, hips, torso, hatch, muzzle, pod, flash, gun, hold: HOLD, phase: Math.random(), aimYaw: 0, aimPitch: 0, low: 0,
     pose(dt, s) {
       const sp = Math.abs(s.speed || 0), sg = (s.speed || 0) < 0 ? -1 : 1, amt = clamp(sp / 1.4, 0, 1), kn = clamp(s.kneel || 0, 0, 1), limp = s.limp ? 1 : 0;
       rig.phase = (rig.phase + sp * dt / 3.6) % 1;

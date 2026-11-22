@@ -112,6 +112,8 @@ function modelRifle(mat) { if (!RM) return null; let src = null; RM.scene.traver
   g.userData = { sightY: .128, mag: magG, bolt, loose, grip: new THREE.Vector3(.004, -.105, .05), fore: new THREE.Vector3(0, -.06, -.27), well: new THREE.Vector3(0, -.19, -.1), top: new THREE.Vector3(.046, .052, .06), muzzle: new THREE.Vector3(0, .028, -.12 - .5 * RSC), magLen: .12 }; return g; }
 // the rifle for a figure to carry: built along +z from the butt of its stock, about 0.75 m long
 export function carriedRifle(mat) { const r = modelRifle(mat); if (!r) return null; const s = .75 / RSC, o = new THREE.Group(); r.rotation.y = Math.PI; r.scale.setScalar(s); r.position.set(0, -.028 * s, (.5 * RSC - .12) * s); o.add(r); return o; }
+// a fresh copy of a gadget the left hand can hold (grenades, kit), for the garage and its pictures
+export function heldProp(k) { if (!HELD[k]) return null; const g = new THREE.Group(); build(g, HELD[k], S, glow, gunMat); return g; }
 export const gunProp = (kind, mat) => (kind === "carbine" && modelRifle(mat)) || (MAKE[kind] || MAKE.carbine)(mat);   // the same guns as the ones in your hands, for standing about in the garage
 const GUNS = {}; for (const k in MAKE) GUNS[k] = (k === "carbine" && modelRifle(gunMat)) || MAKE[k](gunMat);
 for (const k in GUNS) { GUNS[k].visible = false; rig.add(GUNS[k]); }
@@ -162,6 +164,7 @@ const held = { mag: new THREE.Group(), knife: new THREE.Group() }, HELD = { frag
   stim: [C(.014, .11, 0, -.01, -.07, "steel", "z", 8), C(.017, .04, 0, -.01, -.06, "glow", "z", 8), C(.004, .04, 0, -.01, -.145, "steel", "z", 4), B(.03, .012, .012, 0, -.01, .0, "accent")],
   sonar: [C(.05, .012, 0, -.01, -.07, "gun", "y", 8), C(.036, .016, 0, -.01, -.07, "glow", "y", 8), C(.008, .05, 0, .02, -.07, "steel", "y", 4)],
   phase: [B(.06, .02, .08, 0, .02, .04, "gun"), B(.04, .008, .05, 0, .034, .04, "glow"), B(.064, .024, .012, 0, .02, .0, "accent")],
+  shield: [C(.05, .03, 0, -.01, -.07, "gun", "y", 10), C(.042, .012, 0, .008, -.07, "glow", "y", 10), C(.012, .03, 0, .028, -.07, "steel", "y", 6), B(.07, .012, .02, 0, -.02, -.07, "accent")],
   decoy: [C(.04, .02, 0, -.01, -.07, "gun2", "y", 6), C(.03, .008, 0, .004, -.07, "glow", "y", 6), B(.006, .05, .006, 0, .03, -.07, "glow")] };
 for (const k in HELD) { held[k] = new THREE.Group(); build(held[k], HELD[k], S, glow, gunMat); }
 build(held.mag, [B(.03, .12, .052, 0, -.02, -.05, "mag", .5)], S, glow, gunMat);

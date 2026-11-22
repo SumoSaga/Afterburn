@@ -3,7 +3,8 @@
    Everything here is in metres; the engine draws at U units to the metre. */
 import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, cam, gunScene, gunMat, makeRTs, render, BOXES, hitsBox, free, freeG, boxesNear, groundH, WORLD, rayBox, rayWorld,
   post, flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat, PLAN, MAPKEY, MAPNAME, SALT, retryField, setMap as pickMap } from "./engine.js";
-import { VM } from "./hands.js";
+import { VM, gunProp, heldProp } from "./hands.js";
+import { iconOf, iconLater, signOf } from "./icons.js";
 import { GARAGE, GARAGE_FOV } from "./garage.js";
 import { makeRig, TITAN, cockpitRifle } from "./titan.js";
 import "./editor.js";
@@ -198,6 +199,17 @@ const dmgAt = (w, d) => (P.campDmg || 1) * (w.max && d > w.max ? 0 : lerp(w.dmg[
 /* The Pilot tab's two bars and the real numbers behind them. Shots are worked out from the gun's own figures. */
 const TROOP_HP = 84, HEAVY_HP = 280, bar5 = (n) => "<i>" + "&#9632;".repeat(n) + "<s>" + "&#9632;".repeat(5 - n) + "</s></i>";
 function roleBars(r, big) { if (!r) return ""; return `<div class="roles${big ? " big" : ""}"><span><b>Against pilots</b>${bar5(Math.round(r[0]))}</span><span><b>Against troops</b>${bar5(Math.round(r[1]))}</span></div>`; }
+/* picture cards for the Pilot tab: the item itself, its name, and two small bars for how it does against pilots and troops */
+const BLANK = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+const ANTIG = { mag: "maglauncher", arc: "arccannon", rail: "charge", seeker: "seeker" };
+const gunIcon = (k) => iconOf("g:" + k, () => gunProp(k, gunMat)), itemIcon = (k) => iconOf("h:" + k, () => heldProp(k), { w: 84, h: 72, yaw: -.7, pitch: .55 });
+const pips = (n) => `<s>${[1, 2, 3, 4, 5].map((i) => `<u class="${i <= Math.round(n) ? "on" : ""}"></u>`).join("")}</s>`;
+const miniRole = (r) => (r ? `<i class="mr"><em>Pilots</em>${pips(r[0])}<em>Troops</em>${pips(r[1])}</i>` : "");
+const gc = (attr, k, name, img, on, r, small) => `<button data-${attr}="${k}" data-gfocus="${attr}" class="gc ${on ? "on" : ""}${small ? " sm" : ""}"><span class="gi">${img ? `<img src="${img}" draggable="false">` : ""}</span><b>${name}</b>${miniRole(r)}</button>`;
+// the Titan tab's pictures: the gun or the module as it sits on your mech, and drawn signs for the cores and kits
+const hpKey = (slot, k) => "tp:" + BYF[LOAD.side][LOAD.chassis] + slot + k;
+function hpIcon(slot, k) { if (slot === "x" || slot === "kit") return signOf(k, slot === "x" ? "#f6c868" : "#8fe0f0"); const cls = LOAD.chassis, mech = BYF[LOAD.side][cls];
+  return iconLater(hpKey(slot, k), () => { const r = makeRig("you", { cls, mech, lo: fixLoadout(cls, { ...LOAD.tlo[cls], [slot]: k }), accent: LOAD.paint }), o = slot === "prim" ? r.gun : r.mods[slot]; if (!o) return null; o.removeFromParent(); o.position.set(0, 0, 0); o.rotation.set(0, 0, 0); return o; }, slot === "prim" ? {} : { w: 84, h: 72, yaw: -.7, pitch: .35 }); }
 function gunCard(w) { if (!w) return ""; const near = w.dmg[0] * (w.pellets || 1), far = w.dmg[1] * (w.pellets || 1), sp = (n) => Math.max(1, Math.ceil(HP / n)), st = (n) => Math.max(1, Math.ceil(TROOP_HP / (n * (w.tro || 1)))), rpm = Math.round(60 / w.cd);
   const tro = w.tro || 1, n1 = (hp, d) => Math.max(1, Math.ceil(hp / (d * tro))), tline = (a, b, hp) => { const s = n1(hp, a), f = n1(hp, b), h = w.pellets ? 0 : n1(hp, w.dmg[0] * w.hs); return s + (f !== s ? " to " + f : "") + " body" + (h && h < s ? " · " + h + " head" : ""); };
   const lob = !!w.lob, facts = lob ? [["Rate", rpm + " a minute"], ["Rounds", w.mag], ["Reload", w.reload + " s"], ["Troopers", "clears a group where it lands"], ["Pilots", "65 close to the blast"]] : [["Damage", w.pellets ? w.pellets + " × " + w.dmg[0] : w.dmg[0] + (w.dmg[1] !== w.dmg[0] ? " to " + w.dmg[1] : "")], ["Rate", rpm + " a minute"], ["Rounds", w.mag], ["Reload", w.reload + " s"], ["Pilot", sp(near) + (sp(far) !== sp(near) ? " to " + sp(far) : "") + (sp(near) === 1 ? " shot" : " shots")], ["Trooper", tline(near, far, TROOP_HP)], ["Heavy", tline(near, far, HEAVY_HP)]];
@@ -820,7 +832,7 @@ function collList() { const f = DF(), U2 = FACTIONS[f].units; let l = [...Object
 /* the Titan tab: a chassis, its two signature builds, a pick for each of the four hardpoints and the chassis kit, and the
    loadout as a code to share */
 function titanPane(btn) { const cls = LOAD.chassis, C = CHASSIS[cls], lo = LOAD.tlo[cls], m = mechOf(LOAD.side), bn = buildOf(cls, lo);
-  const pick = (key, T, ks) => `<div class="tsl">${ks.map((k) => `<button data-tslot="${key}:${k}" class="${lo[key] === k ? "on" : ""}"><b>${T[k].name}</b><span>${T[k].desc}</span></button>`).join("")}</div>`;
+  const pick = (key, T, ks) => `<div class="tsl">${ks.map((k) => `<button data-tslot="${key}:${k}" class="${lo[key] === k ? "on" : ""}"><span class="ti"><img src="${hpIcon(key, k) || BLANK}" data-ik="${hpKey(key, k)}" draggable="false"></span><b>${T[k].name}</b><span>${T[k].desc}</span></button>`).join("")}</div>`;
   return `<section data-pane="titan"><h2>Chassis</h2><div class="tch">${Object.entries(CHASSIS).map(([k, c]) => `<button data-ch="${k}" class="${cls === k ? "on" : ""}"><b>${c.short}</b><span>${c.name.split(" / ")[1]} · ${mechOf(LOAD.side, k).name}</span><em>${c.hull / 2500} bars · ${c.dash} ${c.dash > 1 ? "dashes" : "dash"} · ${c.speed} m/s</em><i>${c.traitName}</i></button>`).join("")}</div>
     <p class="note"><b>${C.traitName}.</b> ${C.traitDesc} ${C.role}</p>
     <h2>${m.name} <span class="pts">${bn === "Custom" ? "Your own build" : bn + " build"} · ${m.fac}</span></h2><div class="row">${BUILDS[cls].map((b, i) => btn("tbuild", i, b.name, bn === b.name)).join("")}</div><p class="note">A signature build fills every slot at once. Change any slot after and the build is your own. Each chassis keeps its own loadout.</p>
@@ -837,11 +849,11 @@ function buildSetup() { const U2 = FACTIONS[LOAD.side].units, list = LOAD.list[L
   const dkSlots = deckSlots(), dkN = dkSlots.filter(Boolean).length, dkAvg = dkN ? Math.round(dkSlots.filter(Boolean).reduce((t, c) => t + c.d.cost, 0) / dkN) : 0;
   $("setup").innerHTML = `<section data-pane="faction"><h2>Your faction</h2><div class="tiles">${Object.entries(FACTIONS).map(([k, f]) => `<button data-side="${k}" class="tile ${LOAD.side === k ? "on" : ""}"><b>${f.name}</b><span>${f.blurb}</span></button>`).join("")}</div><p class="note">Each faction has its own battlegroup, kept separately. Alone, the other faction is run by the machine. In a match the host\'s side plays the host\'s faction and the other side plays the other one, so keep a battlegroup ready for both.</p></section>
     <section data-pane="pilot"><p class="note">Everything here leans one of two ways: putting down enemy pilots, or clearing and holding off the troops who take points. Mix them to cover each other, or double down on one.</p>
-      <h2>Primary weapon</h2><div class="row">${Object.entries(PW).filter(([, w]) => !w.side).map(([k, w]) => btn("wpn", k, w.name, LOAD.weapon === k)).join("")}</div>${gunCard(PW[LOAD.weapon] && !PW[LOAD.weapon].side ? PW[LOAD.weapon] : PW.carbine)}<p class="note">Hold the right mouse button to aim down the sights: you walk at 3.2 metres a second and the gun tightens up. Key 1.</p>
-      <h2>Sidearm</h2><div class="row">${Object.entries(PW).filter(([, w]) => w.side).map(([k, w]) => btn("sidearm", k, w.name, sideK() === k)).join("")}</div>${gunCard(PW[sideK()])}<p class="note">Key 3.</p>
-      <h2>Ordnance</h2><div class="row">${Object.entries(ORD).map(([k, d]) => btn("ord", k, d[0], LOAD.ord === k)).join("")}</div>${roleBars(OROLE[LOAD.ord])}<p class="note">${ORD[LOAD.ord][1]} One at a time, 18 seconds to come back. Key X.</p>
-      <h2>Tactical kit</h2><div class="row">${Object.entries(KITS).map(([k, d]) => btn("kit", k, d[0], LOAD.kit === k)).join("")}</div>${roleBars(KROLE[LOAD.kit])}<p class="note">${KITS[LOAD.kit][1]}</p>
-      <h2>Against Titans</h2><div class="row">${Object.entries(ANTI).map(([k, d]) => btn("anti", k, d[0], LOAD.anti === k)).join("")}</div><p class="note">${ANTI[LOAD.anti][1]} Key 2.</p>
+      <h2>Primary weapon <span class="pts">Key 1</span></h2><div class="gcards">${Object.entries(PW).filter(([, w]) => !w.side).map(([k, w]) => gc("wpn", k, w.name, gunIcon(k), LOAD.weapon === k, w.role)).join("")}</div>${gunCard(PW[LOAD.weapon] && !PW[LOAD.weapon].side ? PW[LOAD.weapon] : PW.carbine)}<p class="note">Hold the right mouse button to aim down the sights: you walk at 3.2 metres a second and the gun tightens up.</p>
+      <h2>Sidearm <span class="pts">Key 3</span></h2><div class="gcards">${Object.entries(PW).filter(([, w]) => w.side).map(([k, w]) => gc("sidearm", k, w.name, gunIcon(k), sideK() === k, w.role)).join("")}</div>${gunCard(PW[sideK()])}
+      <h2>Ordnance <span class="pts">Key X</span></h2><div class="gcards">${Object.entries(ORD).map(([k, d]) => gc("ord", k, d[0], itemIcon(k), LOAD.ord === k, OROLE[k], true)).join("")}</div><p class="note">${ORD[LOAD.ord][1]} One at a time, 18 seconds to come back.</p>
+      <h2>Tactical kit <span class="pts">Key Q</span></h2><div class="gcards">${Object.entries(KITS).map(([k, d]) => gc("kit", k, d[0], itemIcon(k), LOAD.kit === k, KROLE[k], true)).join("")}</div><p class="note">${KITS[LOAD.kit][1]}</p>
+      <h2>Against Titans <span class="pts">Key 2</span></h2><div class="gcards">${Object.entries(ANTI).map(([k, d]) => gc("anti", k, d[0], gunIcon(ANTIG[k] || "charge"), LOAD.anti === k)).join("")}</div><p class="note">${ANTI[LOAD.anti][1]}</p>
       <h2>Your loadout</h2>${roleBars(loadRole(), true)}<h2>Also carried</h2><p class="note">A knife (F). It does 65, or finishes it outright from behind or when you are moving faster than 11 metres a second. You have 125 health, and it starts coming back 4.5 seconds after you were last hit.</p></section>
     ${titanPane(btn)}
     <section data-pane="group" class="dk"><div class="dk-facs">${Object.entries(FACTIONS).map(([k, f]) => `<button data-dkf="${k}" class="${DF() === k ? "on" : ""}"><b>${f.name}</b><span>${LOAD.side === k ? "You play this side" : "Deck for when you play this side"}</span></button>`).join("")}</div>
@@ -863,7 +875,10 @@ $("setup").addEventListener("click", (e) => { if (DPOP && !e.target.closest(".dk
   else if (d.ddel != null) { const i = +d.ddel; if (DELARM === i) { libOf(DF()).splice(i, 1); DELARM = -1; } else DELARM = i; }
   else 
   if (d.tier) { const [id, br] = d.tier.split(":"); buyTier(id, br); } else if (d.wear) { const [id, br] = d.wear.split(":"); pickBranch(id, br); } else if (d.in) cardIn(d.in, -1); else if (d.out) cardOut(d.out); else if (d.side) { LOAD.side = d.side; DKF = null; } else if (d.dkf) DKF = d.dkf === LOAD.side ? null : d.dkf; else if (d.dfilt) DFILT = d.dfilt; else if (d.dsort) DSORT = d.dsort; else if (d.wpn) LOAD.weapon = d.wpn; else if (d.sidearm) LOAD.sidearm = d.sidearm; else if (d.kit) LOAD.kit = d.kit; else if (d.anti) LOAD.anti = d.anti; else if (d.ord) LOAD.ord = d.ord; else if (d.ch) LOAD.chassis = d.ch; else if (d.paint) LOAD.paint = d.paint; else if (d.doc) LOAD.doctrine = d.doc; else if (d.pas) LOAD.passive = d.pas; else if (d.tag) { const t = LOAD.tags[DF()] || (LOAD.tags[DF()] = {}); t[d.tag] = t[d.tag] === "a" ? "b" : t[d.tag] === "b" ? "" : "a"; }
+  { const s = d.wpn ? "wpn" : d.sidearm ? "sidearm" : d.ord ? "ord" : d.kit ? "kit" : d.anti ? "anti" : d.tslot ? d.tslot.split(":")[0] : d.tbuild != null || d.ch ? "x" : ""; if (s) { snd("selector", { pitch: .8 + Math.random() * .3 }); if (d.wpn || d.sidearm || d.anti || d.tslot) snd("reload", { gain: .5, pitch: 1.2 }); GARAGE.pulse(s); } }
   LOAD.passive = pasOf(LOAD.side); saveLoad(); buildSetup(); });
+{ let ft = 0; $("setup").addEventListener("mouseover", (e) => { const b = e.target.closest && e.target.closest("[data-gfocus], [data-tslot]"); if (!b) return; clearTimeout(ft); GARAGE.focus(b.dataset.gfocus || b.dataset.tslot.split(":")[0]); });
+  $("setup").addEventListener("mouseout", (e) => { const b = e.target.closest && e.target.closest("[data-gfocus], [data-tslot]"); if (!b || (e.relatedTarget && b.contains(e.relatedTarget))) return; clearTimeout(ft); ft = setTimeout(() => GARAGE.focus(null), 900); }); }
 $("setup").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "dk-name") { e.preventDefault(); const b = $("setup").querySelector("[data-dsave]"); if (b) b.click(); } else if (e.key === "Escape" && DPOP) { DPOP = ""; buildSetup(); } });
 // dragging cards between the collection and the deck
 { const S = $("setup"); let dragId = null;
