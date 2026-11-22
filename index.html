@@ -72,6 +72,19 @@
   #capbox { position: absolute; left: 50%; top: 142px; transform: translateX(-50%); display: none; padding: 8px 16px 8px 10px; background: rgba(10,12,15,.78); border-top: 2px solid #d9d2c2; text-shadow: 0 1px 2px #000; white-space: nowrap; } #capbox.you { border-top-color: #7fe3f5; } #capbox.foe { border-top-color: #ff6a4a; }
   #capbox > b { display: inline-block; vertical-align: top; width: 46px; height: 46px; line-height: 46px; text-align: center; font-size: 30px; color: #101214; background: #d9d2c2; margin-right: 12px; } #capbox.you > b { background: #7fe3f5; } #capbox.foe > b { background: #ff6a4a; } #capbox.con > b { animation: ckb .5s steps(2) infinite; }
   #capbox span { display: inline-block; vertical-align: top; } #capbox strong { display: block; font-size: 17px; letter-spacing: .14em; text-transform: uppercase; color: #fff; line-height: 1.1; } #capbox i { width: 260px; height: 10px; margin: 4px 0; } #capbox em { font-style: normal; font-size: 12px; color: #c9c1b0; }
+  /* Titan health bars: shield over hull, hull split into bars, a pale chunk for what was just lost */
+  #tbars { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+  .tbf { position: absolute; left: 0; top: 0; width: 170px; transform-origin: 50% 100%; pointer-events: none; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+  .tbf b { display: block; font-size: 11px; letter-spacing: .14em; color: #f4f1e8; font-weight: 600; margin-bottom: 2px; white-space: nowrap; } .tbf.foe b { color: #ffb19a; }
+  .tbf em { display: none; font-style: normal; }
+  .tb-sh, .tb-hu { position: relative; background: rgba(6,8,10,.72); box-shadow: 0 0 0 1px rgba(0,0,0,.85), 0 0 0 2px rgba(255,255,255,.14); overflow: hidden; }
+  .tb-sh { height: 5px; margin-bottom: 3px; } .tb-sh.empty { opacity: .3; } .tb-hu { height: 11px; }
+  .tb-sh i, .tb-hu i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; } .tbf i.lag { background: #ffe3a0; } .tb-sh i.fill { background: #7fe3f5; box-shadow: 0 0 8px rgba(127,227,245,.8); }
+  .tb-hu i.fill { background: linear-gradient(#ffffff, #d9d4c8); } .tbf.foe .tb-hu i.fill { background: linear-gradient(#ff7a52, #e2401e); } .tbf.foe .tb-sh i.fill { background: #8fd2ff; }
+  .tb-hu s { position: absolute; inset: 0; text-decoration: none; background-image: linear-gradient(90deg, transparent calc(100% - 3px), rgba(6,8,10,.95) calc(100% - 3px)); background-repeat: repeat-x; }
+  .tbf.doom .tb-hu i.fill { background: #ff2a1a; animation: tbblink .6s steps(2) infinite; } .tbf.doom b { color: #ff6a4a; } @keyframes tbblink { 50% { opacity: .45; } }
+  #mybar { left: 50%; top: auto; bottom: 19.5%; width: min(560px, 42vw); transform: translateX(-50%); display: none; z-index: 6; }
+  #mybar b { font-size: 13px; } #mybar .tb-sh { height: 10px; margin-bottom: 4px; } #mybar .tb-hu { height: 22px; } #mybar em { display: block; margin-top: 4px; font-size: 12px; letter-spacing: .12em; color: #cfe8ee; text-align: right; }
   #shfill { background: #7fe3f5; } #foefill { background: #ff5a3a; } #meterfill { width: 0; }
   #shrow { display: none; margin-top: 6px; }
   #state { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); color: #fff; letter-spacing: .22em; font-size: 16px; white-space: nowrap; text-shadow: 0 0 3px #000, 0 1px 3px #000; } #state:not(:empty) { padding: 3px 14px; background: rgba(10,12,15,.55); border-bottom: 2px solid #7fe3f5; }
@@ -246,7 +259,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "53";
+  window.AB_BUILD = "54";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -280,6 +293,7 @@
   <div id="cross"><i></i><i></i><i></i><i></i></div>
   <div id="state"></div>
   <div id="tl" class="hudp"><div id="kills"></div><div class="chips"><span>Command Points<b id="h-cp">0</b></span><span>Squads out<b id="h-sup">0</b></span><span class="dim" id="timer"></span></div></div>
+  <div id="tbars"></div><div id="mybar" class="tbf you"></div>
   <div id="foe" class="box"><div class="lab">Opposition Titan</div><div class="bar"><div id="foefill"></div></div></div>
   <div id="tr">Esc settings &nbsp;·&nbsp; P tuning &nbsp;·&nbsp; T restart</div>
   <div id="bl" class="hudp"><div class="vrow"><span class="lab" id="lab1">Pilot</span><b id="h-hp">100</b></div><div class="bar hp" id="h-hpbar"><div id="hpfill"></div></div>
@@ -308,7 +322,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 53 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 54 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -412,15 +426,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=53"></script>
-<script src="punch/punch-lab.js?v=53"></script>
-<script src="cb/genbuild.js?v=53"></script>
-<script src="cb/machines.js?v=53"></script>
-<script src="cb/soldiers.js?v=53"></script>
-<script src="cb/cbmechdata.js?v=53"></script>
-<script src="cb/cbmech.js?v=53"></script>
-<script src="cb/cbnature.js?v=53"></script>
-<script src="cb/cbweather.js?v=53"></script>
+<script src="punch/punch.js?v=54"></script>
+<script src="punch/punch-lab.js?v=54"></script>
+<script src="cb/genbuild.js?v=54"></script>
+<script src="cb/machines.js?v=54"></script>
+<script src="cb/soldiers.js?v=54"></script>
+<script src="cb/cbmechdata.js?v=54"></script>
+<script src="cb/cbmech.js?v=54"></script>
+<script src="cb/cbnature.js?v=54"></script>
+<script src="cb/cbweather.js?v=54"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>

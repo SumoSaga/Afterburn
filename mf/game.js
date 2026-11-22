@@ -827,7 +827,7 @@ function cockpit(dt) {
   el["ck-strip"].style.transform = `translateX(${-((((-P.yaw * 180 / Math.PI) % 360) + 360) % 360 + 360) * 4}px)`;
   hudT -= dt; if (hudT > 0) return; hudT = .08;
   aimRay(0); const rng = rayWorld(_o, _d, 300); el["ck-rng"].textContent = rng >= 300 ? "RNG ---" : "RNG " + Math.round(rng) + " M";
-  el["ck-ammo"].textContent = t.reload > 0 ? "--" : t.ammo; el["ck-ammoarc"].setAttribute("stroke-dasharray", (t.reload > 0 ? (1 - t.reload / 2.2) : t.ammo / MECHS[t.mech].mag) * 88 + " 400"); el["ck-sharc"].setAttribute("stroke-dasharray", t.shield / 150 * 88 + " 400");
+  el["ck-ammo"].textContent = t.reload > 0 ? "--" : t.ammo; el["ck-ammoarc"].setAttribute("stroke-dasharray", (t.reload > 0 ? (1 - t.reload / 2.2) : t.ammo / MECHS[t.mech].mag) * 88 + " 400"); el["ck-sharc"].setAttribute("stroke-dasharray", t.shield / BAR * 88 + " 400");
   const foe = TITANS.find((o) => o.team === "foe"), W = [];
   if (t.hitT < 1) W.push(["red", "INCOMING FIRE"]); if (t.hull < t.hullMax * .35 || t.doomed) W.push(["red", t.doomed ? "DOOMED: B TO GET OUT" : "HULL CRITICAL"]); if (t.core >= 1) W.push(["amber", "CORE READY: X"]); if (foe) W.push(["amber", "HOSTILE TITAN ON FIELD"]); if (DROPS.some((D) => D.team === "foe")) W.push(["amber", "TITANFALL DETECTED"]); if (t.reload > 0) W.push(["", "RELOADING"]);
   const key = W.map((w) => w[1]).join("|"); if (key !== warnKey) { warnKey = key; el["ck-warn"].innerHTML = W.map(([c, x]) => `<div class="${c}">${TRI}${x}</div>`).join(""); }
@@ -902,7 +902,32 @@ function scope(dt) { const k = !P.titan && P.dead <= 0 && !MAP.on && started && 
   SCOPE.style.opacity = a; SCOPE.className = SCOPED[gunKind()]; const t = performance.now() / 1000, s = (P.grounded ? 1 : 2.4) * (Math.hypot(P.vel.x, P.vel.z) > 1 ? 2 : 1); SCOPE.style.transform = `translate(${(Math.sin(t * 1.3) * 3 + Math.sin(t * 2.9) * 1.2) * s}px, ${(Math.cos(t * 1.1) * 2.4 + Math.sin(t * 3.3) * 1) * s}px) scale(${1.15 - .15 * a})`; }
 /* the four ticks sit on the edge of the cone a shot can go in, so the crosshair opens as the gun blooms and closes as it settles */
 function crossGap() { if (P.titan || P.weapon === 1) { el.cross.style.setProperty("--g", "6px"); return; } const c = cone(pw()), px = Math.tan(c) / Math.tan(cam.fov * Math.PI / 360) * innerHeight / 2; el.cross.style.setProperty("--g", clamp(px, 3, 140).toFixed(1) + "px"); }
-function hud(dt) { campWatch(); oob(dt); nav(); scope(dt); crossGap(); el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
+/* ---------- Titan health, the Titanfall way ----------
+   Solid bars: shield on top, hull underneath split into its bars of 2,500. What a hit takes off shows as a pale chunk that
+   holds for a moment and then drains away, so you can see a duel going your way. Your own mech's bars sit low in the middle
+   of the cockpit; every other mech you can see carries its own bars over its head. */
+const TB = { box: $("tbars"), me: $("mybar"), pool: new Map(), v: new THREE.Vector3(), n: 0 };
+const tbInner = `<b></b><div class="tb-sh"><i class="lag"></i><i class="fill"></i></div><div class="tb-hu"><i class="lag"></i><i class="fill"></i><s></s></div><em></em>`;
+function tbRefs(e) { if (!e._r) { e.innerHTML = tbInner; const q = (s) => e.querySelector(s); e._r = { name: q("b"), sh: q(".tb-sh"), shf: q(".tb-sh .fill"), shl: q(".tb-sh .lag"), huf: q(".tb-hu .fill"), hul: q(".tb-hu .lag"), seg: q(".tb-hu s"), em: q("em") }; } return e._r; }
+function tbLag(t, dt) { const hm = t.doomed ? BAR : t.hullMax, h = clamp(t.hull / hm, 0, 1), s = clamp((t.shield || 0) / BAR, 0, 1); if (t._dm !== !!t.doomed) { t._dm = !!t.doomed; t._lh = h; }
+  for (const [k, v] of [["_lh", h], ["_ls", s]]) { if (t[k] == null || v >= t[k]) { t[k] = v; t[k + "t"] = .5; } else { t[k + "t"] -= dt; if (t[k + "t"] <= 0) t[k] = Math.max(v, t[k] - dt * .5); } }
+  return [h, s, hm]; }
+function tbFill(e, t, h, s, hm, label) { const r = tbRefs(e), pc = (x) => (x * 100).toFixed(1) + "%", n = Math.max(1, Math.round(hm / BAR)), key = [label, pc(h), pc(t._lh), pc(s), pc(t._ls), n, t.doomed].join();
+  if (e._k === key) return; e._k = key; r.name.textContent = label; r.huf.style.width = pc(h); r.hul.style.width = pc(t._lh); r.shf.style.width = pc(s); r.shl.style.width = pc(t._ls); r.sh.classList.toggle("empty", s <= 0 && t._ls <= 0);
+  r.seg.style.backgroundSize = (100 / n) + "% 100%"; r.em.textContent = t.doomed ? "DOOMED · " + Math.ceil(t.hull) : Math.ceil(t.hull / BAR) + " OF " + n + " BARS" + (s > 0 ? " · SHIELD " + Math.ceil(t.shield) : ""); e.classList.toggle("doom", !!t.doomed); }
+function tbars(dt) { const on = started && !MAP.on && !P.seq; for (const e of TB.pool.values()) e._used = false;
+  // your own mech
+  const mt = on && P.titan; TB.me.style.display = mt ? "block" : "none"; if (mt) { const [h, s, hm] = tbLag(P.titan, dt); tbFill(TB.me, P.titan, h, s, hm, MECHS[P.titan.mech].name.toUpperCase()); }
+  // every other mech in sight
+  if (on && P.dead <= 0) { const cx = cam.position.x / U, cz = cam.position.z / U; cam.updateMatrixWorld();
+    TITANS.forEach((t, i) => { if (!t.alive || t === P.titan) return; const d = Math.hypot(t.pos.x - cx, t.pos.z - cz); if (d > (P.titan ? 260 : 180)) return; const [h, s, hm] = tbLag(t, dt);
+      TB.v.set(t.pos.x * U, (t.pos.y + t.h + 1.3) * U, t.pos.z * U); if (TB.v.clone().applyMatrix4(cam.matrixWorldInverse).z >= 0) return; TB.v.project(cam); if (Math.abs(TB.v.x) > 1.1 || Math.abs(TB.v.y) > 1.1) return;
+      const key = t._tb || (t._tb = ++TB.n); let e = TB.pool.get(key); if (!e) { e = document.createElement("div"); TB.box.append(e); TB.pool.set(key, e); } e._used = true;
+      e.className = "tbf " + (t.team === "you" ? "you" : "foe") + (t.doomed ? " doom" : ""); e.style.display = "";
+      const sc = clamp(1.2 - d / 220, .62, 1.12); e.style.transform = `translate(${((TB.v.x * .5 + .5) * innerWidth).toFixed(1)}px, ${((-TB.v.y * .5 + .5) * innerHeight).toFixed(1)}px) translate(-50%, -100%) scale(${sc.toFixed(3)})`;
+      tbFill(e, t, h, s, hm, (t.team === "you" ? "" : "ENEMY ") + MECHS[t.mech].name.toUpperCase() + " · " + Math.round(d) + " M"); }); }
+  for (const e of TB.pool.values()) if (!e._used) e.style.display = "none"; }
+function hud(dt) { tbars(dt); campWatch(); oob(dt); nav(); scope(dt); crossGap(); el.cross.className = hitT > 0 ? "hit" : ""; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
   hudT -= dt; if (hudT > 0) return; hudT = .08; const m = P.mine;
   const W = pw(), anti = P.weapon === 1, word = anti ? (P.charge > 0 ? (LOAD.anti === "seeker" ? "locking " + Math.round(P.charge * 100) + "%" : "charging") : P.fireCd > 0 ? "cooling" : "ready") : P.reload > 0 ? "reloading" : "";
   el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp / HP * 100 + "%"; HX.hp.textContent = Math.max(0, Math.ceil(P.hp)); HX.hpbar.classList.toggle("low", P.hp < HP * .35); el.speed.textContent = hs().toFixed(1) + " m/s";
@@ -911,7 +936,7 @@ function hud(dt) { campWatch(); oob(dt); nav(); scope(dt); crossGap(); el.cross.
   slot(HX.ord, ORD[LOAD.ord][0], P.ordCd, 20); slot(HX.kit, KITS[LOAD.kit][0], P.kitCd, 20); { const ks = HX.w.children; for (let i = 0; i < 3; i++) ks[i].className = (P.weapon === 0 ? 0 : P.weapon === 1 ? 1 : 2) === i ? "on" : ""; }
   el.kills.innerHTML = opLine(); HX.cp.textContent = Math.floor(B.supply.you); HX.sup.textContent = squadsOut("you"); el.timer.textContent = "G ping · Tab command";
   el.meterfill.style.width = (m ? 100 : P.meter) + "%"; HX.tm.classList.toggle("full", !m && P.meter >= 100); el.meterlab.textContent = m ? "Titan: standing by" : DROPS.some((D) => D.team === "you") ? "Titan: on its way" : P.meter >= 100 ? "Titan ready: press V" : "Titan " + Math.floor(P.meter) + "%";
-  const foe = TITANS.find((o) => o.team === "foe"); el.foe.style.display = foe ? "block" : "none"; if (foe) el.foefill.style.width = (foe.hull + foe.shield) / 5 + "%"; 
+  const foe = TITANS.find((o) => o.team === "foe"); el.foe.style.display = "none"; 
   const near = !P.seq && m && m.alive && m.doom <= 0 && Math.hypot(m.pos.x - P.pos.x, m.pos.z - P.pos.z) < 7, nearFoe = !near && !P.rodeo && TITANS.some((t) => t.team !== "you" && t.alive && t.doom <= 0 && Math.hypot(t.pos.x - P.pos.x, t.pos.z - P.pos.z) < 5.5 && Math.abs(t.pos.y - P.pos.y) < 9);
   el.state.textContent = !locked && !noLock && !panelOpen ? "CLICK TO TAKE THE MOUSE BACK" : P.rodeo ? "RIDING. SPACE LETS GO" : near ? (P.battery ? "PRESS E TO FIT THE BATTERY" : "PRESS E TO CLIMB IN") : nearFoe ? "PRESS E TO CLIMB ON" : P.battery ? "CARRYING A BATTERY" : P.wall ? "WALL RUN" : P.mantle ? "CLIMB" : P.sliding ? "SLIDE" : ""; }
 
