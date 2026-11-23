@@ -544,8 +544,15 @@ function fireCharge() {
   if (rh.hit) { const head = end.y - rh.rp.pos.y > rh.rp.h * .82; relay("phit", [rh.rp.slot, 125, head ? 1 : 0]); snd("impact_body", { pos: xyz(end) }); snd("hitmarker", { pitch: head ? 1.25 : 1 }); hitT = .12; }
   else if (th.who) { const crit = weakHit(th.who, end, P.pos); hurtTitan(th.who, crit ? 975 : 650, true, 1, P.pos); snd("hitmarker", { gain: .9 }); hitT = .15; atHit(crit); } else if (!gh.who) snd("impact_metal", { pos: xyz(end), gain: 1.4, pitch: .8 }); else if (gh.who) { snd("hitmarker"); hitT = .15; damage(gh.who, gh.who.veh ? 250 : 9999, toU(P.pos), "chest", true); }
 }
+/* a mech gun's real spread: its own base, opened by sustained fire (bloom), by moving and dashing, by being in the air
+   and by scrambled optics, and tightened by Overclock and by being dug in. The cockpit reticle draws this same number. */
+const BLOOM = { auto: .35, tracker: .5, splitter: .18, arcrep: .12, vulcan: .05, flak: .6, rail: 0, howitzer: .8, slag: 0 };
+function spreadMul(t) { const sp = Math.hypot(t.vel.x, t.vel.z); return (1 + (t.bloom || 0)) * (1 + clamp(sp / 12, 0, 1) * .45 + (t.dashing > 0 ? .6 : 0)) * (t.pos.y - groundH(t.pos.x, t.pos.z) > 1.2 ? 1.3 : 1) * (myBlind > 0 ? 1.7 : 1) * (t.ocT > 0 ? .7 : 1) * (t.fortT > 0 ? .6 : 1); }
+function baseSpread(t) { const p = loOf(t).prim; return p === "splitter" ? (P.adsHeld ? .003 : .006) : p === "arcrep" ? .018 : p === "vulcan" ? (t.vmode === "long" ? .003 + .002 * t.spin : .012 + .01 * t.spin) : p === "flak" ? .05 : p === "rail" ? .001 : p === "howitzer" ? .002 : p === "slag" ? 0 : .006; }
+const mechSpread = (t) => baseSpread(t) * spreadMul(t);
+function bloomUp(t) { t.bloom = Math.min(1.6, (t.bloom || 0) + (BLOOM[loOf(t).prim] ?? .3)); }
 function mechBolt(t, dmg, col, shMul, r) {
-  snd("cannon", shMul > 1 ? { pitch: 1.5, gain: .8 } : undefined); P.kick = 1; t.recoil = 1; flashT = .06; P.shake = Math.max(P.shake, .1); aimRay(.006);
+  snd("cannon", shMul > 1 ? { pitch: 1.5, gain: .8 } : undefined); P.kick = 1; t.recoil = 1; flashT = .06; P.shake = Math.max(P.shake, .1); aimRay(mechSpread(t)); bloomUp(t);
   let best = rayWorld(_o, _d, 260); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best;
   if (rh.hit) { relay("phit", [rh.rp.slot, Math.min(999, Math.round(dmg)), 0]); hitT = .12; snd("hitmarker", { gain: .8 }); }   /* a mech round that strikes a pilot does its whole damage to them */
   const end = _o.clone().addScaledVector(_d, Math.max(0, best - .1)), from = muzzleAt(.9, .7, 2.4); tracer(from, toU(end), col, 9000, 1.5); flash(from, col, 3200, .1); if (B.mp) relay("tfx", [0, r2(end.x), r2(end.y), r2(end.z)], false);
@@ -563,23 +570,23 @@ const kickMech = (t, k) => { P.kick = k; t.recoil = 1; flashT = .06; P.shake = M
    Slag: lands a moment later for 1,100 and leaves a fire. Howitzer: 900 with a shove. The rail fires on letting go: see railShot.
    While the Smart Core runs, nothing uses ammo. */
 function fireCannon(t) { const p = loOf(t).prim, use = () => { if (!(t.smartT > 0)) t.ammo--; };
-  if (p === "splitter") { use(); t.fireCd = .13; if (P.adsHeld) { snd("cannon", { pitch: 1.7, gain: .6 }); kickMech(t, .6); for (const s of [-.045, 0, .045]) mechPellet(t, 90, .003, "#c79bff", true, 1.2, s); } else { snd("cannon", { pitch: 1.5, gain: .7 }); kickMech(t, .7); mechPellet(t, 200, .006, "#c79bff", true, 1.2); } return; }
-  if (p === "arcrep") { use(); t.fireCd = .085; t.arcN = (t.arcN || 0) + 1; snd("cannon", { pitch: 1.9, gain: .45 }); kickMech(t, .35); mechPellet(t, 85, .018, "#9fd8ff", t.arcN % 2 === 0, 1.5); const v = t._gh; if (v && v.veh && v.def.veh.static && B.mp !== "guest") stunAt(v.pos.x, v.pos.z, 2, "you", 1.5); return; }
+  if (p === "splitter") { use(); t.fireCd = .13; if (P.adsHeld) { snd("cannon", { pitch: 1.7, gain: .6 }); kickMech(t, .6); for (const s of [-.045, 0, .045]) mechPellet(t, 90, mechSpread(t), "#c79bff", true, 1.2, s); } else { snd("cannon", { pitch: 1.5, gain: .7 }); kickMech(t, .7); mechPellet(t, 200, mechSpread(t), "#c79bff", true, 1.2); } bloomUp(t); return; }
+  if (p === "arcrep") { use(); t.fireCd = .085; t.arcN = (t.arcN || 0) + 1; snd("cannon", { pitch: 1.9, gain: .45 }); kickMech(t, .35); mechPellet(t, 85, mechSpread(t), "#9fd8ff", t.arcN % 2 === 0, 1.5); bloomUp(t); const v = t._gh; if (v && v.veh && v.def.veh.static && B.mp !== "guest") stunAt(v.pos.x, v.pos.z, 2, "you", 1.5); return; }
   if (p === "tracker") { use(); t.fireCd = .5; mechBolt(t, 320, "#ffb070", 1, 2); return; }
   if (p === "howitzer") { use(); t.fireCd = 1.6; howitzerShot(t); return; }
-  if (p === "vulcan") { use(); t.spin = Math.min(1, t.spin + (t.fortT > 0 ? .16 : .08)); t.spinT = .35; t.fireCd = lerp(.2, .06, t.spin); snd("cannon", { pitch: 1.25, gain: .7 }); kickMech(t, .5); mechPellet(t, 140, t.vmode === "long" ? .003 + .002 * t.spin : .012 + .01 * t.spin, "#ffd890", true); return; }
-  if (p === "flak") { use(); t.fireCd = .72; snd("shotgun", { pitch: .6, gain: 1.4 }); kickMech(t, 2.2); for (let i = 0; i < 9; i++) mechPellet(t, (d) => (d < 12 ? 100 : d > 40 ? 20 : 100 - 80 * (d - 12) / 28), .05, "#ffb070", i % 3 === 0); return; }
+  if (p === "vulcan") { use(); t.spin = Math.min(1, t.spin + (t.fortT > 0 ? .16 : .08)); t.spinT = .35; t.fireCd = lerp(.2, .06, t.spin); snd("cannon", { pitch: 1.25, gain: .7 }); kickMech(t, .5); mechPellet(t, 140, mechSpread(t), "#ffd890", true); bloomUp(t); return; }
+  if (p === "flak") { use(); t.fireCd = .72; snd("shotgun", { pitch: .6, gain: 1.4 }); kickMech(t, 2.2); const fs = mechSpread(t); bloomUp(t); for (let i = 0; i < 9; i++) mechPellet(t, (d) => (d < 12 ? 100 : d > 40 ? 20 : 100 - 80 * (d - 12) / 28), fs, "#ffb070", i % 3 === 0); return; }
   if (p === "slag") { use(); t.fireCd = 1.1; snd("thump", { gain: 1.5, pitch: .6 }); kickMech(t, 2.6); const at = aimSpot(90); tracer(muzzleAt(.9, .7, 2.4), toU(at), "#ff8a3a", 2600, 3); later(.4, () => slagLand(at)); return; }
   use(); t.fireCd = .2; mechBolt(t, 220, "#ffd890", 1, 2.2); }
 // the Howitzer: a heavy shell, a shove for mechs, and 1.75 times as much into turrets and barriers
-function howitzerShot(t) { snd("thump", { gain: 1.8, pitch: .45 }); snd("cannon", { pitch: .5, gain: 1.4 }); kickMech(t, 3); P.shake = Math.max(P.shake, .3); aimRay(.002);
+function howitzerShot(t) { snd("thump", { gain: 1.8, pitch: .45 }); snd("cannon", { pitch: .5, gain: 1.4 }); kickMech(t, 3); P.shake = Math.max(P.shake, .3); aimRay(mechSpread(t)); bloomUp(t);
   let best = rayWorld(_o, _d, 200); const gh = gruntHit(_o, _d, best); best = gh.best; const th = titanHit(_o, _d, best, "you"); best = th.best; const rh = rpHit(_o, _d, best); best = rh.best; const end = _o.clone().addScaledVector(_d, Math.max(0, best - .1));
   tracer(muzzleAt(.9, .7, 2.4), toU(end), "#ffd28a", 7000, 3.2); if (B.mp) relay("tfx", [0, r2(end.x), r2(end.y), r2(end.z)], false);
   if (th.who) { hurtTitan(th.who, 900, true); knock(th.who, _d.x * 12, _d.z * 12); t.core = Math.min(1, t.core + .02); hitT = .15; snd("hitmarker"); }
   else if (gh.who && gh.who.veh) { damage(gh.who, gh.who.def.veh.static ? 1575 : 900, toU(P.pos), "blast", true); hitT = .15; snd("hitmarker"); }
   if (rh.hit) relay("phit", [rh.rp.slot, 150, 0]); blast(end, 3.2, { team: "you", pilot: 120 }); }
 // the Kestrel: hold to charge, let go to fire. 450 at a tap, 1,400 after a second.
-function railShot(t) { const c = clamp(t.chg, 0, 1); t.chg = 0; if (!(t.smartT > 0)) t.ammo--; t.fireCd = .45; snd("charge_fire", { pitch: 1 + c * .3, gain: .9 + c * .5 }); kickMech(t, 1 + c * 2); mechPellet(t, 450 + 950 * c, .001, c > .9 ? "#d8f8ff" : "#8fe0f0", true); }
+function railShot(t) { const c = clamp(t.chg, 0, 1); t.chg = 0; if (!(t.smartT > 0)) t.ammo--; t.fireCd = .45; snd("charge_fire", { pitch: 1 + c * .3, gain: .9 + c * .5 }); kickMech(t, 1 + c * 2); mechPellet(t, 450 + 950 * c, mechSpread(t), c > .9 ? "#d8f8ff" : "#8fe0f0", true); }
 /* fire on the ground: it burns mechs, troops and pilots of the other side that stand in it */
 const FIRES = [], CANS = []; let fireTick = 0;
 function addFire(x, z, r, sec, dps, team = "you", ghost = false) { FIRES.push({ x, z, r, t: sec, dps, team, ghost }); if (!ghost && team === "you" && B.mp) relay("fire", [r2(x), r2(z), r, sec, dps]); else if (!ghost && B.mp === "host") send("fire2", [r2(x), r2(z), r, sec, dps, team]); }   // the host also sends the fires lit on the far side (the machine's flamers, an enemy mech's slag), so every guest sees them and burns in them   // a ghost is another player's fire: drawn here, and it burns this pilot, but the mechs and troops are its owner's to count
@@ -1053,6 +1060,15 @@ function abBar(t) { const lo = loOf(t), list = [["q", "Q", lo.q, ORDQ[lo.q].name
     x: [Math.min(1, t.core), t.core >= 1 ? "" : Math.floor(t.core * 100) + "%"] };
   for (const id in st) { const e = AB.cells[id]; if (!e) continue; const [p0, txt] = st[id], p = clamp(p0, 0, 1), rdy = p >= 1; if (rdy && AB.was[id] === false) { e.classList.remove("pop"); void e.offsetWidth; e.classList.add("pop"); } AB.was[id] = rdy;
     e.classList.toggle("rdy", rdy); e.children[1].style.clipPath = `inset(${((1 - p) * 100).toFixed(1)}% 0 0 0)`; e.children[1].style.opacity = rdy ? 1 : .75; const sp = e.children[3]; sp.className = rdy ? "n" : ""; sp.textContent = txt; } }
+/* the reticle shows the gun as it is right now: brackets at the edge of the real spread, a three-way fan for the Splitter's
+   split shot, a closing ring while the rail charges, a wide ring for the Leadwall, and amber while the Smart Core aims for you */
+const CKC = { r: 20, svg: null };
+function ckCone(t, dt) { if (!CKC.svg) { CKC.svg = $("ck-ret"); CKC.tk = $("ck-tk"); CKC.ring = $("ck-sp"); CKC.fan = $("ck-fan"); }
+  t.bloom = Math.max(0, (t.bloom || 0) - dt * (loOf(t).prim === "vulcan" ? 1.2 : 2.4)); const p = loOf(t).prim, s = mechSpread(t), px = Math.tan(s) / Math.tan(cam.fov * Math.PI / 360) * innerHeight / 2;
+  let want = clamp(7 + px * 1.5, 7, 100);   /* drawn half again as wide as the true cone, never smaller than the dot */ if (p === "rail") want = 8 + (1 - clamp(t.chg || 0, 0, 1)) * 34; CKC.r += (want - CKC.r) * (1 - Math.exp(-dt * 18)); const r = CKC.r, g = 7;
+  CKC.tk.setAttribute("d", `M0 ${-r}V${-r - g}M0 ${r}V${r + g}M${-r} 0H${-r - g}M${r} 0H${r + g}`); CKC.ring.setAttribute("r", r.toFixed(1)); CKC.ring.style.opacity = p === "flak" || p === "rail" || p === "arcrep" ? .9 : .35;
+  const fan = p === "splitter" && P.adsHeld; CKC.fan.style.display = fan ? "" : "none"; if (fan) { const o = Math.tan(.045) / Math.tan(cam.fov * Math.PI / 360) * innerHeight / 2; CKC.fan.setAttribute("d", [-o, 0, o].map((x) => `M${x.toFixed(1)} -9V9`).join("")); }
+  CKC.svg.setAttribute("stroke", t.smartT > 0 ? "#f2c46a" : myBlind > 0 ? "#ff8a6a" : "#8fe0f0"); CKC.svg.classList.toggle("lob", p === "slag" || p === "howitzer"); }
 function cockpit(dt) {
   CK.t += dt; CK.glitch = Math.max(0, CK.glitch - dt); const t = P.titan, on = CK.mode !== "off" && !MAP.on; $("hud").classList.toggle("mapon", MAP.on);
   el.cockpit.style.display = on ? "block" : "none"; el.tl.style.display = el.bl.style.display = el.br.style.display = on ? "none" : "block"; el.cross.style.display = on ? "none" : "block"; msg.style.top = on ? "28%" : "22%"; if (!on) return;
@@ -1071,6 +1087,7 @@ function cockpit(dt) {
   for (const g of GRUNTS) if (g.s.dead < 0) { const q = g.s.root.position; tryLock(V3(q.x / U, q.y / U + 1, q.z / U), g); }
   const L = el["ck-lock"]; if (lock) { const v = toU(lp).project(cam), size = clamp((lock.s ? 2.2 : 7) / ld * innerHeight * .62, 26, innerHeight * .7); L.style.display = "block"; L.style.left = (v.x * .5 + .5) * innerWidth - size / 2 + "px"; L.style.top = (-v.y * .5 + .5) * innerHeight - size / 2 + "px"; L.style.width = L.style.height = size + "px"; L.className = best < .06 ? "hot" : "";
     el["ck-locklab"].textContent = (lock.s ? "INFANTRY" : "HOSTILE TITAN " + Math.round((lock.hull + lock.shield) / (lock.hullMax + 150) * 100) + "%") + "  " + Math.round(ld) + " M"; } else L.style.display = "none";
+  ckCone(t, dt);
   el["ck-strip"].style.transform = `translateX(${-((((-P.yaw * 180 / Math.PI) % 360) + 360) % 360 + 360) * 4}px)`;
   hudT -= dt; if (hudT > 0) return; hudT = .08;
   aimRay(0); const rng = rayWorld(_o, _d, 300); el["ck-rng"].textContent = rng >= 300 ? "RNG ---" : "RNG " + Math.round(rng) + " M";
@@ -1340,6 +1357,6 @@ try { const aj = JSON.parse(sessionStorage.getItem("ab-autojoin") || "null"); if
   const go = (n) => pickMap(kind.value + "-" + (String(n).replace(/\D/g, "").slice(0, 6) || "1") + "-" + size.value + role.value);
   $("map-go").onclick = () => go(num.value || "1"); $("map-new").onclick = () => go(1000 + Math.floor(Math.random() * 9000));
   $("map-now").textContent = "You are on " + MAPNAME + ", and you " + (OP.atk === "you" ? "attack" : "defend") + ". " + SECN + " sectors: " + POINTS.map((p) => p.name + " " + p.label.toLowerCase() + (p.roof ? " (roofed)" : "")).join(", ") + "."; }
-window.__mf = { SEEK, FOOT, ATW, weakHit, get critT() { return critT; }, aimDbg() { aimRay(0); const best = rayWorld(_o, _d, 220), th = titanHit(_o, _d, best, "you"); return { o: _o.toArray().map((v) => +v.toFixed(1)), d: _d.toArray().map((v) => +v.toFixed(2)), world: +best.toFixed(1), hit: th.who ? th.who.team + " at " + th.best.toFixed(1) : null, later: LATER.length }; }, FIRES, addFire, useKit, HANDLING, cone, income, lastStep, GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+window.__mf = { mechSpread, spreadMul, baseSpread, SEEK, FOOT, ATW, weakHit, get critT() { return critT; }, aimDbg() { aimRay(0); const best = rayWorld(_o, _d, 220), th = titanHit(_o, _d, best, "you"); return { o: _o.toArray().map((v) => +v.toFixed(1)), d: _d.toArray().map((v) => +v.toFixed(2)), world: +best.toFixed(1), hit: th.who ? th.who.team + " at " + th.best.toFixed(1) : null, later: LATER.length }; }, FIRES, addFire, useKit, HANDLING, cone, income, lastStep, GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);

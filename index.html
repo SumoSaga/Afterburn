@@ -146,6 +146,7 @@
   #ck-strip { position: absolute; left: 180px; top: 0; height: 100%; } #ck-strip span { position: absolute; top: 2px; width: 40px; margin-left: -20px; text-align: center; font-size: 11px; }
   #ck-compass:after { content: ""; position: absolute; left: 50%; bottom: 0; margin-left: -4px; border: 4px solid transparent; border-bottom-color: #f2c46a; }
   #ck-ret { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px; overflow: visible; filter: drop-shadow(0 0 4px rgba(143,224,240,.6)); }
+  #ck-ret .lobm { display: none; } #ck-ret.lob .lobm { display: inline; }   /* drop marks under the reticle for the shells that arc */
   #ck-rng { position: absolute; left: 50%; top: 50%; margin-top: 62px; width: 160px; margin-left: -80px; text-align: center; }
   #ck-lock { position: absolute; display: none; color: #f2c46a; }
   #ck-lock s { position: absolute; width: 22%; height: 22%; border: 2px solid currentColor; }
@@ -357,7 +358,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "66";
+  window.AB_BUILD = "67";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "icons", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -370,8 +371,8 @@
     <div id="ck">
       <div id="ck-compass"><div id="ck-strip"></div></div>
       <svg id="ck-ret" viewBox="-110 -110 220 220" fill="none" stroke="#8fe0f0" stroke-width="1.6">
-        <circle r="30" stroke-dasharray="34 13.1" transform="rotate(-36)"/><circle r="2" fill="#d8f8ff" stroke="none"/>
-        <path d="M0-52V-38M0 52V38M-52 0H-38M52 0H38"/><path d="M-12-12-6-6M12-12 6-6M-12 12-6 6M12 12 6 6" stroke-width="1"/>
+        <circle id="ck-sp" r="20" stroke-width="1"/><circle r="2" fill="#d8f8ff" stroke="none"/>
+        <path id="ck-tk" d="M0-20V-27M0 20V27M-20 0H-27M20 0H27" stroke-width="2"/><path id="ck-fan" d="" stroke-width="2" style="display:none"/><path class="lobm" d="M-8 34 0 40 8 34M-5 44 0 48 5 44" stroke-width="1.4"/>
         <circle r="70" stroke="rgba(143,224,240,.25)" stroke-dasharray="88 400" transform="rotate(-36)"/><circle id="ck-ammoarc" r="70" stroke="#f2c46a" stroke-width="3" stroke-dasharray="88 400" transform="rotate(-36)"/>
         <circle id="ck-sharc" r="70" stroke-width="0" stroke="none"/>
         <text id="ck-ammo" x="84" y="6" fill="#f2c46a" stroke="none" font-size="20" font-family="Courier New, monospace">18</text>
@@ -430,7 +431,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 66 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 67 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -535,15 +536,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=66"></script>
-<script src="punch/punch-lab.js?v=66"></script>
-<script src="cb/genbuild.js?v=66"></script>
-<script src="cb/machines.js?v=66"></script>
-<script src="cb/soldiers.js?v=66"></script>
-<script src="cb/cbmechdata.js?v=66"></script>
-<script src="cb/cbmech.js?v=66"></script>
-<script src="cb/cbnature.js?v=66"></script>
-<script src="cb/cbweather.js?v=66"></script>
+<script src="punch/punch.js?v=67"></script>
+<script src="punch/punch-lab.js?v=67"></script>
+<script src="cb/genbuild.js?v=67"></script>
+<script src="cb/machines.js?v=67"></script>
+<script src="cb/soldiers.js?v=67"></script>
+<script src="cb/cbmechdata.js?v=67"></script>
+<script src="cb/cbmech.js?v=67"></script>
+<script src="cb/cbnature.js?v=67"></script>
+<script src="cb/cbweather.js?v=67"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
