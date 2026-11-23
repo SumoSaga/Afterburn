@@ -17,6 +17,13 @@ const WPN = { rifle: { range: 48, dmg: 22, burst: 3, acc: .5, cd: [1.4, 2.4] }, 
   flamer: { range: 15, dmg: 14, burst: 1, acc: .9, cd: [.7, 1], titan: 4, veh: 2, fire: { r: 2.6, sec: 2.5, dps: 150 }, rig: "shotgun" },
   mortar: { range: 95, minr: 24, dmg: 0, burst: 1, acc: .55, cd: [6, 8], indirect: true, splash: { r: 4.5, inf: 60, veh: 60, pilot: 40, pin: 2.5 }, rig: "at" },
   gl: { range: 42, minr: 6, dmg: 0, burst: 1, acc: .6, cd: [2.6, 3.4], indirect: true, splash: { r: 2.6, inf: 36, veh: 40, pilot: 25, pin: 1.2 }, rig: "at" },
+  gl2: { range: 42, minr: 6, dmg: 0, burst: 1, acc: .6, cd: [2.6, 3.4], indirect: true, splash: { r: 3.2, inf: 36, veh: 40, pilot: 25, pin: 1.2 }, rig: "at" },
+  gl3: { range: 42, minr: 6, dmg: 0, burst: 1, acc: .6, cd: [2.6, 3.4], indirect: true, splash: { r: 3.2, inf: 36, veh: 40, pilot: 25, pin: 2 }, rig: "at" },
+  glf: { range: 42, minr: 6, dmg: 0, burst: 1, acc: .6, cd: [2.6, 3.4], indirect: true, splash: { r: 2.6, inf: 30, veh: 30, pilot: 20, pin: .8 }, fire: { r: 2.2, sec: 2, dps: 120 }, rig: "at" },
+  glf2: { range: 52, minr: 6, dmg: 0, burst: 1, acc: .6, cd: [2.6, 3.4], indirect: true, splash: { r: 2.6, inf: 30, veh: 30, pilot: 20, pin: .8 }, fire: { r: 2.2, sec: 2, dps: 120 }, rig: "at" },
+  charge2: { range: 14, dmg: 30, burst: 1, acc: .8, cd: [1.6, 2.2], veh: 8, titan: 6, rig: "shotgun" },
+  hmg2: { range: 60, dmg: 12, burst: 8, acc: .4, cd: [1.4, 2], pin: 1.2, rig: "lmg" },
+  hmg3: { range: 70, dmg: 12, burst: 8, acc: .4, cd: [1.4, 2], pin: 1.2, rig: "lmg" },
   charge: { range: 14, dmg: 30, burst: 1, acc: .8, cd: [1.6, 2.2], veh: 6, titan: 6, rig: "shotgun" },
   hmg: { range: 60, dmg: 12, burst: 8, acc: .4, cd: [1.4, 2], pin: .8, rig: "lmg" },
   arc: { range: 50, dmg: 18, burst: 1, acc: .75, cd: [2.6, 3.4], titan: 25, veh: 4, emp: true, splash: { r: 3, inf: 22, veh: 30, pilot: 20, pin: 3 }, rig: "dmr" } };
@@ -86,6 +93,12 @@ export const TECH = {
   drones: { a: { name: "Armoured Pair", tiers: ["240 health, up from 200.", "280 health.", "320 health."] }, b: { name: "Fast Pair", tiers: ["A sixth faster.", "A third faster.", "Half again as fast."] } },
   miner: { a: { name: "Armoured Layer", tiers: ["150 health, up from 120.", "180 health.", "220 health."] }, b: { name: "Fast Layer", tiers: ["A sixth faster.", "A third faster.", "Half again as fast."] } },
   recon: { a: { name: "Hardened Pod", tiers: ["460 health, up from 400.", "520 health.", "600 health."] }, b: { name: "Cheap Pod", tiers: ["Costs 160 Command Points, down from 180.", "Costs 140.", "Costs 120."] } },
+  grenadiers: { a: { name: "Breach Grenadiers", tiers: ["Grenades burst 3.2 metres wide, up from 2.6.", "Their pins last 2 seconds, up from 1.2.", "A third launcher takes the place of the rifle."] }, b: { name: "Fire Grenadiers", tiers: ["Grenades leave the ground burning for 2 seconds, but hit a little softer.", "85 health each, up from 70.", "Reach 52 metres, up from 42."] } },
+  runners: { a: { name: "Supply Train", tiers: ["Four batteries, up from three.", "A battery every 6 seconds, up from 8.", "Five batteries."] }, b: { name: "Armoured Couriers", tiers: ["80 health each, up from 60.", "A third runner with a shotgun joins them.", "A shield on each that stops 60 from the front."] } },
+  haulers: { a: { name: "Salvage Crew", tiers: ["1.5 Command Points a second, up from 1.2.", "1.8 a second.", "2.2 a second."] }, b: { name: "Armed Haulers", tiers: ["70 health each, up from 55.", "All three carry shotguns.", "Each counts a quarter more on a point."] } },
+  sappers: { a: { name: "Demolition Crew", tiers: ["Charges do 240 to placed assets, up from 180.", "A third sapper joins them.", "Each lays a mech mine where it stops on a point."] }, b: { name: "Tunnel Rats", tiers: ["100 health each, up from 85.", "They cannot be pinned.", "Each counts double on a point."] } },
+  gunners: { a: { name: "Lane Lock", tiers: ["Each hit pins for 1.2 seconds, up from 0.8.", "Reach 70 metres, up from 60.", "A third gunner joins them."] }, b: { name: "Bunker Crew", tiers: ["120 health each, up from 90.", "A shield on each that stops 120 from the front.", "Each counts double on a point."] } },
+  officers: { a: { name: "Command Staff", tiers: ["They steady squads within 20 metres, up from 15.", "Within 25 metres.", "A third officer joins them."] }, b: { name: "Iron Discipline", tiers: ["Squads near them are not pinned at all.", "110 health each, up from 80.", "A shield on each that stops 100 from the front."] } },
   beacon: { a: { name: "Rapid Assault Beacon", tiers: ["Brings in four squads, up from three.", "Five squads.", "Six squads."] }, b: { name: "Hardened Relay", tiers: ["420 health, up from 350.", "500 health.", "600 health."] } } };
 const TIER_COST = [1, 1, 2];
 export const MAST = { xp: {}, tiers: {}, pick: {} }; try { Object.assign(MAST, JSON.parse(localStorage.getItem("ab-mastery") || "{}")); } catch (e) {} MAST.xp = MAST.xp || {}; MAST.tiers = MAST.tiers || {}; MAST.pick = MAST.pick || {};
@@ -118,6 +131,18 @@ function techDef(base, id, worn) { if (!worn || !TECH[id]) return base; const br
   else if (k === "dronesa") { d.veh.hp = [240, 280, 320][n - 1]; } else if (k === "dronesb") { d.veh.speed = base.veh.speed * [1.17, 1.33, 1.5][n - 1]; }
   else if (k === "minera") { d.veh.hp = [150, 180, 220][n - 1]; } else if (k === "minerb") { d.veh.speed = base.veh.speed * [1.17, 1.33, 1.5][n - 1]; }
   else if (k === "recona") { d.veh.hp = [460, 520, 600][n - 1]; } else if (k === "reconb") { d.cost = [160, 140, 120][n - 1]; }
+  else if (k === "grenadiersa") { d.guns = n > 2 ? ["gl3", "gl3", "gl3"] : n > 1 ? ["gl3", "gl3", "rifle"] : ["gl2", "gl2", "rifle"]; }
+  else if (k === "grenadiersb") { d.guns = n > 2 ? ["glf2", "glf2", "rifle"] : ["glf", "glf", "rifle"]; if (n > 1) d.hp = 85; }
+  else if (k === "runnersa") { d.courier = [4, 4, 5][n - 1]; if (n > 1) d.feedCd = 6; }
+  else if (k === "runnersb") { d.hp = 80; if (n > 1) d.guns = ["rifle", "rifle", "shotgun"]; if (n > 2) d.shield = 60; }
+  else if (k === "haulersa") { d.salvage = [1.5, 1.8, 2.2][n - 1]; }
+  else if (k === "haulersb") { d.hp = 70; if (n > 1) d.guns = ["shotgun", "shotgun", "shotgun"]; if (n > 2) d.capw = base.capw * 1.25; }
+  else if (k === "sappersa") { d.guns = n > 1 ? ["charge2", "charge2", "charge2"] : ["charge2", "charge2"]; if (n > 2) d.mines = true; }
+  else if (k === "sappersb") { d.hp = 100; if (n > 1) d.steady = true; if (n > 2) d.capw = base.capw * 2; }
+  else if (k === "gunnersa") { d.guns = n > 2 ? ["hmg3", "hmg3", "hmg3"] : n > 1 ? ["hmg3", "hmg3"] : ["hmg2", "hmg2"]; }
+  else if (k === "gunnersb") { d.hp = 120; if (n > 1) d.shield = 120; if (n > 2) d.capw = base.capw * 2; }
+  else if (k === "officersa") { d.rally = [20, 25, 25][n - 1]; if (n > 2) d.guns = ["rifle", "dmr", "rifle"]; }
+  else if (k === "officersb") { d.rallyHard = true; if (n > 1) d.hp = 110; if (n > 2) d.shield = 100; }
   return d; }
 export const saveLoad = () => { try { localStorage.setItem("mf-fps-load", JSON.stringify(LOAD)); } catch (e) {} };
 
@@ -278,7 +303,7 @@ export const room = () => true;   // there is no limit on how many squads a comm
 export const squadsOut = (who) => SQUADS.reduce((t, q) => t + (!q.dead && q.owner === who ? 1 : 0), 0);
 export const credit = (who, n) => { if (who && B.supply[who] !== undefined && !B.over) B.supply[who] = Math.min(CPMAX, B.supply[who] + n * (OP.phase === "retreat" && B.side[who] === OP.atk ? 2 : 1)); };   // the pursuit pays double
 const passive = (who) => (B.passive && B.passive[who]) || null, cmdPilot = (who) => PIL.find((p) => p.key === who);
-const rallied = (g) => { const x = g.s.root.position.x / U, z = g.s.root.position.z / U; return SQUADS.some((q) => !q.dead && q.def.rally && q.side === g.side && q.n > 0 && Math.hypot(q.c.x - x, q.c.z - z) < q.def.rally); };   // a Field Officer close by
+const rallied = (g) => { const x = g.s.root.position.x / U, z = g.s.root.position.z / U; return SQUADS.find((q) => !q.dead && q.def.rally && q.side === g.side && q.n > 0 && Math.hypot(q.c.x - x, q.c.z - z) < q.def.rally) || null; };   // a Field Officer close by
 let PIL = [];
 // a smoke cloud of the given size, the same as the Smoke Barrage support card lays
 export function addSmoke(side, x, z, r = 9, sec = 18) { const gy = groundH(x, z), dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(r * U, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#8a8780", transparent: true, opacity: .3, depthWrite: false, side: THREE.DoubleSide })));
@@ -299,7 +324,7 @@ export function damage(u, n, fromU, zone = "chest", byPlayer = false, pin = 0) {
   if (u.veh) { if (!u.alive) return; u.hp -= n; if (u.hp <= 0) { wreckVeh(u); credit(by, 25); if (byPlayer === true && B.hooks.onKill) B.hooks.onKill(15); } return; }
   if (u.s.dead >= 0) return; const ow = u.sq.owner, op = passive(ow) === "combined" ? cmdPilot(ow) : null, ux = u.s.root.position.x / U, uz = u.s.root.position.z / U; if (op && Math.hypot(op.x - ux, op.z - uz) < 20) n *= .85;
   if (u.sh > 0 && fromU && zone !== "blast") { const yaw = u.s.root.rotation.y, fx = Math.sin(yaw), fz = Math.cos(yaw), dx = fromU.x / U - ux, dz = fromU.z / U - uz, dl = Math.hypot(dx, dz) || 1; if ((fx * dx + fz * dz) / dl > .35) { const a = Math.min(u.sh, n); u.sh -= a; n -= a; if (n <= 0) return; } }   // an energy shield stops what comes from the front until it is spent
-  if (pin > 0 && !u.sq.def.steady) { if (rallied(u)) pin *= .5; } if (pin > 0 && !u.sq.def.steady) for (const m of u.sq.members) if (m.s.dead < 0) m.pin = Math.max(m.pin || 0, B.time + pin);   // pinned: the whole squad keeps its head down
+  if (pin > 0 && !u.sq.def.steady) { const rq = rallied(u); if (rq) pin = rq.def.rallyHard ? 0 : pin * .5; } if (pin > 0 && !u.sq.def.steady) for (const m of u.sq.members) if (m.s.dead < 0) m.pin = Math.max(m.pin || 0, B.time + pin);   // pinned: the whole squad keeps its head down
   u.hp -= n; if (u.hp <= 0) { u.s.die(fromU, { zone, force: zone === "blast" ? 2 : 1 }); credit(by, u.sq.def.hp >= 150 ? 25 : 10); if (byPlayer === true && B.hooks.onKill) B.hooks.onKill(9); } else if (rnd() < .5) u.s.hit(fromU, 1); }
 // the nearest thing on one side that a line from o along d strikes
 export function rayUnits(o, d, best, side) { let who = null;
@@ -415,7 +440,7 @@ function stepSquad(sq, dt) {
       /* Battery Runners: follow the nearest friendly mech, and plug a battery into one close by that needs it */
       if (D.courier) { if (sq.batts == null) sq.batts = D.courier; sq.feedT = (sq.feedT || 0) - dt; const ts = (B.hooks.titans ? B.hooks.titans() : []).filter((t) => t.alive && t.doom <= 0 && t.team === sq.side);
         if (sq.batts > 0 && sq.auto && (sq.followT = (sq.followT || 0) - dt) <= 0) { sq.followT = 4; sq.think = 9; let best = null, bd = 90; for (const t of ts) { const d = Math.hypot(t.pos.x - sq.c.x, t.pos.z - sq.c.z); if (d < bd) { bd = d; best = t; } } if (best && bd > 8) { sq.order = { type: "move", pos: V3(best.pos.x + 3, 0, best.pos.z + 3) }; sq.path = legNodes(sq.c, sq.order.pos, false); } }
-        if (sq.batts > 0 && sq.feedT <= 0) { const t = ts.find((t) => Math.hypot(t.pos.x - sq.c.x, t.pos.z - sq.c.z) < 9 + t.r && (t.shield < 2500 * .6 || t.hull < t.hullMax * .85)); if (t && B.hooks.feedTitan) { B.hooks.feedTitan(t); sq.batts--; sq.feedT = 8; if (sq.owner === "you" && B.hooks.say) B.hooks.say("Battery Runners plugged a battery into a mech. " + (sq.batts ? sq.batts + " left." : "That was their last."), 2.5); } } } }
+        if (sq.batts > 0 && sq.feedT <= 0) { const t = ts.find((t) => Math.hypot(t.pos.x - sq.c.x, t.pos.z - sq.c.z) < 9 + t.r && (t.shield < 2500 * .6 || t.hull < t.hullMax * .85)); if (t && B.hooks.feedTitan) { B.hooks.feedTitan(t); sq.batts--; sq.feedT = D.feedCd || 8; if (sq.owner === "you" && B.hooks.say) B.hooks.say("Battery Runners plugged a battery into a mech. " + (sq.batts ? sq.batts + " left." : "That was their last."), 2.5); } } } }
     if (D.mines && !sq.mined && sq.arrived && o.type === "point" && B.mp !== "guest") { sq.mined = true; for (const m of mem) { const q = m.s.root.position; layMine(q.x / U + (rnd() - .5) * 3, q.z / U + (rnd() - .5) * 3, sq.side, false); } } }
   const where = o.type === "point" ? POINTS[o.i].name + ", the " + POINTS[o.i].label.toLowerCase() : null;
   sq.state = sq.eng ? (where ? (sq.arrived ? "Fighting on " : "Fighting on the way to ") + where : "Fighting") : sq.arrived ? (where ? (POINTS[o.i].owner === sq.side ? "Holding " : "Taking ") + where : "Holding position") : where ? "Moving to " + where + (sq.path.some((p) => p.stop) ? " by your stops" : "") : "Moving";
