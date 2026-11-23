@@ -18,6 +18,13 @@
   #cross i:nth-child(4) { top: -1px; left: 0; height: 2px; width: 7px; transform: translateX(var(--g)); }
   #cross:after { content: ""; position: absolute; left: -1px; top: -1px; width: 2px; height: 2px; background: #fff; }
   #cross.hit i, #cross.hit:after { background: #ff9a3a; }
+  /* no scroll bars anywhere: the menus still scroll with the wheel, they just look cleaner */
+  * { scrollbar-width: none; } *::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  #cross.crit i, #cross.crit:after { background: #ffd84a; box-shadow: 0 0 6px #ffb020; }
+  #wk i { position: fixed; left: 0; top: 0; width: 11px; height: 11px; margin: -6px 0 0 -6px; border: 2px solid #ffb347; box-shadow: 0 0 6px rgba(255,170,60,.7); pointer-events: none; }
+  #lockw { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); color: #ff5a3a; font: 700 15px/1 system-ui, sans-serif; letter-spacing: .22em; padding: 6px 12px; border: 2px solid #ff5a3a; background: rgba(40,6,4,.55); display: none; pointer-events: none; animation: lockb .3s steps(2) infinite; }
+  @keyframes lockb { 50% { opacity: .35; } }
+  #blind { position: fixed; inset: 0; pointer-events: none; opacity: 0; backdrop-filter: blur(6px) saturate(.35); background: repeating-linear-gradient(0deg, rgba(150,210,255,.10) 0 2px, rgba(0,0,0,0) 2px 5px); transition: opacity .2s; }
   /* the pilot's display: four quiet panels, big numbers, one colour for each kind of thing (amber yours to spend, blue the machine, red trouble) */
   .hudp { position: absolute; padding: 10px 14px; background: linear-gradient(180deg, rgba(10,12,15,.78), rgba(10,12,15,.6)); border-top: 1px solid rgba(255,255,255,.16); text-shadow: 0 1px 2px rgba(0,0,0,.9); backdrop-filter: blur(2px); }
   #tl { left: 50%; top: 0; transform: translateX(-50%); padding: 8px 22px 9px; text-align: center; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%); min-width: 420px; }
@@ -308,7 +315,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "62";
+  window.AB_BUILD = "63";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "icons", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -339,6 +346,7 @@
     <div id="ck2"><div id="ck-vit"></div></div>
   </div>
   <div id="ptmarks"></div><canvas id="mini" width="200" height="200"></canvas><div id="compass"><s></s></div><div id="capbox"></div><div id="scope"><i class="h"></i><i class="v"></i><i class="pl"></i><i class="pr"></i><i class="pb"></i><b></b><s></s></div><div id="oob"></div><div id="secban"></div>
+  <div id="wk"></div><div id="blind"></div><div id="lockw">LOCK WARNING</div>
   <div id="cross"><i></i><i></i><i></i><i></i></div>
   <div id="state"></div>
   <div id="tl" class="hudp"><div id="kills"></div><div class="chips"><span>Command Points<b id="h-cp">0</b></span><span>Squads out<b id="h-sup">0</b></span><span class="dim" id="timer"></span></div></div>
@@ -371,7 +379,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 62 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 63 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -476,15 +484,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=62"></script>
-<script src="punch/punch-lab.js?v=62"></script>
-<script src="cb/genbuild.js?v=62"></script>
-<script src="cb/machines.js?v=62"></script>
-<script src="cb/soldiers.js?v=62"></script>
-<script src="cb/cbmechdata.js?v=62"></script>
-<script src="cb/cbmech.js?v=62"></script>
-<script src="cb/cbnature.js?v=62"></script>
-<script src="cb/cbweather.js?v=62"></script>
+<script src="punch/punch.js?v=63"></script>
+<script src="punch/punch-lab.js?v=63"></script>
+<script src="cb/genbuild.js?v=63"></script>
+<script src="cb/machines.js?v=63"></script>
+<script src="cb/soldiers.js?v=63"></script>
+<script src="cb/cbmechdata.js?v=63"></script>
+<script src="cb/cbmech.js?v=63"></script>
+<script src="cb/cbnature.js?v=63"></script>
+<script src="cb/cbweather.js?v=63"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>

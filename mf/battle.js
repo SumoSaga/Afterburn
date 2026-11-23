@@ -269,6 +269,7 @@ export function addSmoke(side, x, z, r = 9, sec = 18) { const gy = groundH(x, z)
   dome.position.set(x * U, (gy - 1) * U, z * U); scene.add(dome); DOMES.push({ x, z, r, side, t: sec, smoke: true, mesh: dome }); }
 // the Vanguard's Combined-Arms Uplink: is this spot within 20 metres of a friendly Vanguard Titan?
 const uplinked = (side, x, z) => !!B.hooks.uplinks && B.hooks.uplinks().some((u) => u.side === side && Math.hypot(u.x - x, u.z - z) < 20);
+export const smokeAt = (x, z) => DOMES.some((d) => d.smoke && Math.hypot(d.x - x, d.z - z) < d.r);   // is this spot inside a smoke cloud?
 export function addDome(side, x, z, r, sec) { const col = side === "you" ? "#6fd8ff" : "#ff8a6a", gy = groundH(x, z), dome = fxLayer(new THREE.Mesh(new THREE.SphereGeometry(r * U, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }))); dome.position.set(x * U, (gy - 1) * U, z * U); scene.add(dome); DOMES.push({ x, z, r, side, t: sec, mesh: dome, box: new THREE.Object3D() }); }   // a short shield over troops, as the Vortex Wall gives
 export function stunAt(x, z, r, bySide, sec) { for (const v of VEH) if (v.alive && v.side !== bySide && v.def.veh.static && Math.hypot(v.pos.x - x, v.pos.z - z) < r) v.stun = sec; }   // an arc grenade shuts placed assets down for a while
 export const nearAI = (side, x, z, r) => arr(side).some((g) => g.s.dead < 0 && Math.hypot(g.s.root.position.x / U - x, g.s.root.position.z / U - z) < r);
@@ -317,7 +318,7 @@ function lobTarget(g) { const p = g.s.root.position, x = p.x / U, z = p.z / U; l
   if (!best) return null; const m = best.members.find((q) => q.s.dead < 0); return m ? { kind: "inf", ref: m, pos: posOf(m), d: Math.hypot(best.c.x - x, best.c.z - z) } : null; }
 function stepSoldier(g, dt) { const s = g.s, rp = s.root.position;
   if (s.dead >= 0) { if (g.cv) drop(g); g.deadT += dt; if (g.deadT > 9 && !g.gone) { g.gone = true; try { s.remove(); } catch (e) {} } return; }
-  g.think -= dt; if (g.think <= 0) { g.think = .35 + rnd() * .2; g.tgt = g.W.indirect ? lobTarget(g) : nearestEnemy(g.side, V3(rp.x / U, rp.y / U + 1.5, rp.z / U), g.W.range, false, g.sq.def.hunter); if (!g.tgt) s.aimAt(null); }
+  g.think -= dt; if (g.think <= 0) { g.think = .35 + rnd() * .2; g.tgt = g.W.indirect ? lobTarget(g) : nearestEnemy(g.side, V3(rp.x / U, rp.y / U + 1.5, rp.z / U), g.W.range, false, g.sq.def.hunter || g.sq.hunt); if (!g.tgt) s.aimAt(null); }
   const t = g.tgt;
   if (t && tgtAlive(t)) { const p = tgtPos(t); s.aimAt(V3(p.x * U + g.err.x, p.y * U + g.err.y, p.z * U + g.err.z)); g.cd -= dt;
     if (g.cd <= 0 && !s.busy) { if (s.ammo <= 0) s.doReload(); else { const d = t.d, pl = isP(t) ? pilotOf(t) : null;
