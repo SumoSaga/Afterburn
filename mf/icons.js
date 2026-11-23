@@ -32,6 +32,29 @@ const SIGNS = {
   meltdown: (g) => { flame(g, 48, 82); ring(g, 48, 74, 30, .5); }, smart: (g) => { ring(g, 48, 48, 26); line(g, 48, 12, 48, 30); line(g, 48, 66, 48, 84); line(g, 12, 48, 30, 48); line(g, 66, 48, 84, 48); dot(g, 48, 48, 6); },
   turbo: (g) => { chevR(g, 30, 48); chevR(g, 50, 48); chevR(g, 70, 48); }, overcore: (g) => { ring(g, 48, 48, 28, .25); arc(g, 48, 48, 28, -Math.PI / 2, -Math.PI / 2 + Math.PI * .4, 7); dot(g, 48, 48, 9); },
   smoke: (g) => { for (const [x, y, r] of [[34, 56, 16], [54, 48, 20], [66, 62, 14], [44, 66, 12]]) ring(g, x, y, r); bolt(g, 54, 40, 30, .6); }, eject: (g) => { g.strokeRect(24, 56, 48, 26); line(g, 48, 70, 48, 14); line(g, 36, 26, 48, 14); line(g, 60, 26, 48, 14); },
+  /* ordnance (Q) */
+  cluster: (g) => { missile(g, 30, 58); missile(g, 48, 46); missile(g, 66, 58); for (const [x, y] of [[22, 84], [40, 80], [58, 84], [74, 80]]) dot(g, x, y, 3.5); },
+  arcwave: (g) => { bolt(g, 48, 10, 46); arc(g, 48, 92, 22, Math.PI * 1.15, Math.PI * 1.85, 5); arc(g, 48, 92, 36, Math.PI * 1.15, Math.PI * 1.85, 5); },
+  tether: (g) => { ring(g, 26, 66, 14); dot(g, 26, 66, 5); line(g, 38, 58, 70, 30); ring(g, 74, 26, 7); line(g, 18, 82, 34, 82); },
+  salvo: (g) => { for (let i = 0; i < 4; i++) missile(g, 24 + i * 16, 62); g.strokeRect(14, 74, 68, 12); },
+  laser: (g) => { ring(g, 20, 48, 10); const w = g.lineWidth; g.lineWidth = 11; line(g, 32, 48, 86, 48); g.lineWidth = w; line(g, 70, 32, 86, 24); line(g, 70, 64, 86, 72); },
+  siphon: (g) => { for (const x of [-18, 0, 18]) { g.beginPath(); g.moveTo(48 + x * .5, 76); g.quadraticCurveTo(48 + x * 1.4, 44, 48 + x, 18); g.stroke(); } g.strokeRect(34, 76, 28, 12); },
+  gas: (g) => { g.strokeRect(22, 34, 24, 48); g.strokeRect(28, 26, 12, 8); g.strokeRect(52, 40, 22, 42); flame(g, 64, 34); },
+  power: (g) => { dot(g, 48, 48, 12); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; line(g, 48 + Math.cos(a) * 20, 48 + Math.sin(a) * 20, 48 + Math.cos(a) * 36, 48 + Math.sin(a) * 36); } },
+  smokeb: (g) => { for (const [x, y, r] of [[30, 60, 14], [50, 52, 18], [68, 64, 13]]) ring(g, x, y, r); missile(g, 48, 34); line(g, 18, 86, 78, 86); },
+  /* defence (E) */
+  phase: (g) => { g.globalAlpha = .45; ring(g, 38, 50, 22); g.globalAlpha = 1; ring(g, 58, 46, 22); chevR(g, 46, 48); },
+  vtol: (g) => { line(g, 48, 72, 48, 16); line(g, 32, 32, 48, 16); line(g, 64, 32, 48, 16); flame(g, 34, 92); flame(g, 62, 92); },
+  buckler: (g) => { g.beginPath(); g.moveTo(48, 12); g.lineTo(78, 24); g.lineTo(74, 58); g.quadraticCurveTo(64, 78, 48, 86); g.quadraticCurveTo(32, 78, 22, 58); g.lineTo(18, 24); g.closePath(); g.stroke(); line(g, 48, 24, 48, 74); },
+  vortex: (g) => { g.beginPath(); for (let a = 0; a < Math.PI * 5; a += .15) { const r = 4 + a * 2.6; g.lineTo(48 + Math.cos(a) * r, 48 + Math.sin(a) * r); } g.stroke(); },
+  pwall: (g) => { arc(g, 48, 92, 56, Math.PI * 1.2, Math.PI * 1.8, 7); for (const x of [26, 40, 56, 70]) line(g, x, 54, x, 84); },
+  sonar: (g) => { dot(g, 22, 74, 7); for (const r of [20, 36, 52]) arc(g, 22, 74, r, -Math.PI / 2, 0, 5); },
+  furnace: (g) => { g.beginPath(); g.moveTo(48, 10); g.lineTo(78, 22); g.lineTo(74, 56); g.quadraticCurveTo(64, 76, 48, 86); g.quadraticCurveTo(32, 76, 22, 56); g.lineTo(18, 22); g.closePath(); g.stroke(); flame(g, 48, 72); },
+  gunshield: (g) => { g.strokeRect(18, 22, 34, 52); line(g, 52, 48, 86, 48); line(g, 52, 42, 86, 42); line(g, 52, 54, 86, 54); },
+  anchor: (g) => { ring(g, 48, 18, 8); line(g, 48, 26, 48, 82); line(g, 32, 38, 64, 38); arc(g, 48, 56, 28, Math.PI * .15, Math.PI * .85, 5); },
+  /* the rest of a mech's buttons */
+  punch: (g) => { g.beginPath(); g.roundRect(24, 30, 48, 40, 9); g.stroke(); for (const x of [36, 48, 60]) line(g, x, 30, x, 46); line(g, 30, 70, 30, 84); line(g, 66, 70, 66, 84); line(g, 30, 84, 66, 84); },
+  dash: (g) => { chevR(g, 46, 48); chevR(g, 66, 48); for (const [y, l] of [[34, 22], [48, 30], [62, 22]]) line(g, 30 - l, y, 30, y); },
   coax: (g) => { g.strokeRect(30, 40, 26, 22); line(g, 56, 50, 84, 50); line(g, 56, 46, 84, 46); line(g, 38, 62, 34, 76); ring(g, 20, 30, 6); ring(g, 14, 52, 4); } };
 function line(g, a, b, c, d) { g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke(); }
 function ring(g, x, y, r, gap = 0) { g.beginPath(); g.arc(x, y, r, gap, Math.PI * 2 - gap); g.stroke(); }
