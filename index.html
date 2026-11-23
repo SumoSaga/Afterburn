@@ -133,6 +133,11 @@
   #ck-frame .ft { left: 0; right: 0; top: 0; height: 4.5%; clip-path: polygon(0 0, 100% 0, 100% 55%, 64% 55%, 61% 100%, 39% 100%, 36% 55%, 0 55%); }
   #ck-frame .fd { left: 0; right: 0; bottom: 0; height: 17%; clip-path: polygon(0 42%, 13% 42%, 20% 0, 80% 0, 87% 42%, 100% 42%, 100% 100%, 0 100%); background: linear-gradient(#211c17, #0c0b0a); }
   #ck-frame .fe { left: 20%; right: 20%; bottom: 16.6%; height: 2px; background: #c45a1e; box-shadow: 0 0 8px #c45a1e; }
+  /* the seams of the cabin glass: thin dark lines where the panes meet, a faint lit edge beside each, and a few rivets */
+  #ck-seams { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #ck-seams .sm path { fill: none; stroke: rgba(6,6,7,.88); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+  #ck-seams .hi path { fill: none; stroke: rgba(196,90,30,.22); stroke-width: 1; vector-effect: non-scaling-stroke; transform: translate(2px, 2px); }
+  #ck-seams .rv rect { fill: #121110; stroke: rgba(196,90,30,.35); stroke-width: 1; vector-effect: non-scaling-stroke; }
   #ck-frame .scan { inset: 0; background: repeating-linear-gradient(rgba(0,0,0,.16) 0 1px, rgba(143,224,240,.025) 1px 3px); }
   #ck, #ck2 { position: absolute; inset: 0; }
   #ck u { display: block; text-decoration: none; color: #f2c46a; text-shadow: 0 0 6px rgba(242,196,106,.5); margin: 8px 0 2px; border-bottom: 1px solid rgba(143,224,240,.4); padding-bottom: 2px; }
@@ -352,7 +357,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "65";
+  window.AB_BUILD = "66";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "icons", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -378,7 +383,11 @@
       <div id="ck-wpn"></div>
       <div id="ck-boot"></div>
     </div>
-    <div id="ck-frame"><i class="scan"></i><i class="sl"></i><i class="sr"></i><i class="ft"></i></div>
+    <div id="ck-frame"><i class="scan"></i><i class="sl"></i><i class="sr"></i><i class="ft"></i><svg id="ck-seams" viewBox="0 0 1600 900" preserveAspectRatio="none">
+      <g class="hi"><path d="M0 312 L528 43 M1600 312 L1072 43 M0 652 L262 900 M1600 652 L1338 900 M0 312 L0 652 M528 43 L1072 43"/></g>
+      <g class="sm"><path d="M0 312 L528 43 M1600 312 L1072 43 M0 652 L262 900 M1600 652 L1338 900 M528 43 L1072 43 M800 43 L800 0 M0 470 L70 470 M1600 470 L1530 470"/></g>
+      <g class="rv"><rect x="73" y="271" width="5" height="5"/><rect x="148" y="233" width="5" height="5"/><rect x="224" y="194" width="5" height="5"/><rect x="299" y="156" width="5" height="5"/><rect x="375" y="117" width="5" height="5"/><rect x="450" y="79" width="5" height="5"/><rect x="1522" y="271" width="5" height="5"/><rect x="1447" y="233" width="5" height="5"/><rect x="1371" y="194" width="5" height="5"/><rect x="1296" y="156" width="5" height="5"/><rect x="1220" y="117" width="5" height="5"/><rect x="1145" y="79" width="5" height="5"/><rect x="63" y="712" width="5" height="5"/><rect x="128" y="774" width="5" height="5"/><rect x="194" y="836" width="5" height="5"/><rect x="1532" y="712" width="5" height="5"/><rect x="1466" y="774" width="5" height="5"/><rect x="1401" y="836" width="5" height="5"/></g>
+    </svg></div>
     <div id="ck2"><div id="ck-vit" style="display:none"></div><div id="ck-abil"></div></div>
   </div>
   <div id="ptmarks"></div><canvas id="mini" width="200" height="200"></canvas><div id="compass"><s></s></div><div id="capbox"></div><div id="scope"><i class="h"></i><i class="v"></i><i class="pl"></i><i class="pr"></i><i class="pb"></i><b></b><s></s></div><div id="oob"></div><div id="secban"></div>
@@ -421,7 +430,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 65 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 66 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -526,15 +535,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=65"></script>
-<script src="punch/punch-lab.js?v=65"></script>
-<script src="cb/genbuild.js?v=65"></script>
-<script src="cb/machines.js?v=65"></script>
-<script src="cb/soldiers.js?v=65"></script>
-<script src="cb/cbmechdata.js?v=65"></script>
-<script src="cb/cbmech.js?v=65"></script>
-<script src="cb/cbnature.js?v=65"></script>
-<script src="cb/cbweather.js?v=65"></script>
+<script src="punch/punch.js?v=66"></script>
+<script src="punch/punch-lab.js?v=66"></script>
+<script src="cb/genbuild.js?v=66"></script>
+<script src="cb/machines.js?v=66"></script>
+<script src="cb/soldiers.js?v=66"></script>
+<script src="cb/cbmechdata.js?v=66"></script>
+<script src="cb/cbmech.js?v=66"></script>
+<script src="cb/cbnature.js?v=66"></script>
+<script src="cb/cbweather.js?v=66"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
