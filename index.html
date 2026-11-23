@@ -45,6 +45,15 @@
   @keyframes holo { 0%, 91%, 100% { opacity: 1; } 92% { opacity: .78; } 93% { opacity: 1; } 95% { opacity: .9; } }
   @keyframes hboot { 0% { opacity: 0; filter: brightness(3); clip-path: inset(48% 0 48% 0); } 40% { opacity: 1; clip-path: inset(0 0 0 0); } 60% { opacity: .5; } 100% { opacity: 1; filter: none; } }
   @keyframes vboot { from { opacity: 0; } to { opacity: 1; } }
+  /* damage numbers that rise off what you hit, and an X hit marker in the middle of the screen */
+  #dmgn { position: fixed; inset: 0; pointer-events: none; z-index: 7; overflow: hidden; }
+  #dmgn b { position: absolute; left: 0; top: 0; font: 800 17px/1 system-ui, sans-serif; color: #fff; letter-spacing: .02em; text-shadow: 0 0 3px #000, 0 1px 2px #000, 0 0 8px rgba(0,0,0,.6); white-space: nowrap; will-change: transform; }
+  #dmgn b.shield { color: #8fe0f0; } #dmgn b.crit { color: #ffd84a; font-size: 21px; } #dmgn b.hull { color: #fff; }
+  #hm { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 8; opacity: 0; }
+  #hm i { position: absolute; width: 11px; height: 2.5px; background: #fff; box-shadow: 0 0 3px rgba(0,0,0,.9); border-radius: 1px; }
+  #hm i:nth-child(1) { left: -16px; top: -12px; transform: rotate(45deg); } #hm i:nth-child(2) { left: 5px; top: -12px; transform: rotate(-45deg); } #hm i:nth-child(3) { left: -16px; top: 10px; transform: rotate(-45deg); } #hm i:nth-child(4) { left: 5px; top: 10px; transform: rotate(45deg); }
+  #hm.on { animation: hmk .22s ease-out; } #hm.crit i { background: #ffd84a; } #hm.kill i { background: #ff4a3a; width: 15px; height: 3px; }
+  @keyframes hmk { 0% { opacity: 1; transform: scale(1.35); } 60% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
   #cross.crit i, #cross.crit:after { background: #ffd84a; box-shadow: 0 0 6px #ffb020; }
   #wk i { position: fixed; left: 0; top: 0; width: 11px; height: 11px; margin: -6px 0 0 -6px; border: 2px solid #ffb347; box-shadow: 0 0 6px rgba(255,170,60,.7); pointer-events: none; }
   #lockw { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); color: #ff5a3a; font: 700 15px/1 system-ui, sans-serif; letter-spacing: .22em; padding: 6px 12px; border: 2px solid #ff5a3a; background: rgba(40,6,4,.55); display: none; pointer-events: none; animation: lockb .3s steps(2) infinite; }
@@ -382,7 +391,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "71";
+  window.AB_BUILD = "72";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "icons", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -422,6 +431,7 @@
     <path class="rim" d="M0 96 Q22 450 0 808 Z"/><path class="rim" d="M1600 96 Q1578 450 1600 808 Z"/><path class="edge faint" d="M14 130 Q40 450 14 780"/><path class="edge faint" d="M1586 130 Q1560 450 1586 780"/>
     <g class="tick"><path d="M760 34 v8 M780 33 v6 M800 32 v10 M820 33 v6 M840 34 v8"/><path d="M640 884 v-8 M960 884 v-8"/><path d="M700 884 h200"/></g>
   </svg></div>
+  <div id="dmgn"></div><div id="hm"><i></i><i></i><i></i><i></i></div>
   <div id="wk"></div><div id="blind"></div><div id="lockw">LOCK WARNING</div>
   <div id="cross"><i></i><i></i><i></i><i></i></div>
   <div id="state"></div>
@@ -455,7 +465,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 71 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 72 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -479,7 +489,7 @@
         <button class="tile" data-role="a"><b>Attack</b><span>Push through every sector and take the citadel. You have tickets, and each time you come back costs one.</span></button>
         <button class="tile" data-role="d"><b>Defend</b><span>Hold the line. Fall back a sector at a time, and run their two battalions out of tickets.</span></button>
       </div>
-      <div class="row" id="presets" style="margin:6px 0"><button data-preset="colony-101-sa">Colony, 1v1</button><button data-preset="colony-202-ma">Colony, 2v2</button><button data-preset="colony-303-la">Colony, 3v3</button><button data-preset="city-101-sa">City, 1v1</button><button data-preset="city-202-ma">City, 2v2</button><button data-preset="city-303-la">City, 3v3</button><button data-preset="ship-101-sa">Ship, 1v1</button><button data-preset="ship-202-ma">Ship, 2v2</button><button data-preset="ship-303-la">Ship, 3v3</button></div>
+      <div class="row" id="presets" style="margin:6px 0"><button data-preset="highlands-303-la">Highlands, 3v3</button><button data-preset="highlands-202-ma">Highlands, 2v2</button><button data-preset="highlands-101-sa">Highlands, 1v1</button><button data-preset="colony-101-sa">Colony, 1v1</button><button data-preset="colony-202-ma">Colony, 2v2</button><button data-preset="colony-303-la">Colony, 3v3</button><button data-preset="city-101-sa">City, 1v1</button><button data-preset="city-202-ma">City, 2v2</button><button data-preset="city-303-la">City, 3v3</button><button data-preset="ship-101-sa">Ship, 1v1</button><button data-preset="ship-202-ma">Ship, 2v2</button><button data-preset="ship-303-la">Ship, 3v3</button></div>
       <p id="map-now" class="m-now"></p>
       <div id="prematch"></div>
       <div class="row"><button class="go" id="go">Drop in alone</button></div>
@@ -560,15 +570,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=71"></script>
-<script src="punch/punch-lab.js?v=71"></script>
-<script src="cb/genbuild.js?v=71"></script>
-<script src="cb/machines.js?v=71"></script>
-<script src="cb/soldiers.js?v=71"></script>
-<script src="cb/cbmechdata.js?v=71"></script>
-<script src="cb/cbmech.js?v=71"></script>
-<script src="cb/cbnature.js?v=71"></script>
-<script src="cb/cbweather.js?v=71"></script>
+<script src="punch/punch.js?v=72"></script>
+<script src="punch/punch-lab.js?v=72"></script>
+<script src="cb/genbuild.js?v=72"></script>
+<script src="cb/machines.js?v=72"></script>
+<script src="cb/soldiers.js?v=72"></script>
+<script src="cb/cbmechdata.js?v=72"></script>
+<script src="cb/cbmech.js?v=72"></script>
+<script src="cb/cbnature.js?v=72"></script>
+<script src="cb/cbweather.js?v=72"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
