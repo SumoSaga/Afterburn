@@ -49,9 +49,27 @@ const CK = { mode: "off", t: 0, glitch: 0 };   // the cockpit screens: off, dark
 const K = {}; let mouseDown = false, started = false, panelOpen = false, locked = false, noLock = false;
 let runT = 0, runOn = false, runDone = false, hurtFx = 0, coolFx = 0, sayT = 0, clock = 0;
 const hs = () => Math.hypot(P.vel.x, P.vel.z);
-function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .3 : 0), z = p.z - (ax === 2 ? n * .3 : 0);
+function nearWall(ax, n) { const p = P.pos, x = p.x - (ax === 0 ? n * .4 : 0), z = p.z - (ax === 2 ? n * .4 : 0);
   for (const b of boxesNear(x, z, P.r)) if (b.max[1] >= p.y + 1.2 && b.min[1] <= p.y + .8 && hitsBox(x, p.y + .5, z, .8, b, P.r)) return b; return null; }
 const _down = V3(0, -1, 0);
+/* climbing up onto something: the top must be in reach, there must be room to stand on it, and the space above your head
+   must be clear. It tries a few depths so thin rails and deep roofs both work. */
+function tryMantle(b, dx, dz, vb) { const top = b.max[1], up = top - P.pos.y; if (up < .3 || up > 2.7) return false; if (!free(P.pos.x, P.pos.y + .05, P.pos.z, top + 1.82 - P.pos.y, .3)) return false;
+  for (const k of [.75, .55, 1, 1.3]) { const x1 = P.pos.x + dx * k, z1 = P.pos.z + dz * k; if (!free(x1, top + .02, z1, 1.8, .3) || free(x1, top - .2, z1, .15, .2)) continue;
+    P.mantle = { t: 0, dur: .15 + up * .075, x0: P.pos.x, y0: P.pos.y, z0: P.pos.z, x1, y1: top + .02, z1, dx, dz, sp: Math.max(4.5, Math.hypot(vb.x, vb.z) * .8) }; P.h = 1.8; P.vel.set(0, 0, 0); P.wall = null; return true; }
+  return false; }
+/* reach for a ledge in front of you while in the air: no need to bump into the wall first */
+function ledgeGrab(dx, dz) { const px = P.pos.x + dx * (P.r + .4), pz = P.pos.z + dz * (P.r + .4); let best = null;
+  for (const b of boxesNear(px, pz, .3)) { if (px < b.min[0] - .15 || px > b.max[0] + .15 || pz < b.min[2] - .15 || pz > b.max[2] + .15) continue; const up = b.max[1] - P.pos.y; if (up < .3 || up > 2.7 || b.min[1] > P.pos.y + 1.7) continue; if (!best || b.max[1] > best.max[1]) best = b; }
+  return best ? tryMantle(best, dx, dz, P.vel) : false; }
+/* catch a wall beside you while in the air, even when you are not quite touching it, and slide flush against it */
+function wallSnap() { if (P.wallCd > 0 || P.mantle) return false; for (const ax of [0, 2]) for (const n of [-1, 1]) { const tx0 = ax === 0 ? 0 : 1, tz0 = ax === 0 ? 1 : 0, along = P.vel.x * tx0 + P.vel.z * tz0, away = (ax === 0 ? P.vel.x : P.vel.z) * n; if (Math.abs(along) < 2.2 || away > 2.5) continue;
+    const p = P.pos, x = p.x - (ax === 0 ? n * .75 : 0), z = p.z - (ax === 2 ? n * .75 : 0);
+    for (const b of boxesNear(x, z, P.r)) { if (!(b.max[1] >= p.y + 1.2 && b.min[1] <= p.y + .8 && hitsBox(x, p.y + .5, z, .8, b, P.r))) continue;
+      const same = P.lastWall && P.lastWall.ax === ax && P.lastWall.n === n && Math.abs(P.lastWall.c - p.getComponent(ax)) < .5; if (same) continue;
+      const c = n > 0 ? b.max[ax] + P.r + .01 : b.min[ax] - P.r - .01, nx = ax === 0 ? c : p.x, nz = ax === 2 ? c : p.z; if (!free(nx, p.y, nz, P.h)) continue; if (p.y - groundBelow() < .35) return false;
+      p.setComponent(ax, c); const sg = Math.sign(along); P.wall = { ax, n, tx: tx0 * sg, tz: tz0 * sg, sp: Math.abs(along), t: 0, miss: 0 }; P.vel.y = clamp(P.vel.y * .6, 1.5, 4.5); return true; } }
+  return false; }
 function groundBelow() { const t = rayWorld(P.pos.clone().setY(P.pos.y + .1), _down, 50); return P.pos.y + .1 - t; }
 function endWall(cd) { const w = P.wall; P.lastWall = { ax: w.ax, n: w.n, c: P.pos.getComponent(w.ax) }; P.wall = null; P.wallCd = cd; }
 function respawn() { const ox = B.mp ? (MY.slot > 1 ? 5 : 0) : 0; const north = B.mp && !MY.south, hm = homeOf(north ? "foe" : "you"), tz = north ? -400 : 400, pt0 = POINTS.find((p) => p.sector === Math.min(OP.sector, SECN - 1)) || { x: hm[0], z: hm[1] - tz }; P.pos.set(hm[0] + ox, groundH(hm[0] + ox, hm[1]) + .1, hm[1]); P.vel.set(0, 0, 0); P.yaw = Math.atan2(-(pt0.x - hm[0]), -(pt0.z - hm[1])); P.pitch = 0; P.hp = HP; P.dead = 0; P.mags = { 0: PW[LOAD.weapon] ? PW[LOAD.weapon].mag : 28, 2: PW.pistol.mag }; P.weapon = 0; P.ads = 0; P.adsHeld = false; P.grap = null; P.stimT = 0; P.wall = P.mantle = null; P.sliding = false; P.h = 1.8; P.nades = 2; P.swapT = P.nadeT = P.meleeT = -1; P.ammo = pw().mag; P.reload = 0; P.canDouble = true; P.titan = null; atFill(); }
@@ -99,9 +117,10 @@ function stepPilot(dt) {
     w.sp = Math.min(Math.max(w.sp, CFG.wallSpeed * .8) + 6 * dt, Math.max(w.sp, CFG.wallSpeed * (P.stimT > 0 ? 1.4 : 1)));
     P.vel.x = w.tx * w.sp; P.vel.z = w.tz * w.sp;
     const late = w.t > CFG.wallTime * .7; P.vel.y = late ? P.vel.y - CFG.gravity * .45 * dt : Math.max(P.vel.y - 9 * dt, 0);
-    const b = nearWall(w.ax, w.n);
-    if (P.jumpBuf > 0) { P.jumpBuf = 0; if (w.ax === 0) P.vel.x += w.n * CFG.wallKick; else P.vel.z += w.n * CFG.wallKick; P.vel.y = CFG.jump * 1.03; endWall(.2); }
-    else if (!b || w.t > CFG.wallTime || P.grounded || (mz < 0)) endWall(.25);
+    const b = nearWall(w.ax, w.n); if (b) w.miss = 0; else w.miss = (w.miss || 0) + dt;
+    if (b && wl > 0 && wx * -(w.ax === 0 ? w.n : 0) + wz * -(w.ax === 2 ? w.n : 0) > .55 && tryMantle(b, w.ax === 0 ? -w.n : 0, w.ax === 2 ? -w.n : 0, P.vel)) return;
+    if (P.jumpBuf > 0) { P.jumpBuf = 0; if (w.ax === 0) P.vel.x += w.n * CFG.wallKick; else P.vel.z += w.n * CFG.wallKick; P.vel.y = CFG.jump * 1.03; endWall(.15); }
+    else if (w.miss > .14 || w.t > CFG.wallTime || P.grounded || (mz < 0)) endWall(.25);
   } else if (P.grounded) {
     P.canDouble = true; P.lastWall = null; P.coyote = .1;
     if (crouchKey && !P.sliding && !P.crouchLatch) { if (hs() > 5.6) { P.sliding = true; if (P.slideCd <= 0) { const s = hs(), k = (s + CFG.slideBoost) / s; P.vel.x *= k; P.vel.z *= k; P.slideCd = 1.8; } } else P.crouchLatch = true; }
@@ -127,13 +146,12 @@ function stepPilot(dt) {
   // a wall got in the way while in the air: pull up onto it if the top is in reach, otherwise run along it
   if (!P.grounded && !P.wall && hits.length) {
     for (const hI of hits) { const b = hI.b, up = b.max[1] - P.pos.y, nx = hI.ax === 0 ? hI.n : 0, nz = hI.ax === 2 ? hI.n : 0;
-      if (up > .5 && up <= 2.15 && wx * -nx + wz * -nz > .3 && free(P.pos.x - nx * .75, b.max[1] + .02, P.pos.z - nz * .75, 1.8)) {
-        P.mantle = { t: 0, dur: .16 + up * .08, x0: P.pos.x, y0: P.pos.y, z0: P.pos.z, x1: P.pos.x - nx * .75, y1: b.max[1] + .02, z1: P.pos.z - nz * .75, dx: -nx, dz: -nz, sp: Math.max(4, Math.hypot(vb.x, vb.z) * .75) };
-        P.h = 1.8; P.vel.set(0, 0, 0); return; }
+      if (up > .3 && up <= 2.7 && wx * -nx + wz * -nz > .15 && tryMantle(b, -nx, -nz, vb)) return;
       const tx0 = hI.ax === 0 ? 0 : 1, tz0 = hI.ax === 0 ? 1 : 0, along = vb.x * tx0 + vb.z * tz0;
       const same = P.lastWall && P.lastWall.ax === hI.ax && P.lastWall.n === hI.n && Math.abs(P.lastWall.c - P.pos.getComponent(hI.ax)) < .5;
-      if (P.wallCd <= 0 && !same && !was && Math.abs(along) > 3 && b.max[1] >= P.pos.y + 1.5 && b.min[1] <= P.pos.y + .6 && P.pos.y - groundBelow() > .5) {
-        const sg = Math.sign(along); P.wall = { ax: hI.ax, n: hI.n, tx: tx0 * sg, tz: tz0 * sg, sp: Math.abs(along), t: 0 }; P.vel.y = clamp(vb.y * .6, 1.5, 4.5); break; } } }
+      if (P.wallCd <= 0 && !same && !was && Math.abs(along) > 2.2 && b.max[1] >= P.pos.y + 1.2 && b.min[1] <= P.pos.y + .8 && P.pos.y - groundBelow() > .35) {
+        const sg = Math.sign(along); P.wall = { ax: hI.ax, n: hI.n, tx: tx0 * sg, tz: tz0 * sg, sp: Math.abs(along), t: 0, miss: 0 }; P.vel.y = clamp(vb.y * .6, 1.5, 4.5); break; } } }
+  if (!P.grounded && !P.wall && !P.mantle && !P.seq) { if (wl > 0 && (wx * fx + wz * fz > .3 || hs() > 2) && ledgeGrab(wx, wz)) return; wallSnap(); }
 }
 
 /* ---------- blasts and damage ---------- */
@@ -1150,7 +1168,13 @@ function weakMarks() { let n = 0; const put = (x, y, z) => { const v = V3(x * U,
   if (started && !MAP.on && !P.titan && P.dead <= 0 && !P.seq && P.weapon === 1 && P.ads > .5) { cam.updateMatrixWorld(); for (const t of TITANS) { if (!t.alive || t.team === "you") continue; const d = Math.hypot(t.pos.x - P.pos.x, t.pos.z - P.pos.z); if (d > 150) continue;
       put(t.pos.x, t.pos.y + t.h * .9, t.pos.z); const fx = -Math.sin(t.yaw), fz = -Math.cos(t.yaw); if (((P.pos.x - t.pos.x) * fx + (P.pos.z - t.pos.z) * fz) / (d || 1) < .2) put(t.pos.x - fx * t.r * .9, t.pos.y + t.h * .6, t.pos.z - fz * t.r * .9); } }
   for (let i = n; i < WK.pool.length; i++) WK.pool[i].style.display = "none"; }
-function hud(dt) { tbars(dt); weakMarks(); campWatch(); oob(dt); nav(); scope(dt); crossGap(); el.cross.className = hitT > 0 ? (critT > 0 ? "hit crit" : "hit") : ""; WK.lock.style.display = P.titan && lockWarn > 0 ? "block" : "none"; WK.blind.style.opacity = P.titan && myBlind > 0 ? Math.min(1, myBlind / 1.2) : 0; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
+/* the helmet display: on when you are on foot in the fight. It lags a touch behind your head as you turn and land, and boots up when you drop in. */
+const HELM = { on: false, yaw: 0, pitch: 0, x: 0, y: 0, el: $("hud") };
+function helm(dt) { const on = started && !MAP.on && !P.titan && !P.seq && P.dead <= 0 && CK.mode === "off" && !(SCOPED[gunKind()] && P.ads > .82);
+  if (on !== HELM.on) { HELM.on = on; HELM.el.classList.toggle("helm", on); if (on) { HELM.el.classList.add("boot"); later(.75, () => HELM.el.classList.remove("boot")); HELM.yaw = P.yaw; HELM.pitch = P.pitch; } }
+  if (!on || dt <= 0) return; const dy = angD(HELM.yaw, P.yaw) / dt, dp = (P.pitch - HELM.pitch) / dt; HELM.yaw = P.yaw; HELM.pitch = P.pitch; const k = 1 - Math.exp(-dt * 7);
+  HELM.x = lerp(HELM.x, clamp(dy * 5, -16, 16), k); HELM.y = lerp(HELM.y, clamp(dp * 4 + P.vel.y * .5 + P.dip * 30, -14, 14), k); HELM.el.style.setProperty("--sx", HELM.x.toFixed(1) + "px"); HELM.el.style.setProperty("--sy", HELM.y.toFixed(1) + "px"); }
+function hud(dt) { helm(dt); tbars(dt); weakMarks(); campWatch(); oob(dt); nav(); scope(dt); crossGap(); el.cross.className = hitT > 0 ? (critT > 0 ? "hit crit" : "hit") : ""; WK.lock.style.display = P.titan && lockWarn > 0 ? "block" : "none"; WK.blind.style.opacity = P.titan && myBlind > 0 ? Math.min(1, myBlind / 1.2) : 0; if (sayT > 0) { sayT -= dt; if (sayT <= 0) say(""); } cockpit(dt); if (P.titan || CK.mode !== "off") { el.state.textContent = ""; el.foe.style.display = "none"; return; }
   hudT -= dt; if (hudT > 0) return; hudT = .08; const m = P.mine;
   const W = pw(), anti = P.weapon === 1, word = anti ? (P.atRl > 0 ? "reloading" : P.charge > 0 ? (LOAD.anti === "seeker" ? "locking " + Math.round(P.charge * 100) + "%" : "charging") : P.atMag <= 0 && P.atRes <= 0 ? "empty" : "") : P.reload > 0 ? "reloading" : "";
   el.lab1.textContent = "Pilot"; el.hpfill.style.width = P.hp / HP * 100 + "%"; HX.hp.textContent = Math.max(0, Math.ceil(P.hp)); HX.hpbar.classList.toggle("low", P.hp < HP * .35); el.speed.textContent = hs().toFixed(1) + " m/s";
