@@ -200,6 +200,14 @@
   #m-main table { border-collapse: collapse; font-size: 13px; } #m-main td { padding: 5px 12px 5px 0; vertical-align: top; border-top: 1px solid #3a2e22; color: #cdbb98; } #m-main td:first-child { color: #f2c46a; white-space: nowrap; }
   @media (max-width: 820px) { #m-side { width: 190px; padding-left: 20px; } #m-side h1 { font-size: 28px; } #m-nav button { font-size: 18px; } #m-main { padding: 30px 16px; } .tiles { grid-template-columns: 1fr; } }
 
+  /* saved loadouts and the Play tab's "going in with" */
+  .lsets { margin-bottom: 6px; } .lrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; } .lrow .none { color: #8a8170; font-size: 13px; }
+  .lchip { display: inline-flex; border: 1px solid rgba(255,255,255,.16); background: rgba(20,23,26,.85); } .lchip.on { border-color: #f2a046; background: rgba(60,42,20,.9); }
+  #m-main .lchip button { border: 0; background: none; padding: 6px 10px; text-align: left; font-size: 13px; color: #efe2c8; } #m-main .lchip button em { display: block; font-style: normal; font-size: 11px; color: #8a8170; letter-spacing: .02em; }
+  #m-main .lchip.on button { color: #f6c868; } #m-main .lchip .x { padding: 6px 8px; color: #8a8170; border-left: 1px solid rgba(255,255,255,.1); } #m-main .lchip .x:hover { color: #ff8a6a; } #m-main .lchip .x.arm { background: #a3301e; color: #fff; }
+  .lsave { display: flex; gap: 6px; align-items: center; margin-top: 8px; } .lsave input { font: inherit; font-size: 13px; background: #0e0c0a; color: #efe2c8; border: 1px solid #6b5438; padding: 6px 8px; width: 220px; } #m-main .lsave button { font-size: 12px; padding: 6px 12px; } .lnote { font-size: 12px; color: #8fe08a; }
+  #prematch h2 { margin-top: 18px; } .pm { display: grid; gap: 8px; margin-top: 8px; } .pm label { display: grid; grid-template-columns: 70px 220px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: rgba(20,23,26,.8); border: 1px solid rgba(255,255,255,.12); }
+  .pm b { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #fff; font-weight: 600; } .pm select { font: inherit; font-size: 13px; background: #0e0c0a; color: #efe2c8; border: 1px solid #6b5438; padding: 5px 6px; } .pm span { font-size: 12px; color: #b4ac9c; } #m-main .pm button { font-size: 12px; padding: 4px 10px; }
   /* picture cards on the Pilot and Titan tabs */
   .gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
   #m-main .gc { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 0 0 8px; text-align: left; background: linear-gradient(180deg, #23282d, #15181b); border: 1px solid rgba(255,255,255,.13); border-bottom: 3px solid rgba(255,255,255,.12); overflow: hidden; transition: transform .12s, border-color .12s; }
@@ -300,7 +308,7 @@
 </style>
 <script>
   // Every file of the game is asked for with this build number on the end, so a new build is never mixed with old files a browser kept.
-  window.AB_BUILD = "60";
+  window.AB_BUILD = "61";
   (function () { var v = "?v=" + window.AB_BUILD, m = { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" };
     ["battle", "campaign", "editor", "engine", "figure", "game", "garage", "hands", "icons", "loadout", "mapgen", "mechblocks", "net", "parts", "puppet", "titan"].forEach(function (n) { m["./mf/" + n + ".js"] = "./mf/" + n + ".js" + v; });
     var s = document.createElement("script"); s.type = "importmap"; s.textContent = JSON.stringify({ imports: m }); document.currentScript.after(s); })();
@@ -363,7 +371,7 @@
  <div class="m-wrap">
   <div id="m-side">
     <h1>AFTERBURN</h1>
-    <div class="m-tag">Prototype 60 · Frontier Conquest</div>
+    <div class="m-tag">Prototype 61 · Frontier Conquest</div>
     <nav id="m-nav">
       <button data-tab="play" class="on">Play</button>
       <button data-tab="faction">Faction</button>
@@ -389,6 +397,7 @@
       </div>
       <div class="row" id="presets" style="margin:6px 0"><button data-preset="colony-101-sa">Colony, 1v1</button><button data-preset="colony-202-ma">Colony, 2v2</button><button data-preset="colony-303-la">Colony, 3v3</button><button data-preset="city-101-sa">City, 1v1</button><button data-preset="city-202-ma">City, 2v2</button><button data-preset="city-303-la">City, 3v3</button><button data-preset="ship-101-sa">Ship, 1v1</button><button data-preset="ship-202-ma">Ship, 2v2</button><button data-preset="ship-303-la">Ship, 3v3</button></div>
       <p id="map-now" class="m-now"></p>
+      <div id="prematch"></div>
       <div class="row"><button class="go" id="go">Drop in alone</button></div>
       <h2>Private match</h2>
       <p class="note">Two to six players, in two sides. One of you hosts and gets a code; the others type the code and join. Each of you brings your own faction, pilot, Titan and battlegroup. The host's side attacks or defends as chosen here, and everyone plays on the host's field. If someone drops out, opening this page again puts them back in.</p>
@@ -467,15 +476,15 @@
   <div class="row"><button id="t-meter">Fill the Titan meter</button><button id="t-copy">Copy settings</button><button id="t-reset">Defaults</button><button id="t-close" class="on">Back to the yard</button></div>
   <p id="t-note" class="lab"></p>
 </div>
-<script src="punch/punch.js?v=60"></script>
-<script src="punch/punch-lab.js?v=60"></script>
-<script src="cb/genbuild.js?v=60"></script>
-<script src="cb/machines.js?v=60"></script>
-<script src="cb/soldiers.js?v=60"></script>
-<script src="cb/cbmechdata.js?v=60"></script>
-<script src="cb/cbmech.js?v=60"></script>
-<script src="cb/cbnature.js?v=60"></script>
-<script src="cb/cbweather.js?v=60"></script>
+<script src="punch/punch.js?v=61"></script>
+<script src="punch/punch-lab.js?v=61"></script>
+<script src="cb/genbuild.js?v=61"></script>
+<script src="cb/machines.js?v=61"></script>
+<script src="cb/soldiers.js?v=61"></script>
+<script src="cb/cbmechdata.js?v=61"></script>
+<script src="cb/cbmech.js?v=61"></script>
+<script src="cb/cbnature.js?v=61"></script>
+<script src="cb/cbweather.js?v=61"></script>
 <script type="module">import "./mf/game.js";</script>
 </body>
 </html>
