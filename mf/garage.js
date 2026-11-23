@@ -55,7 +55,18 @@ function partAt(slot) { const v = new THREE.Vector3(); if (!tab) return null;
 const VIEWS = { pilot: { p: [-2.2, 1.45, 8.6], t: [-7.5, 1.0, 6.0] }, titan: { p: [-2.4, 2.4, 8], t: [.8, 4, -4] } };
 export const GARAGE_FOV = 52;
 // the view for the tab, or a closer one on the part being looked at: the camera comes in along its own line and keeps the part right of the menu
-function focusView(v) { const base = { p: V(v.p), t: V(v.t) }; if (!focus) return base; const part = partAt(focus); if (!part) return base; part.y += Y0;
+/* The Pilot tab's camera stands in front of the pilot and keeps them in the screen space the menu leaves on the right
+   (frameX is the middle of that space, 0 to 1 across the screen). With no part picked it shows the whole pilot; on a part it
+   comes in close at that part's height, and the pilot turns to show it: the back for the weapon for mechs, the right hip for
+   the sidearm, the belt for ordnance. */
+const PFOC = { wpn: { h: 1.22, turn: -.15 }, sidearm: { h: .86, turn: 1.15 }, ord: { h: .98, turn: -.45 }, kit: { h: 1.3, turn: -.3 }, anti: { h: 1.32, turn: 2.55 } };
+const PILOT_AT = new THREE.Vector3(-6.0, 0, 4.1), PILOT_YAW = Math.PI + .62; let frameX = .74, turnNow = 0;
+function pilotView() { const f = PFOC[focus || sfocus], d = f ? 1.6 : 2.35, h = f ? f.h : .95, face = PILOT_YAW, fx = Math.sin(face - Math.PI), fz = Math.cos(face - Math.PI);
+  const a = -.28, cx = fx * Math.cos(a) - fz * Math.sin(a), cz = fx * Math.sin(a) + fz * Math.cos(a), at = new THREE.Vector3(PILOT_AT.x, Y0 + h, PILOT_AT.z), p = at.clone().add(new THREE.Vector3(cx * d, .08, cz * d));
+  const fwd = at.clone().sub(p).setY(0).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x), tanH = Math.tan(GARAGE_FOV * Math.PI / 360) * (cam.aspect || 1.6), s = clamp(frameX * 2 - 1, -.6, .7);
+  return { p, t: at.clone().addScaledVector(right, -d * s * tanH) }; }
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)); let sfocus = null;
+function focusView(v) { if (tab === "pilot") return pilotView(); const base = { p: V(v.p), t: V(v.t) }; const fs = focus || sfocus; if (!fs) return base; const part = partAt(fs); if (!part) return base; part.y += Y0;
   // move the camera part of the way toward the part, and its aim a little less, so the subject stays right of the menu as it comes closer
   if (tab === "pilot") return { p: base.p.clone().lerp(part, .42).add(new THREE.Vector3(0, .1, 0)), t: base.t.clone().lerp(part, .3) };
   return { p: base.p.clone().lerp(part, .36).add(new THREE.Vector3(0, .5, 0)), t: base.t.clone().lerp(part, .1) }; }
@@ -67,16 +78,21 @@ export const GARAGE = {
   setTab(name) { const next = VIEWS[name] ? name : null, was = tab; if (next === was) return; tab = next; root.visible = !!tab; for (const l of lamps) l.visible = !!tab; if (!tab) { cam.fov = CFG.fov; cam.updateProjectionMatrix(); return; } refresh();
     if (was) { from.p.copy(cur.p); from.t.copy(cur.t); k = 0; } else { cur.p.copy(V(VIEWS[tab].p)); cur.t.copy(V(VIEWS[tab].t)); k = 1; } },
   refresh,
-  step(dt) { if (!tab) return false; time += dt; if (cam.fov !== GARAGE_FOV) { cam.fov = GARAGE_FOV; cam.updateProjectionMatrix(); } const v = VIEWS[tab]; if (k < 1) { k = Math.min(1, k + dt / 1.6); const e = ease(k); cur.p.lerpVectors(from.p, V(v.p), e); cur.t.lerpVectors(from.t, V(v.t), e); cur.p.y += Math.sin(e * Math.PI) * .5; }
+  step(dt) { if (!tab) return false; time += dt; if (cam.fov !== GARAGE_FOV) { cam.fov = GARAGE_FOV; cam.updateProjectionMatrix(); } const v = VIEWS[tab]; if (k < 1) { k = Math.min(1, k + dt / 1.6); const e = ease(k); const to = tab === "pilot" ? pilotView() : { p: V(v.p), t: V(v.t) }; cur.p.lerpVectors(from.p, to.p, e); cur.t.lerpVectors(from.t, to.t, e); cur.p.y += Math.sin(e * Math.PI) * .5; }
     if (k >= 1) { const want = focusView(v); const e = 1 - Math.exp(-dt * 3.2); cur.p.lerp(want.p, e); cur.t.lerp(want.t, e); }
     const sway = Math.sin(time * .25) * .12; cam.position.set((cur.p.x + sway) * U, cur.p.y * U, cur.p.z * U); cam.lookAt(cur.t.x * U, cur.t.y * U, cur.t.z * U);
     // the pilot stands by the crate, turning a little as they shift their weight, and shows off a new pick with a half turn
-    const show = Math.max(0, pulseT); if (fig) fig.pose(dt, { x: -6.0, y: 0, z: 4.1, yaw: Math.PI + .62 + Math.sin(time * .5) * .06 - Math.sin(show * Math.PI) * .5, pitch: -.12 + Math.sin(show * Math.PI) * .15, speed: 0, grounded: true, sit: false, sliding: false, crouch: false, wall: 0, dj: 9, vy: 0, dead: false, hidden: false });
+    const show = Math.max(0, pulseT); const ft = tab === "pilot" && PFOC[focus || sfocus] ? PFOC[focus || sfocus].turn : 0; turnNow += (ft - turnNow) * (1 - Math.exp(-dt * 4));
+    if (fig) fig.pose(dt, { x: PILOT_AT.x, y: 0, z: PILOT_AT.z, yaw: PILOT_YAW + turnNow + Math.sin(time * .5) * .05 - Math.sin(show * Math.PI) * .4, pitch: -.12 + Math.sin(show * Math.PI) * .15, speed: 0, grounded: true, sit: false, sliding: false, crouch: false, wall: 0, dj: 9, vy: 0, dead: false, hidden: false });
     if (rig) { rig.pose(dt, { speed: 0, kneel: 0, hatch: 0, aimYaw: Math.sin(time * .2) * .08, aimPitch: 0, recoil: show * .6, punch: 0, limp: false }); rig.root.position.y = -Math.sin(show * Math.PI) * .12 * U; }
     if (pulseT > 0) { pulseT -= dt * 1.1; pulseL.visible = true; pulseL.intensity = Math.max(0, pulseT) * 700; } else pulseL.visible = false;
     return true; },
   // point the camera at one part of the loadout while its cards are looked at (null to go back)
   focus(slot) { focus = slot || null; },
+  // the part whose cards are at the top of the menu as you scroll
+  scrollFocus(slot) { sfocus = slot || null; },
+  // where across the screen the subject should stand: the middle of the space right of the menu
+  frame(x) { if (x > 0 && x < 1) frameX = x; },
   // light up the part that just changed
   pulse(slot) { setTimeout(() => { const p = partAt(slot); if (!p) return; pulseL.position.set(p.x * U, (p.y + Y0) * U, p.z * U); pulseT = 1; }, 60); },
   leave() { if (tab) { cam.fov = CFG.fov; cam.updateProjectionMatrix(); } tab = null; root.visible = false; for (const l of lamps) l.visible = false; } };
