@@ -32,7 +32,7 @@ const lamps = [new THREE.PointLight("#ffc890", 1700, 520, 1.5), new THREE.PointL
 const gear = new THREE.Group(); root.add(gear); let fig = null, figKey = "", rig = null, rigKey = "", gearKey = "";
 function refresh() { if (!root.visible) return;
   const fk = LOAD.side + LOAD.paint; if (fk !== figKey) { figKey = fk; if (fig) fig.dispose(); fig = makeFigure(LOAD.side, false, LOAD.paint); root.add(fig.root); for (const c of fig.root.children) if (c.geometry && c.geometry.type === "OctahedronGeometry") c.visible = false; }
-  const lo = LOAD.tlo && LOAD.tlo[LOAD.chassis], rk = LOAD.paint + LOAD.chassis + LOAD.side + JSON.stringify(lo || {}); if (rk !== rigKey) { rigKey = rk; if (rig) rig.root.removeFromParent(); rig = makeRig("you", { accent: LOAD.paint, cls: LOAD.chassis, lo, mech: ({ machine: { light: "kestrel", medium: "centurion", heavy: "bastion" }, militia: { light: "jackal", medium: "nomad", heavy: "furnace" } })[LOAD.side][LOAD.chassis] }); root.add(rig.root); rig.root.position.set(5 * U, 0, -4 * U); rig.root.rotation.y = Math.PI - .25; }
+  const lo = LOAD.tlo && LOAD.tlo[LOAD.chassis], rk = LOAD.paint + LOAD.chassis + LOAD.side + JSON.stringify(lo || {}); if (rk !== rigKey) { rigKey = rk; if (rig) rig.root.removeFromParent(); rig = makeRig("you", { accent: LOAD.paint, cls: LOAD.chassis, lo, mech: ({ machine: { light: "kestrel", medium: "centurion", heavy: "bastion" }, militia: { light: "jackal", medium: "nomad", heavy: "furnace" } })[LOAD.side][LOAD.chassis] }); root.add(rig.root); rig.root.position.set(5 * U, 0, -4 * U); rig.root.rotation.y = Math.PI - .25; rig.root.updateMatrixWorld(true); { const bx = new THREE.Box3().setFromObject(rig.root); rigTall = Math.max(3, (bx.max.y - bx.min.y) / U); } }
   /* The pilot wears the loadout: the primary in the hands, the sidearm in a thigh holster, the ordnance on the belt, the kit
      strapped to the chest and the weapon for mechs slung across the back. */
   const gk = [LOAD.weapon, LOAD.sidearm, LOAD.ord, LOAD.kit, LOAD.anti, figKey].join(); if (gk !== gearKey && fig) { gearKey = gk; for (const o of worn) o.removeFromParent(); worn.length = 0;
@@ -66,7 +66,19 @@ function pilotView() { const f = PFOC[focus || sfocus], d = f ? 1.6 : 2.35, h = 
   const fwd = at.clone().sub(p).setY(0).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x), tanH = Math.tan(GARAGE_FOV * Math.PI / 360) * (cam.aspect || 1.6), s = clamp(frameX * 2 - 1, -.6, .7);
   return { p, t: at.clone().addScaledVector(right, -d * s * tanH) }; }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)); let sfocus = null;
-function focusView(v) { if (tab === "pilot") return pilotView(); const base = { p: V(v.p), t: V(v.t) }; const fs = focus || sfocus; if (!fs) return base; const part = partAt(fs); if (!part) return base; part.y += Y0;
+/* The Titan tab works the same way: the mech stands large in the space right of the menu, and on a slot the camera comes in on
+   that part while the mech turns to show it. The primary is in the right hand, ordnance on the left shoulder, the coax on the
+   right shoulder; a defensive kit can sit on the left forearm, the gun, the back or the legs. */
+const TITAN_AT = new THREE.Vector3(5, 0, -4), TITAN_ROT = Math.PI - .25; let tTurn = 0, rigTall = 6;
+const ETURN = { phase: 2.5, vtol: 2.5, sonar: 2.6, anchor: .15, gunshield: -.45 };
+function titanTurn(slot) { if (!slot) return 0; if (slot === "prim") return -.45; if (slot === "q") return .6; if (slot === "kit") return -.6; if (slot === "x") return 0; const e = LOAD.tlo && LOAD.tlo[LOAD.chassis] && LOAD.tlo[LOAD.chassis].e; return ETURN[e] ?? .6; }
+function titanView() { const slot = focus || sfocus, fx = -Math.sin(TITAN_ROT), fz = -Math.cos(TITAN_ROT), a = .3, cx = fx * Math.cos(a) - fz * Math.sin(a), cz = fx * Math.sin(a) + fz * Math.cos(a);
+  let at = null; if (slot && slot !== "x") { const q = partAt(slot); if (q) { at = q; at.y += Y0; } }
+  const tall = rigTall, d = at ? tall * .75 : tall * 1.3;
+  if (!at) at = new THREE.Vector3(TITAN_AT.x, Y0 + tall * (slot === "x" ? .7 : .5), TITAN_AT.z);
+  const p = at.clone().add(new THREE.Vector3(cx * d, slot && slot !== "x" ? tall * .06 : tall * .12, cz * d)), fwd = at.clone().sub(p).setY(0).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x), tanH = Math.tan(GARAGE_FOV * Math.PI / 360) * (cam.aspect || 1.6), s = clamp(frameX * 2 - 1, -.6, .7);
+  return { p, t: at.clone().addScaledVector(right, -d * s * tanH) }; }
+function focusView(v) { if (tab === "pilot") return pilotView(); if (tab === "titan") return titanView(); const base = { p: V(v.p), t: V(v.t) }; const fs = focus || sfocus; if (!fs) return base; const part = partAt(fs); if (!part) return base; part.y += Y0;
   // move the camera part of the way toward the part, and its aim a little less, so the subject stays right of the menu as it comes closer
   if (tab === "pilot") return { p: base.p.clone().lerp(part, .42).add(new THREE.Vector3(0, .1, 0)), t: base.t.clone().lerp(part, .3) };
   return { p: base.p.clone().lerp(part, .36).add(new THREE.Vector3(0, .5, 0)), t: base.t.clone().lerp(part, .1) }; }
@@ -78,12 +90,13 @@ export const GARAGE = {
   setTab(name) { const next = VIEWS[name] ? name : null, was = tab; if (next === was) return; tab = next; root.visible = !!tab; for (const l of lamps) l.visible = !!tab; if (!tab) { cam.fov = CFG.fov; cam.updateProjectionMatrix(); return; } refresh();
     if (was) { from.p.copy(cur.p); from.t.copy(cur.t); k = 0; } else { cur.p.copy(V(VIEWS[tab].p)); cur.t.copy(V(VIEWS[tab].t)); k = 1; } },
   refresh,
-  step(dt) { if (!tab) return false; time += dt; if (cam.fov !== GARAGE_FOV) { cam.fov = GARAGE_FOV; cam.updateProjectionMatrix(); } const v = VIEWS[tab]; if (k < 1) { k = Math.min(1, k + dt / 1.6); const e = ease(k); const to = tab === "pilot" ? pilotView() : { p: V(v.p), t: V(v.t) }; cur.p.lerpVectors(from.p, to.p, e); cur.t.lerpVectors(from.t, to.t, e); cur.p.y += Math.sin(e * Math.PI) * .5; }
+  step(dt) { if (!tab) return false; time += dt; if (cam.fov !== GARAGE_FOV) { cam.fov = GARAGE_FOV; cam.updateProjectionMatrix(); } const v = VIEWS[tab]; if (k < 1) { k = Math.min(1, k + dt / 1.6); const e = ease(k); const to = tab === "pilot" ? pilotView() : tab === "titan" ? titanView() : { p: V(v.p), t: V(v.t) }; cur.p.lerpVectors(from.p, to.p, e); cur.t.lerpVectors(from.t, to.t, e); cur.p.y += Math.sin(e * Math.PI) * .5; }
     if (k >= 1) { const want = focusView(v); const e = 1 - Math.exp(-dt * 3.2); cur.p.lerp(want.p, e); cur.t.lerp(want.t, e); }
     const sway = Math.sin(time * .25) * .12; cam.position.set((cur.p.x + sway) * U, cur.p.y * U, cur.p.z * U); cam.lookAt(cur.t.x * U, cur.t.y * U, cur.t.z * U);
     // the pilot stands by the crate, turning a little as they shift their weight, and shows off a new pick with a half turn
     const show = Math.max(0, pulseT); const ft = tab === "pilot" && PFOC[focus || sfocus] ? PFOC[focus || sfocus].turn : 0; turnNow += (ft - turnNow) * (1 - Math.exp(-dt * 4));
     if (fig) fig.pose(dt, { x: PILOT_AT.x, y: 0, z: PILOT_AT.z, yaw: PILOT_YAW + turnNow + Math.sin(time * .5) * .05 - Math.sin(show * Math.PI) * .4, pitch: -.12 + Math.sin(show * Math.PI) * .15, speed: 0, grounded: true, sit: false, sliding: false, crouch: false, wall: 0, dj: 9, vy: 0, dead: false, hidden: false });
+    { const tt = tab === "titan" ? titanTurn(focus || sfocus) : 0; tTurn += (tt - tTurn) * (1 - Math.exp(-dt * 3)); if (rig) rig.root.rotation.y = TITAN_ROT + tTurn; }
     if (rig) { rig.pose(dt, { speed: 0, kneel: 0, hatch: 0, aimYaw: Math.sin(time * .2) * .08, aimPitch: 0, recoil: show * .6, punch: 0, limp: false }); rig.root.position.y = -Math.sin(show * Math.PI) * .12 * U; }
     if (pulseT > 0) { pulseT -= dt * 1.1; pulseL.visible = true; pulseL.intensity = Math.max(0, pulseT) * 700; } else pulseL.visible = false;
     return true; },
