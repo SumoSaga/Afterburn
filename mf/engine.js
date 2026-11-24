@@ -221,6 +221,7 @@ function boxGeo(w, h, d, x, y, z, col, grime = true) { const g = new THREE.BoxGe
 function tone(col, k) { _c.set(col).multiplyScalar(k); return "#" + _c.getHexString(); }
 const deco = (x, y, z, w, h, d, col, grime) => geos.push(boxGeo(w, h, d, x, y, z, col, grime));
 const glow = (x, y, z, w, h, d) => glowGeos.push(new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z));
+const glowCGeos = [], glowC = (x, y, z, w, h, d) => glowCGeos.push(new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z));   // cyan light: the colour of the new colony and ship pieces
 function solid(x, y, z, w, h, d, col, o = {}) {
   BOXES.push({ min: [x - w / 2, y, z - d / 2], max: [x + w / 2, y + h, z + d / 2] });
   if (o.hide) return;
@@ -333,6 +334,8 @@ if (PLAN) for (const p of PLAN.prims) { const k = p[0], x = p[1], z = p[2], y = 
   else if (k === "d" && p[8]) roofGeos.push(boxGeo(p[3], p[4], p[5], x, y + p[7], z, p[6], true));
   else if (k === "s") { const sink = p[8] ? 0 : .15; solid(x, y + p[8] - sink, z, p[3], p[4] + sink, p[5], p[6], p[7]); } else if (k === "d") deco(x, y + p[7], z, p[3], p[4], p[5], p[6], true); else if (k === "g") glow(x, y + p[6], z, p[3], p[4], p[5]);
   else if (k === "sb") sandbags(x, z, p[3], p[4], y - .05); else if (k === "br") barrels(x, z, p[3], undefined, groundH(x + .4, z + .8) - .05); else if (k === "ct") { cyl(x, y - .15, z, p[3], p[4] + .15, p[5], 12); cyl(x, y + p[4], z, p[3] * .8, .12, "#3c4046", 12); BOXES.push({ min: [x - p[3] * .8, y - .3, z - p[3] * .8], max: [x + p[3] * .8, y + p[4], z + p[3] * .8] }); }
+  else if (k === "gc") glowC(x, y + p[6], z, p[3], p[4], p[5]);
+  else if (k === "cy") { cyl(x, y + (p[6] || 0) - (p[6] ? 0 : .15), z, p[3], p[4] + (p[6] ? 0 : .15), p[5], p[8] || 10); if (p[7]) BOXES.push({ min: [x - p[3] * .8, y + (p[6] || 0) - .3, z - p[3] * .8], max: [x + p[3] * .8, y + (p[6] || 0) + p[4], z + p[3] * .8] }); }
   else if (k === "li") { lamp(x, y + p[3], z, "#ffd9a0", 1100); glow(x, y + p[3] + .35, z, .9, .12, .9); }
   else if (k === "lp") lampPost(x, z, p[3], p[4], undefined, undefined, y - .1); else if (k === "fb") fireBarrel(x, z, y - .05); }
 // the land itself
@@ -373,6 +376,7 @@ if (PLAN) for (const [cx, cz, r] of PLAN.yards) { const N = Math.round(2 * r / .
 const world = new THREE.Mesh(mergeGeometries(geos), flatToon); world.scale.setScalar(U); world.castShadow = world.receiveShadow = true; scene.add(world);
 export const ROOFS = roofGeos.length ? new THREE.Mesh(mergeGeometries(roofGeos), flatToon) : null; if (ROOFS) { ROOFS.scale.setScalar(U); ROOFS.castShadow = ROOFS.receiveShadow = true; scene.add(ROOFS); }   // the roofs of the objective halls, hidden when you look down from the battle map
 { const m = new THREE.Mesh(mergeGeometries(glowGeos), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.8, 1.8, .7) })); m.scale.setScalar(U); scene.add(m); }
+if (glowCGeos.length) { const m = new THREE.Mesh(mergeGeometries(glowCGeos), new THREE.MeshBasicMaterial({ color: new THREE.Color(.55, 2.2, 2.8) })); m.scale.setScalar(U); scene.add(m); }
 for (const b of BULBS) { const m = new THREE.Mesh(new THREE.BoxGeometry(b.s[0] * U, b.s[1] * U, b.s[2] * U), new THREE.MeshBasicMaterial({ color: "#ffd9a0" })); m.position.set(b.at[0] * U, b.at[1] * U, b.at[2] * U); scene.add(m); b.L.bulb = m; b.L.fire = !!b.fire; }
 
 // sky: a dusk dome with a ringed giant, carried along with the camera

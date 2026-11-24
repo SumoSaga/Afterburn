@@ -169,11 +169,84 @@ export function planMap(key, api) {
   // a block with a smaller one on top, so the roofs make steps
   const stack = (x, z, w, d) => { if (!place(x, z, w / 2, d / 2)) return false; const c = R.pick(PANEL), t = R.pick(TRIMS), h1 = R.pick([4, 5]), ox = R.sign() * w * .18, oz = R.sign() * d * .14; prefab(x, z, w, d, h1, 0, c, t); prefab(x + ox, z + oz, w * .6, d * .66, R.pick([3.5, 4.5]), h1, c, t); S(x - ox * 2.4, z - oz * 2.6, 2.4, h1 / 2, 2.4, "#565e64"); return true; };
   const block = (x, z, w, d, h = R.pick([7, 8, 9, 11])) => { if (!place(x, z, w / 2, d / 2)) return false; prefab(x, z, w, d, h); return true; };
-  const LOTS = { pads: 0, n: 0 }, lot = (x, z) => { const az = R.chance(.5), kind = R.w([["kick", 3], ["wall", 1.5], ["pipe", COLONY ? 3 : 1.5], ["block", COLONY ? 3 : 5], ["stack", 3], ["tanks", COLONY ? 2 : .7], ["pad", LOTS.pads < 3 ? .8 : 0]]); let ok = false;
+  const LOTS = { pads: 0, n: 0 }, lot = (x, z) => { const az = R.chance(.5), F = COLONY || HIGH ? 1.6 : 1, kind = R.w([["kick", 3], ["wall", 1.5], ["pipe", COLONY ? 3 : 1.5], ["block", COLONY ? 3 : 5], ["stack", 3], ["tanks", COLONY ? 2 : .7], ["pad", LOTS.pads < 3 ? .8 : 0], ["hab", 2 * F], ["mast", .8 * F], ["reactor", .7 * F], ["hangar", .9 * F], ["solar", 1 * F], ["green", .9 * F], ["crane", .8 * F]]); let ok = false;
     if (kind === "kick") { const len = R.pick([16, 20, 24]), h = R.pick([8, 9, 10]); ok = runwall(x + (az ? -3.85 : 0), z + (az ? 0 : -3.85), len, az, h); if (ok) runwall(x + (az ? 3.85 : len * .35), z + (az ? len * .35 : 3.85), len, az, h, true); }
     else if (kind === "wall") ok = runwall(x, z, R.pick([18, 24, 30]), az); else if (kind === "pipe") ok = pipeline(x, z, R.pick([18, 26, 34]), az); else if (kind === "tanks") ok = tankfarm(x, z); else if (kind === "pad") { ok = pad(x, z); if (ok) LOTS.pads++; }
+    else if (kind === "hab") ok = hab(x, z); else if (kind === "mast") ok = mast(x, z); else if (kind === "reactor") ok = reactor(x, z); else if (kind === "hangar") ok = hangar(x, z, az); else if (kind === "solar") ok = solar(x, z); else if (kind === "green") ok = greenhouse(x, z, az); else if (kind === "crane") ok = crane(x, z, az);
     else if (kind === "stack") ok = stack(x, z, R.range(11, 15), R.range(9, 12)); else ok = block(x, z, R.range(9, 15), R.range(8, 12));
     if (!ok) ok = block(x, z, R.range(7, 10), R.range(6, 9), R.pick([5, 7, 8, 10])); if (!ok) ok = block(x, z, R.range(5, 6.5), R.range(5, 6.5), R.pick([4, 6, 8])); if (ok) LOTS.n++; return ok; };
+  /* ---------- the newer colony and ship pieces ----------
+     White hull plating, dark seams and cyan running lights: the look of the Frontier's newer settlements and its ships.
+     Each piece has something to climb or run on as well as something to look at. */
+  const C = (x, z, w, h, d, dy = 0) => P.push(["gc", x, z, w, h, d, dy]), Y = (x, z, r, h, col, dy = 0, sol = 0, seg = 10) => P.push(["cy", x, z, r, h, col, dy, sol, seg]);
+  const SCI = ["#d8dde0", "#c4ccd2", "#b0bcc4", "#e2e0d8"], SEAM = "#2a3138", HAZ = "#c9a23a";
+  const at = (x, z, az) => (u, v) => (az ? [x + v, z + u] : [x + u, z + v]), sz = (az) => (w, d) => (az ? [d, w] : [w, d]);
+  // a habitat module: a round, stepped pod with a lit band, an airlock and a mast on its roof
+  const hab = (x, z) => { if (!place(x, z, 8.5, 7)) return false; const c = R.pick(SCI), r = R.range(5, 6.2);
+    Y(x, z, r, 3.6, c, 0, 1, 8); Y(x, z, r - .7, .4, SEAM, 3.6, 0, 8); Y(x, z, r - 1.5, 1.4, c, 4, 1, 8); Y(x, z, r - 3.2, 1, c, 5.4, 1, 8);
+    for (const sd of [-1, 1]) { C(x, z + sd * (r - .05), r * .8, .25, .12, 2.3); C(x + sd * (r - .05), z, .12, .25, r * .8, 2.3); }
+    const sd = R.sign(); S(x + sd * (r + 1.3), z, 2.8, 3, 3.2, c); D(x + sd * (r + 2.75), z, .12, 2.2, 1.6, SEAM); C(x + sd * (r + 2.8), z, .1, .2, 1.6, 2.5);
+    D(x, z, .15, 3, .15, FRAME, 6.4); C(x, z, .35, .35, .35, 9.4); if (R.chance(.6)) prop(R.pick(["crates", "barrels"]), x - sd * (r + 1.5), z + R.range(-3, 3), R.chance(.5) ? 1 : 0, .1, [[]]); return true; };
+  // a comms mast: a lattice tower with three landings, a dish and a beacon on top
+  const mast = (x, z) => { if (!place(x, z, 3, 3, 1.5)) return false;
+    for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) S(x + a * 1.4, z + b * 1.4, .35, 13, .35, FRAME);
+    for (let y = 2; y < 13; y += 2.6) { D(x, z - 1.4, 2.8, .18, .18, FRAME, y); D(x, z + 1.4, 2.8, .18, .18, FRAME, y); D(x - 1.4, z, .18, .18, 2.8, FRAME, y + 1.3); D(x + 1.4, z, .18, .18, 2.8, FRAME, y + 1.3); }
+    S(x - 1.1, z, 2.4, .3, 3.6, "#6c747a", null, 4.2); S(x + 1.1, z, 2.4, .3, 3.6, "#6c747a", null, 8.4); S(x, z, 4.2, .3, 4.2, "#6c747a", null, 12.6); D(x, z, 4.3, .5, 4.3, HAZ, 12.9);
+    Y(x + .6, z, .25, 1.2, FRAME, 12.9, 0, 6); Y(x + .6, z, 2.1, .3, "#e2e0d8", 14.1, 0, 12); D(x - 1, z, .14, 3.4, .14, FRAME, 12.9); C(x - 1, z, .4, .4, .4, 16.3); return true; };
+  // a reactor: a tall drum with lit bands and fins, a catwalk round its middle and stairs up to it
+  const reactor = (x, z) => { if (!place(x, z, 9.5, 8)) return false; const c = R.pick(["#8f989e", "#a1a7a8", "#b0bcc4"]);
+    D(x, z, 11, .08, 11, HAZ, .02); Y(x, z, 4.6, 10, c, 0, 1, 12); for (const y of [2.4, 7.6]) for (const sd of [-1, 1]) { C(x, z + sd * 4.55, 2.6, .35, .12, y); C(x + sd * 4.55, z, .12, .35, 2.6, y); }
+    for (const sd of [-1, 1]) { D(x + sd * 5, z, 1.4, 8, .35, FRAME, .5); D(x, z + sd * 5, .35, 8, 1.4, FRAME, .5); }
+    Y(x, z, 3.6, .6, SEAM, 10, 0, 12); C(x, z, 2.2, .2, 2.2, 10.6);
+    for (const sd of [-1, 1]) { S(x, z + sd * 5.9, 13.4, .3, 1.6, "#6c747a", null, 5); S(x + sd * 5.9, z, 1.6, .3, 10.2, "#6c747a", null, 5); D(x, z + sd * 6.7, 13.4, .9, .1, HAZ, 5.3); }
+    for (let i = 0; i < 4; i++) S(x + 7.6, z - 5.4 + i * 1.6, 1.6, 1.25 * (i + 1), 1.6, "#565e64"); return true; };
+  // a hangar: two long walls and a stepped roof, open at both ends, with a mech cradle inside lit cyan. Mechs fit inside.
+  const hangar = (x, z, az = R.chance(.5)) => { const L = 26, W = 18, H = 9.5; const [hw, hd] = sz(az)(W / 2 + 1, L / 2); if (!place(x, z, hw, hd, 2)) return false; const p = at(x, z, az), q = sz(az), c = R.pick(SCI);
+    for (const sd of [-1, 1]) { const [a, b] = p(0, sd * (W / 2 - .5)), [w, d] = q(L, 1); S(a, b, w, H, d, c); { const [w2, d2] = q(L + .2, .5); D(a, b, w2, .6, d2 + .2, R.pick(TRIMS), H - 1.4); } for (let u = -L / 2 + 2; u <= L / 2 - 2; u += 6) { const [a2, b2] = p(u, sd * (W / 2 - 1.1)), [w3, d3] = q(.5, .3); D(a2, b2, w3, H, d3, FRAME); } }
+    { const [a, b] = p(0, 0), [w, d] = q(L, 8); S(a, b, w, .5, d, c, { roof: true, stripe: false, base: c, cap: SEAM }, H + 1.6); }
+    for (const sd of [-1, 1]) { const [a, b] = p(0, sd * 6.5), [w, d] = q(L, 5); S(a, b, w, .5, d, c, { roof: true, stripe: false, base: c, cap: SEAM }, H); }
+    for (const u of [-L / 2, L / 2]) { const [a, b] = p(u, 0), [w, d] = q(.6, W); D(a, b, w, .8, d, HAZ, H - .6); }
+    for (let u = -L / 2 + 3; u < L / 2; u += 6) { const [a, b] = p(u, 0), [w, d] = q(.4, 7); C(a, b, w, .12, d, H + 1.45); }
+    for (const v of [-3.2, 3.2]) { const [a, b] = p(-L / 2 + 6, v); D(a, b, .6, 8, .6, FRAME); } { const [a, b] = p(-L / 2 + 6, 0), [w, d] = q(.8, 7); D(a, b, w, .6, d, FRAME, 7.6); C(a, b, w * .5, .12, d * .9, 7.5); }
+    { const [a, b] = p(L / 2 - 5, R.range(-4, 4)); prop(R.pick(["crates", "container", "barrels"]), a, b, az ? 0 : 1, .1, [[]]); } plan.lit++; { const [a, b] = p(0, 0); P.push(["li", a, b, H + 1.4]); } return true; };
+  // a solar field: rows of dark panels on short posts, low enough to run across the tops
+  const solar = (x, z) => { if (!place(x, z, 9, 6.5, 1.5)) return false;
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { const px = x - 6 + i * 4, pz = z - 3.6 + j * 3.6; D(px, pz, .2, 1.4, .2, FRAME); S(px, pz, 3.6, .2, 2.6, "#1f2e46", null, 1.4); D(px, pz, 3.62, .05, .08, "#5f86a8", 1.61); D(px, pz, .08, .05, 2.62, "#5f86a8", 1.61); }
+    S(x + 8.6, z, 1.6, 2, 2.4, "#c4ccd2"); C(x + 9.45, z, .1, .2, 1.2, 1.5); return true; };
+  // a greenhouse: a long glass roof on a low wall, grow lights inside, rows of green, open at the ends
+  const greenhouse = (x, z, az = R.chance(.5)) => { const L = 20, W = 8; const [hw, hd] = sz(az)(W / 2, L / 2); if (!place(x, z, hw + .5, hd + .5)) return false; const p = at(x, z, az), q = sz(az);
+    for (const sd of [-1, 1]) { const [a, b] = p(0, sd * (W / 2 - .2)), [w, d] = q(L, .4); S(a, b, w, 1, d, "#c4ccd2"); for (let u = -L / 2; u <= L / 2; u += 4) { const [a2, b2] = p(u, sd * (W / 2 - .2)); D(a2, b2, .25, 4, .25, FRAME, 1); } }
+    { const [a, b] = p(0, 0), [w, d] = q(L, W); S(a, b, w, .2, d, "#4a6a78", { roof: true, stripe: false, base: "#4a6a78", cap: "#4a6a78" }, 4.6); const [w2, d2] = q(L, .3); D(a, b, w2, .3, d2, FRAME, 4.8); }
+    for (const v of [-2.2, 0, 2.2]) { const [a, b] = p(0, v), [w, d] = q(L - 3, 1); D(a, b, w, .8, d, R.pick(["#4f7a3a", "#5d8a42", "#3f6a34"])); const [w2, d2] = q(L - 4, .2); C(a, b, w2, .08, d2, 3.9); } return true; };
+  // a crane gantry: four legs and two long beams to run along, a trolley hanging over the containers it is moving
+  const crane = (x, z, az = R.chance(.5)) => { const SP = 16, LN = 12; const [hw, hd] = sz(az)(SP / 2 + .6, LN / 2 + .6); if (!place(x, z, hw, hd, 2)) return false; const p = at(x, z, az), q = sz(az), c = R.pick([HAZ, "#d2691e", "#c4ccd2"]);
+    for (const a of [-1, 1]) for (const b of [-1, 1]) { const [px, pz] = p(b * LN / 2, a * SP / 2); S(px, pz, 1, 12, 1, c); }
+    for (const b of [-1, 1]) { const [px, pz] = p(b * LN / 2, 0), [w, d] = q(1.2, SP + 1); S(px, pz, w, 1, d, c, null, 12); }
+    { const tv = R.range(-4, 4), [px, pz] = p(0, tv), [w, d] = q(LN, 2.4); S(px, pz, w, 1.2, d, FRAME, null, 11.8); D(px, pz, .1, 5, .1, SEAM, 6.8); C(px, pz, .5, .3, .5, 11.5); }
+    for (const v of [-4, 3]) { const [px, pz] = p(R.range(-2, 2), v); prop("container", px, pz, az ? 0 : 1, .1, [[]]); } return true; };
+  // a light pylon: a tall post with hazard bands and a cyan lamp, for lining roads and pads
+  const pylon = (x, z) => { if (!fits(x - .6, z - .6, x + .6, z + .6, .4)) return false; occ.push([x - .5, z - .5, x + .5, z + .5]); S(x, z, .7, 6.5, .7, "#c4ccd2"); D(x, z, .74, .4, .74, HAZ, .6); D(x, z, .74, .4, .74, HAZ, 5.2); C(x, z, .8, .5, .8, 6.5); return true; };
+  // a console: a desk of screens, lit from the front
+  const consoleBox = (x, z, az) => { if (!fits(x - 1, z - 1, x + 1, z + 1, .3)) return false; occ.push([x - .9, z - .9, x + .9, z + .9]); const [w, d] = sz(az)(1.8, .9); S(x, z, w, 1.1, d, "#5f676d"); D(x, z, w * .9, .5, d * .3, SEAM, 1.1); C(x, z, w * .8, .35, d * .34, 1.2); return true; };
+  /* ship compartments: what fills the decks between the bulkheads */
+  // a crew room: four walls with a door in two of them, a roof, bunks and a console. Mechs cannot go in.
+  const crewRoom = (x, z) => { const hw = 6, hd = 4.5, H = 4.6; if (!place(x, z, hw + .5, hd + .5, 2)) return false; const c = R.pick(["#8f959a", "#7d858a", "#a1a7a8"]);
+    for (const sd of [-1, 1]) { S(x - 3.8, z + sd * hd, 4.4, H, .5, c); S(x + 3.8, z + sd * hd, 4.4, H, .5, c); D(x, z + sd * hd, 3.2, 1.6, .5, c, H - 1.6); S(x + sd * hw, z, .5, H, hd * 2, c); }
+    S(x, z, hw * 2 + .5, .4, hd * 2 + .5, "#4a5258", { roof: true, stripe: false, base: "#4a5258", cap: "#4a5258" }, H); plan.halls.push([x - hw, z - hd, x + hw, z + hd, H]);
+    for (const sd of [-1, 1]) { D(x + sd * 4.2, z - 2.6, 2.6, .9, 1.2, "#3f6f9a"); D(x + sd * 4.2, z - 2.6, 2.6, .9, 1.2, "#3f6f9a", 1.8); C(x + sd * (hw - .3), z + 1, .1, .3, 2, 2.6); } consoleBox(x, z + 2.8, 0); plan.lit++; P.push(["li", x, z, H - .3]); return true; };
+  // a cryo bay: a row of pods on a plinth, each with a lit face
+  const cryo = (x, z, az = R.chance(.5)) => { const n = 5, L = n * 2.2; const [hw, hd] = sz(az)(L / 2 + .5, 1.4); if (!place(x, z, hw, hd, 1.5)) return false; const p = at(x, z, az), q = sz(az);
+    { const [w, d] = q(L + 1, 2.4); S(x, z, w, .5, d, "#5f676d"); }
+    for (let i = 0; i < n; i++) { const [a, b] = p(-L / 2 + 1.1 + i * 2.2, 0); Y(a, b, .8, 2.3, "#d8dde0", .5, 1, 8); const [c1, c2] = p(-L / 2 + 1.1 + i * 2.2, .8); C(c1, c2, .5, 1.4, .5, 1); } return true; };
+  // a cargo rack: two shelves to climb and run along, crates on them
+  const rack = (x, z, az = R.chance(.5)) => { const L = R.pick([10, 14]); const [hw, hd] = sz(az)(L / 2, 1.2); if (!place(x, z, hw, hd, 1.5)) return false; const p = at(x, z, az), q = sz(az);
+    for (const y of [2.4, 4.8]) { const [w, d] = q(L, 2.2); S(x, z, w, .25, d, "#6c747a", null, y); }
+    for (let u = -L / 2; u <= L / 2; u += L / 2) for (const v of [-1, 1]) { const [a, b] = p(u, v); D(a, b, .25, 5.1, .25, FRAME); }
+    for (let u = -L / 2 + 1.2; u < L / 2 - .5; u += 2.2) for (const y of [0, 2.65, 5.05]) if (R.chance(.55)) { const [a, b] = p(u, 0); S(a, b, 1.5, 1.3, 1.5, R.pick(["#6f7d4a", "#8a6a40", "#5f676d", "#3f6f9a"]), null, y); } return true; };
+  // a mech cradle: the frame a Titan stands in for repairs, gantry posts and a lit beam
+  const cradle = (x, z, az = R.chance(.5)) => { const [hw, hd] = sz(az)(5, 4); if (!place(x, z, hw, hd, 1.5)) return false; const p = at(x, z, az), q = sz(az);
+    { const [w, d] = q(9, 7); D(x, z, w, .06, d, HAZ, .02); } for (const u of [-4, 4]) { const [a, b] = p(u, -2.5); S(a, b, .8, 9, .8, FRAME); } { const [a, b] = p(0, -2.5), [w, d] = q(9, 1.4); S(a, b, w, .6, d, FRAME, 9); C(a, b, w * .8, .12, d * .6, 8.9); } { const [a, b] = p(0, -2.5), [w, d] = q(8, 1.2); S(a, b, w, .3, d, "#6c747a", null, 4.5); }
+    consoleBox(...p(4.2, 2), az); return true; };
   const COVER = [["container", 2.5], ["barrier", 2], ["crates", 2.5], ["sandbag", 1.5], ["barrels", 1.2], ["hesco", 1.2], ["container2", 1], ["wall", 1], ["piperack", .8], ["tank", .6]];
 
   /* ---------- a district ---------- */
@@ -275,6 +348,19 @@ export function planMap(key, api) {
         for (let z = Z0 + 30; z < Z1 - 20; z += 56) for (let i = 0; i < 5; i++) S(sd * (HX - 8.2), z + i * 1.6, 3, (i + 1), 1.6, "#565e64"); }
       { const z0 = plan.sectors[0].z + (flip ? -1 : 1) * 30, ship = (x, z) => { if (!fits(x - 8, z - 5, x + 8, z + 5, 1) || near(x, z, 12)) return; occ.push([x - 8, z - 5, x + 8, z + 5]); S(x, z, 14, 2.8, 4.4, "#7d858a", null, 1.4); S(x - 4, z, 5, 1.6, 9.5, "#6c747a", null, 2.2); S(x + 5.5, z, 2, 2.2, .6, "#5f676d", null, 4.2); for (const sx of [-4, 3]) for (const sz of [-1.7, 1.7]) S(x + sx, z + sz, .5, 1.4, .5, "#3c4046"); D(x - 7.1, z, .3, 1, 2.6, "#2a3038", 2.4); G(x + 7.1, z, .2, .6, 1.6, 2.2); }; for (const x of [-92, -64, 64, 92]) ship(x, z0); }
       for (let k = 0; k + 1 < plan.sectors.length; k++) { const z = Math.round((plan.sectors[k].z + plan.sectors[k + 1].z) / 2); for (const x of DOORS) { D(x - 8.4, z, .8, HH, 2, "#c9733a"); D(x + 8.4, z, .8, HH, 2, "#c9733a"); D(x, z, 17.6, .8, 2, "#c9733a", 9); } }
+      /* Making it read as a ship: ribs down the hull every 7 metres, beams across the deckhead, pipe runs and cyan panels
+         along the walls, painted lane lines on the deck, and the decks between the bulkheads filled with crew rooms,
+         cryo bays, cargo racks, mech cradles and consoles. Two reactors stand at the stern. */
+      for (let z = Z0 + 3; z < Z1; z += 7) for (const sd of [-1, 1]) D(sd * (HX - 2.1), z, 1.2, HH, .8, "#3c4046");
+      for (let z = Z0 + 7; z < Z1; z += 14) D(0, z, HX * 2 - 4, .9, .7, "#3c4046", HH - 1);
+      for (const sd of [-1, 1]) { for (const [y, c] of [[2.6, "#7d6a52"], [3.3, "#5f676d"], [10.2, "#8a3a2a"]]) D(sd * (HX - 2.9), (Z0 + Z1) / 2, .5, .5, Z1 - Z0 - 6, c, y); for (let z = Z0 + 10; z < Z1 - 6; z += 14) C(sd * (HX - 1.55), z, .1, 1.8, 3.2, 7.4); }
+      for (const x of DOORS) for (const sd of [-1, 1]) D(x + sd * 7.5, (Z0 + Z1) / 2, .35, .04, Z1 - Z0 - 8, HAZ, .02);
+      { let n = 0; for (const x of [-40, 40]) if (reactor(x, Z0 + 18)) n++; plan.reactors = n; }
+      { const cells = []; for (let gx = -HX + 16; gx <= HX - 16; gx += 16) for (let gz = Z0 + 14; gz <= Z1 - 14; gz += 16) cells.push([gx + R.range(-3, 3), gz + R.range(-3, 3)]); for (let i = cells.length - 1; i > 0; i--) { const j = R.int(0, i); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+        const SHIPK = [["room", 3], ["cryo", 2], ["rack", 3], ["cradle", 2], ["hangar", .8], ["tanks", .8], ["console", 1.5]]; let n = 0;
+        for (const [x, z] of cells) { if (inDistrict(x, z, 2) || DOORS.some((dx) => Math.abs(x - dx) < 12)) continue; const k = R.w(SHIPK), az = R.chance(.5);
+          const ok = k === "room" ? crewRoom(x, z) : k === "cryo" ? cryo(x, z, az) : k === "rack" ? rack(x, z, az) : k === "cradle" ? cradle(x, z, az) : k === "hangar" ? hangar(x, z, az) : k === "tanks" ? tankfarm(x, z) : consoleBox(x, z, az);
+          if (ok) { n++; if (R.chance(.5)) consoleBox(x + R.range(-7, 7), z + R.range(-7, 7), R.chance(.5)); } } plan.shipFill = n; }
       plan.paint.unshift({ x0: -HX, z0: Z0, x1: HX, z1: Z1, k: "apron" }); } }
   /* ---------- the highlands: ground at many heights, rock you can climb, a bunker on high ground and one under it ----------
      Built the way a Titanfall field is built. Each lane has more than one way through it: the road for the mechs, and
@@ -324,10 +410,13 @@ export function planMap(key, api) {
     // 7. ruins, rock and filler, so no stretch of ground is bare
     tries(Math.round(10 + 10 * big), () => { const x = R.range(-135, 135), z = R.range(-170, 128); if (!clear(x, z, 4, 4, 1)) return false; const az = R.chance(.5), c = R.pick(["#8a7d6a", "#7d858a", "#76634c", "#a39c8c"]), len = R.range(5, 9);
       for (let u = -len / 2; u < len / 2 - .5; u += 1.5) { const hh = R.chance(.25) ? 0 : R.range(1, 4.2); if (hh) S(x + (az ? 0 : u + .75), z + (az ? u + .75 : 0), az ? .5 : 1.5, hh, az ? 1.5 : .5, c); } occ.push([x - 4.5, z - 4.5, x + 4.5, z + 4.5]); if (R.chance(.5)) plan.rocks.push([x + R.range(-4, 4), z + R.range(-4, 4), R.range(3, 6)]); return true; });
+    tries(Math.round(3 + 4 * big), () => { const x = R.range(-125, 125), z = R.range(-165, 120); return !inDistrict(x, z, 10) && R.pick([hab, hab, mast, solar, greenhouse, crane])(x, z); });
     const FILL = [["rock", 4], ["tree", 3], ["bush", 4], ["crates", 1.4], ["barrels", 1], ["container", 1], ["sandbag", 1.2], ["hesco", 1], ["wall", 1.2], ["tank", .5], ["piperack", .5]];
     for (let i = 0; i < 260 * (.6 + big * .6); i++) { const x = R.range(-140, 140), z = R.range(-175, 132); if (inDistrict(x, z, 3) || nearRoad(x, z, 5)) continue; prop(R.w(FILL), x, z, R.chance(.5) ? 1 : 0, .4); }
     for (let i = 0; i < 26 * (.5 + big); i++) { const x = R.range(-140, 140), z = R.range(-175, 132); if (!clear(x, z, 3, 3, 1)) continue; crag(x, z, R.range(3, 5.5), R.range(3, 5.5), R.pick([2.3, 4.6, 4.6, 6.9])); occ.push([x - 3, z - 3, x + 3, z + 3]); } }
 
+  // light pylons along the roads of the newer colonies, so the routes between points are lit
+  if (COLONY || HIGH || CITY) { let n = 0; for (const rd of plan.roads) for (let t = 14; t < rd.len - 10; t += 24) { const ux = (rd.bx - rd.ax) / rd.len, uz = (rd.bz - rd.az) / rd.len, sd = (Math.round(t / 24) % 2) ? 1 : -1, x = rd.ax + ux * t - uz * 7 * sd, z = rd.az + uz * t + ux * 7 * sd; if (!inDistrict(x, z, 2) && !nearRoad(x, z, 5.5) && pylon(x, z)) n++; } plan.pylons = n; }
   /* ---------- out in the hills: small places with their own reason to be there ---------- */
   const OUT = { camp: 12, farmstead: 14, fuelstop: 13, relay: 11, checkpoint: 14, crash: 19, tankfarm: 13 }, kinds = Object.keys(OUT); plan.outposts = []; for (let i = kinds.length - 1; i > 0; i--) { const j = R.int(0, i); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
   for (let i = 0; i < 400 && !FLAT && plan.outposts.length < (size === "s" ? 5 : 4); i++) { const kind = kinds[plan.outposts.length % kinds.length], hr = OUT[kind], x = R.range(-138, 138), z = R.range(-140, 96);
