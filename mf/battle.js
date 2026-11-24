@@ -6,7 +6,7 @@
    the same skeleton. Vehicles are the Table's generated models; the Machine's walk and track on their own rigs.
    Everything here is in metres; the engine draws at U. */
 import { CHASSIS } from "./loadout.js";
-import { THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, SITES, PLAN, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
+import { vlight, THREE, U, clamp, lerp, V3, rnd, $, scene, cam, renderer, charMat, free, freeG, groundH, slopeAt, WORLD, SITES, PLAN, rayBox, rayWorld, SOL, GEN, MACH, placeMachine, removeMachine, mfx, genModel, flash, puff, ringFx, tracer, fxLayer } from "./engine.js";
 
 const toU = (v) => V3(v.x * U, v.y * U, v.z * U);
 /* The troopers' weapons. splash: a blast where the round lands, with damage to troops (inf), vehicles (veh) and pilots
@@ -227,8 +227,8 @@ for (const [name, x, z, label, sector = 0, roof = 0] of SITES) { const gy = grou
   const lamp = new THREE.Mesh(new THREE.BoxGeometry(.5 * U, .5 * U, .5 * U), new THREE.MeshBasicMaterial({ color: new THREE.Color(...COL.none) })); lamp.position.set(x * U, (gy + 5.2) * U, z * U);
   const pole = new THREE.Mesh(new THREE.BoxGeometry(.14 * U, 5 * U, .14 * U), new THREE.MeshToonMaterial({ color: "#2a2724" })); pole.position.set(x * U, (gy + 2.5) * U, z * U); pole.castShadow = true;
   const ring = fxLayer(new THREE.Mesh(new THREE.RingGeometry(8.6 * U, 9 * U, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: lamp.material.color, transparent: true, opacity: .75, depthWrite: false, side: THREE.DoubleSide }))); ring.position.set(x * U, gy * U + 3, z * U);
-  const light = new THREE.PointLight("#ffffff", 900, 300, 1.5); light.position.set(x * U, (gy + 4.6) * U, z * U);
-  scene.add(lamp, pole, ring, light); POINTS.push({ name, label, x, z, sector, roof: !!roof, prog: 0, owner: null, lamp, light, n: { you: 0, foe: 0 }, w: { you: 0, foe: 0 } });
+  const light = vlight("#ffffff", 900, 300, 1.5); light.position.set(x * U, (gy + 4.6) * U, z * U);
+  scene.add(lamp, pole, ring); POINTS.push({ name, label, x, z, sector, roof: !!roof, prog: 0, owner: null, lamp, light, n: { you: 0, foe: 0 }, w: { you: 0, foe: 0 } });
 }
 
 /* ---------- the operation: one side attacks through the sectors in turn, the other holds them ----------

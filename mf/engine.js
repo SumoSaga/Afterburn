@@ -61,7 +61,16 @@ const normMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
 /* ---------- light: a low sun at dusk ---------- */
 const TOD = { sunI: 2.2, hemiI: .72, fogDen: .0011 };
 export const sun = new THREE.DirectionalLight("#ff9a5e", TOD.sunI); sun.position.set(-200 * U, 125 * U, 125 * U); sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096); Object.assign(sun.shadow.camera, { left: -215 * U, right: 215 * U, top: 215 * U, bottom: -215 * U, near: 10, far: 560 * U }); sun.shadow.bias = -.0007;
+/* The sun's shadow used to cover the whole field at 4096 and was redrawn on one frame in three, so every third frame took
+   twice as long: that was the stutter. Now it covers 100 metres round a point just ahead of the camera at 2048, a
+   quarter of the pixels, and is redrawn every frame so the frames come out even. The window moves in whole shadow
+   pixels so its edges do not crawl as you walk. */
+const SHR = 100, SHN = 2048, SUND = new THREE.Vector3(-200, 125, 125).normalize(), SUNR = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), SUND).normalize(), SUNU = new THREE.Vector3().crossVectors(SUND, SUNR);
+sun.shadow.mapSize.set(SHN, SHN); Object.assign(sun.shadow.camera, { left: -SHR * U, right: SHR * U, top: SHR * U, bottom: -SHR * U, near: 10, far: 560 * U }); sun.shadow.bias = -.0007;
+const _sc = new THREE.Vector3(), _sf = new THREE.Vector3();
+function followShadow() { cam.getWorldDirection(_sf); _sf.y = 0; if (_sf.lengthSq() > 1e-6) _sf.normalize(); _sc.copy(cam.position).addScaledVector(_sf, 40 * U); _sc.y = 0; const tx = 2 * SHR * U / SHN;
+  const a = Math.round(_sc.dot(SUNR) / tx) * tx, b = Math.round(_sc.dot(SUNU) / tx) * tx, c = _sc.dot(SUND); _sc.copy(SUNR).multiplyScalar(a).addScaledVector(SUNU, b).addScaledVector(SUND, c);
+  sun.target.position.copy(_sc); sun.position.copy(_sc).addScaledVector(SUND, 267 * U); sun.target.updateMatrixWorld(); sun.updateMatrixWorld(); }
 scene.add(sun, sun.target);
 const fill = new THREE.DirectionalLight("#5a68a8", .32); fill.position.set(1, .6, -.8); scene.add(fill);
 export const hemi = new THREE.HemisphereLight("#8388bc", "#3a2a30", TOD.hemiI); scene.add(hemi);
@@ -72,7 +81,18 @@ const LP = Array.from({ length: 6 }, () => { const l = new THREE.PointLight("#ff
 export function flash(at, color, power, life) { const b = LP.find((x) => x.life <= 0) || LP.reduce((a, x) => (x.l.intensity < a.l.intensity ? x : a)); b.l.color.set(color); b.l.position.copy(at); b.i0 = power; b.l.intensity = power; b.t = 0; b.life = life; return b; }
 // lamps and fires that stay lit
 const LAMPS = [];
-function lamp(x, y, z, color, power, o = {}) { const l = new THREE.PointLight(color, power, o.reach || 330, 1.5); l.position.set(x * U, y * U, z * U); scene.add(l); const L = { l, power, flicker: o.flicker || 0, blink: o.blink || 0, ph: rnd() * 9, bulb: null, col: new THREE.Color(color) }; LAMPS.push(L); return L; }
+/* Lights, pooled. A map can hold forty or more lamps and point lights, and every lit pixel on screen paid for every one of
+   them each frame. Now each lamp is a light in name only: a fixed pool of real point lights is handed to the lamps
+   nearest the camera a few times a second. The number of real lights never changes, so the shaders never recompile
+   mid-match either. */
+const VL = [], VPOOL = Array.from({ length: 10 }, () => { const l = new THREE.PointLight("#ffffff", 0, 300, 1.5); scene.add(l); return { l, v: null }; });
+export function vlight(color, intensity, distance = 300, decay = 1.5) { const v = { isVL: true, position: new THREE.Vector3(), color: new THREE.Color(color), intensity, distance, decay }; VL.push(v); return v; }
+let vlT = 0;
+function tickLights(dt) { if ((vlT -= dt) <= 0) { vlT = .2; const c = cam.position, best = [];
+    for (const v of VL) { if (!(v.intensity > 0)) continue; const d = v.position.distanceToSquared(c); if (best.length < VPOOL.length) { best.push([d, v]); best.sort((a, b) => a[0] - b[0]); } else if (d < best[best.length - 1][0]) { best[best.length - 1] = [d, v]; best.sort((a, b) => a[0] - b[0]); } }
+    const keep = new Set(best.map((b) => b[1])), free = VPOOL.filter((p) => !p.v || !keep.has(p.v)); for (const p of VPOOL) if (p.v && !keep.has(p.v)) p.v = null; for (const [, v] of best) if (!VPOOL.some((p) => p.v === v)) { const p = free.shift(); if (p) p.v = v; } }
+  for (const p of VPOOL) { const v = p.v; if (!v) { p.l.intensity = 0; continue; } p.l.position.copy(v.position); p.l.color.copy(v.color); p.l.intensity = v.intensity; p.l.distance = v.distance; p.l.decay = v.decay; } }
+function lamp(x, y, z, color, power, o = {}) { const l = vlight(color, power, o.reach || 330, 1.5); l.position.set(x * U, y * U, z * U); const L = { l, power, flicker: o.flicker || 0, blink: o.blink || 0, ph: rnd() * 9, bulb: null, col: new THREE.Color(color) }; LAMPS.push(L); return L; }
 
 /* ---------- pixel particles ---------- */
 const FX = [];
@@ -103,7 +123,7 @@ function tickFx(dt) {
     else if (b.glow) b.glow.material.opacity = .6 * (1 - k);
     else if (b.chunk) { b.v.y -= 260 * dt; b.chunk.position.addScaledVector(b.v, dt); if (b.chunk.position.y < 1) { b.chunk.position.y = 1; b.v.set(b.v.x * .4, -b.v.y * .3, b.v.z * .4); } b.chunk.rotation.x += dt * 6; }
     else if (b.tr) { const h = Math.min(1, k) * b.d, t0 = Math.max(0, h - b.len); b.tr.position.copy(b.a).lerp(b.b, t0 / b.d); b.tr.scale.set(b.thick, b.thick, Math.max(1, h - t0)); }
-    if (k >= 1) { const o = b.pts || b.mesh || b.glow || b.chunk || b.tr; scene.remove(o); if (!b.tr) o.geometry.dispose(); o.material.dispose(); FX.splice(i, 1); }
+    if (k >= 1) { const o = b.pts || b.mesh || b.glow || b.chunk || b.tr; scene.remove(o); if (!b.tr) o.geometry.dispose(); FX.splice(i, 1); }   /* the material is left alone: disposing the last one of a kind threw its shader away, and the next puff or tracer stalled the frame compiling it again */
   }
   for (const b of LP) { if (b.life <= 0) continue; b.t += dt; const k = b.t / b.life; b.l.intensity = b.i0 * Math.max(0, 1 - k) ** 2; if (k >= 1) { b.life = 0; b.l.intensity = 0; } }
 }
@@ -539,7 +559,7 @@ if (window.CBWEATHER) window.CBWEATHER.start({ THREE, scene: wxGroup, game: WEAT
 const HAZE = { day: .12, clear: .25, overcast: .45, rain: .6, storm: .75, snow: .7, fog: 1.4 };
 const _pv = new THREE.Matrix4(); let frameN = -1;
 export function render(t, dt, hurt, cool, fromAbove) { if (ROOFS) ROOFS.visible = !fromAbove;
-  tickFx(dt); tickAir(dt, t); if (NAT) NAT.WIND.uTime.value = t;
+  tickFx(dt); tickAir(dt, t); tickLights(dt); if (NAT) NAT.WIND.uTime.value = t;
   sky.position.copy(cam.position); wxGroup.position.set(cam.position.x, Math.max(0, cam.position.y - 120 * U), cam.position.z); cam.updateMatrixWorld();
   const u = post.uniforms; u.time.value = t; const hz = HAZE[WEATHER.state.weather] ?? .3; u.shaftK.value = fromAbove ? .12 : 1; u.fogMix.value = fromAbove ? .25 * hz : hz; u.hurt.value = clamp(hurt || 0, 0, 1); u.cool.value = clamp(cool || 0, 0, 1); u.useLine.value = CFG.outlines; u.usePal.value = CFG.palette; u.useBlock.value = CFG.blocks;
   _pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); u.invPV.value.copy(_pv).invert(); u.camPos.value.copy(cam.position);
@@ -549,7 +569,7 @@ export function render(t, dt, hurt, cool, fromAbove) { if (ROOFS) ROOFS.visible 
      - leaves and grass (layer 3) are drawn in colour only. They take no outlines, so the second pass, which exists to find
        outlines, leaves them out;
      - with outlines turned off that second pass is skipped altogether. */
-  frameN++; const shOn = CFG.shadows !== 0; if (sun.castShadow !== shOn) sun.castShadow = shOn; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = shOn && frameN % 3 === 0;
+  frameN++; const shOn = CFG.shadows !== 0; if (sun.castShadow !== shOn) sun.castShadow = shOn; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = shOn; if (shOn) followShadow();
   if (shOn && sun.shadow.map) { u.tShadow.value = sun.shadow.map.texture; u.shadowM.value.copy(sun.shadow.matrix); u.hasShadow.value = 1; } else u.hasShadow.value = 0;
   cam.layers.set(0); cam.layers.enable(1); cam.layers.enable(3);
   renderer.setRenderTarget(colorRT); renderer.clear(); renderer.render(scene, cam); GL.depthRange(0, .02); renderer.render(gunScene, gunCam); GL.depthRange(0, 1);   // what the pilot holds is drawn into the nearest sliver of depth, so it never pokes into a wall
@@ -560,4 +580,7 @@ export function render(t, dt, hurt, cool, fromAbove) { if (ROOFS) ROOFS.visible 
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 makeRTs();
+/* compile every effect's shader while the field loads, so the first shot, puff and blast of the match do not stall a frame */
+{ const at = new THREE.Vector3(0, -400 * U, 0); puff(at, { n: 2 }); puff(at, { n: 2, dark: true }); ringFx(at, "#ffffff", 2, .05); tracer(at, at.clone().setX(30 * U)); chunksFx(at, "#888888", 1, 1); flash(at, "#ffffff", 0, .05);
+  try { renderer.compile(scene, cam); } catch (e) {} }
 Math.random = _mr;   // the field is built; from here on, chance is chance
