@@ -720,10 +720,10 @@ function drawDeck() { const side = B.fac.you, Un = FACTIONS[side].units, S = MAP
 export const pingTo = (g, sels, force) => { g.ping = force ? 2 : 1; orderTo(g, false, sels); };
 function orderTo(g, way, sels = MAP.sels, asked = false) { if (g.ping === 1 && B.mp !== "guest") sels = sels.filter((q) => !q.lock); g.x = clamp(g.x, WORLD.x0 + 2, WORLD.x1 - 2); g.z = clamp(g.z, WORLD.z0 + 2, WORLD.z1 - 2); const i = POINTS.findIndex((p) => Math.hypot(p.x - g.x, p.z - g.z) < 8);
   if (B.mp === "guest" && !asked) B.hooks.net("order", [sels.map((q) => q.id), r1(g.x), r1(g.z), way ? 1 : 0, g.ping || 0]);
-  for (const s of sels) { s.auto = false; if (!s.fresh) s.path = []; const start = s.path.length ? s.path[s.path.length - 1] : s.c, nodes = legNodes(start, g, !!s.veh), end = nodes[nodes.length - 1]; if (way) end.stop = true; s.path.push(...nodes); s.fresh = way; s.holdT = performance.now() + 700;
+  for (const s of sels) { s.auto = false; if (!g.keep) s.stand = null; if (!s.fresh) s.path = []; const start = s.path.length ? s.path[s.path.length - 1] : s.c, nodes = legNodes(start, g, !!s.veh), end = nodes[nodes.length - 1]; if (way) end.stop = true; s.path.push(...nodes); s.fresh = way; s.holdT = performance.now() + 700;
     s.order = !way && i >= 0 ? { type: "point", i, pos: end.clone() } : { type: "move", pos: end.clone() }; s.lock = !g.ping && !way && i >= 0; for (const m of s.members) m.moveT = 0; } if (!asked) drawDeck(); }
 function squadAct(a, sels, asked = false) { if (B.mp === "guest" && !asked) B.hooks.net("act", [a, sels.map((q) => q.id)]);
-  for (const s of sels) { if (a === "auto") { s.auto = true; s.think = 0; s.path = []; } else if (a === "hold") { s.auto = false; s.order = { type: "move", pos: s.c.clone() }; s.path = []; } else s.path = []; s.fresh = false; s.holdT = performance.now() + 700; } }
+  for (const s of sels) { s.stand = null; if (a === "auto") { s.auto = true; s.think = 0; s.path = []; } else if (a === "hold") { s.auto = false; s.order = { type: "move", pos: s.c.clone() }; s.path = []; } else s.path = []; s.fresh = false; s.holdT = performance.now() + 700; } }
 mapEl.addEventListener("contextmenu", (e) => e.preventDefault());
 mapEl.addEventListener("wheel", (e) => { MAP.dist = clamp(MAP.dist * Math.exp(e.deltaY * .0012), 24, 300); e.preventDefault(); }, { passive: false });
 mapEl.addEventListener("mousedown", (e) => { const b = e.target.closest("button");
