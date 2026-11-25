@@ -107,7 +107,7 @@ export function planMap(key, api) {
   else SPEC.bands.forEach(([a, r, n], k) => { const last = k === SPEC.bands.length - 1, z = even(zOf(a)), xs = n === 1 ? [0] : n === 3 ? [-84, even(R.range(-4, 4)), 84] : last ? (size === "l" ? [-42, 42] : [-28, 28]) : [-even(R.range(SPEC.xr[0], SPEC.xr[1])), even(R.range(SPEC.xr[0], SPEC.xr[1]))];
     const h = FLAT ? 0 : last ? defH : Math.round(clamp(api.hills(0, z) * .3 - 1, 0, 6)), roofAt = n === 1 ? 0 : n === 3 ? 1 : R.int(0, 1), sec = { k, z, pts: [], gapX: n === 3 ? 42 : n === 1 ? 20 : 0, last }; plan.sectors.push(sec);
     xs.forEach((x, i) => { const kn = kits[li % kits.length], kit = KITS[kn], name = "ABCDEFGHIJKL"[li], roof = SHIP || i === roofAt; let label, tries = 0; do label = last ? (n === 1 ? "The citadel" : i ? "Citadel east" : "Citadel west") : R.pick(kit.names); while (used[label] && ++tries < 30); if (used[label] && !last) { used[label]++; label = label + " " + used[label]; } else used[label] = 1;
-      const d = { name, label, x, z, r, h: HIGH ? h + (last ? 5 : R.pick([0, 3, 6, 9])) : h, kn, kit, ax: R.chance(.5) ? 1 : 0, blds: [], sector: k, roof, last }; plan.districts.push(d); sec.pts.push(li); plan.sites.push([name, x, z, label, k, roof ? 1 : 0]); plan.zones.push([x - r - 3, z - r - 3, x + r + 3, z + r + 3, d.h, HIGH ? 18 : 24]); plan.yards.push([x, z, r + 3]); li++; }); });
+      const d = { name, label, x, z, r, h: HIGH ? h + (last ? 4 : R.pick([0, 2, 4, 6])) : h, kn, kit, ax: R.chance(.5) ? 1 : 0, blds: [], sector: k, roof, last }; plan.districts.push(d); sec.pts.push(li); plan.sites.push([name, x, z, label, k, roof ? 1 : 0]); plan.zones.push([x - r - 3, z - r - 3, x + r + 3, z + r + 3, d.h, HIGH ? 28 : 24]); plan.yards.push([x, z, r + 3]); li++; }); });
   plan.homes = plan.sectors.map((sec, k) => ({ atk: k === 0 ? [0, atkZ] : [plan.sectors[k - 1].gapX, plan.sectors[k - 1].z], def: sec.last ? [0, defZ] : [plan.sectors[k + 1].gapX, plan.sectors[k + 1].z] }));
   plan.zones.push([-34, 104, 34, 150, 0, 26], [-34, -190, 34, -146, FLAT ? 0 : 2, 26]); if (FLAT) plan.zones.push([-124, -190, 124, 152, 0, 30]); keep.push([-10, 100, 10, 150], [-10, -190, 10, -142]);
 
@@ -458,6 +458,18 @@ export function planMap(key, api) {
       default: return n2 > .66 ? "#63603e" : ["#5c4c3a", "#64533f", "#6c5a44", "#544636", "#4f4434"][Math.floor(n * 4.99)]; } };
   if (SHIP) { plan.trees.length = 0; plan.bushes.length = 0; plan.rocks.length = 0; }
   plan.soft = (x, z) => { if (SHIP) return false; const p = plan.kindAt(x, z); return !!p && (p.k === "dirt" || p.k === "grass") && !p.road; };   // where grass and brush may grow inside a built place
+  /* Highlands: a point's district can come out ringed shut by its own buildings and props, so the roads lead up to it
+     but a mech cannot get in, and the field used to be thrown away and built again, up to six times over. Instead,
+     where a road enters an open (unroofed) point, a lane wide enough for a mech is cleared through the district. */
+  if (HIGH) { const W = 5.2, lanes = [], segD = (x, z, L) => { const dx = L.bx - L.ax, dz = L.bz - L.az, l2 = dx * dx + dz * dz || 1, t = clamp(((x - L.ax) * dx + (z - L.az) * dz) / l2, 0, 1); return Math.hypot(x - (L.ax + dx * t), z - (L.az + dz * t)); };
+    for (const d of plan.districts) { if (d.roof) continue; for (const rd of plan.roads) for (const [ex, ez, ox, oz] of [[rd.ax, rd.az, rd.bx, rd.bz], [rd.bx, rd.bz, rd.ax, rd.az]]) { const de = Math.hypot(ex - d.x, ez - d.z); if (de > d.r + 8) continue; const ux = de > 1 ? (ex - d.x) / de : (ox - ex) / (Math.hypot(ox - ex, oz - ez) || 1), uz = de > 1 ? (ez - d.z) / de : (oz - ez) / (Math.hypot(ox - ex, oz - ez) || 1); lanes.push({ ax: d.x, az: d.z, bx: d.x + ux * (d.r + 8), bz: d.z + uz * (d.r + 8) }); } }
+    const hits = (x, z, hw, hd) => lanes.some((L) => { const n = Math.max(2, Math.ceil(Math.hypot(L.bx - L.ax, L.bz - L.az))); for (let i = 0; i <= n; i++) { const px = L.ax + (L.bx - L.ax) * i / n, pz = L.az + (L.bz - L.az) * i / n; if (Math.abs(px - x) < hw + W && Math.abs(pz - z) < hd + W) return true; } return false; });
+    const box = (q) => (q[0] === "s" || q[0] === "d" || q[0] === "g" || q[0] === "gc" ? [q[3] / 2, q[5] / 2] : q[0] === "cy" || q[0] === "ct" ? [q[3], q[3]] : [1.5, 1.5]);
+    const n0 = plan.prims.length + plan.gens.length;
+    plan.prims = plan.prims.filter((q) => { if (q[0] === "li" || q[0] === "lp") return true; const [hw, hd] = box(q); return !hits(q[1], q[2], hw, hd); });
+    plan.gens = plan.gens.filter((g) => !hits(g.x, g.z, g.hw || 2, g.hd || 2));
+    plan.rocks = plan.rocks.filter((r) => !lanes.some((L) => segD(r[0], r[1], L) < W + 2)); plan.trees = plan.trees.filter((t) => !lanes.some((L) => segD(t[1], t[2], L) < W));
+    plan.lanesCut = n0 - plan.prims.length - plan.gens.length; }
   plan.name = CUSTOM ? (DZ.name || "Custom field") : THEMES[theme] + " " + (kp[1] || "");
   return plan;
 }

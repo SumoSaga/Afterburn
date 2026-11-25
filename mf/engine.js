@@ -15,7 +15,7 @@ export const MAPKEY = (() => { let k = null; try { if (sessionStorage.getItem("a
 export const setMap = (k, extra) => { if (!okKey(k)) return false; try { localStorage.setItem("ab-map", k); sessionStorage.removeItem("ab-map-join"); if (extra) sessionStorage.setItem("ab-map-go", JSON.stringify(extra)); } catch (e) {} const u = new URL(location.href); u.searchParams.delete("map"); location.href = u.toString(); return true; };
 export const SALT = (() => { try { return Math.min(6, +localStorage.getItem("ab-salt:" + MAPKEY) || 0); } catch (e) { return 0; } })();
 // a field that fails its walk test is made again with the next salt, so the same key still gives everyone the same field
-export const retryField = (to) => { const n = to != null ? to : SALT + 1; if (n > 6 || n === SALT) return false; try { localStorage.setItem("ab-salt:" + MAPKEY, n); } catch (e) { return false; } location.reload(); return true; };
+export const retryField = (to) => { const n = to != null ? to : SALT + 1; if (n > 6 || n === SALT || /[?&]noretry/.test(location.search)) return false; try { localStorage.setItem("ab-salt:" + MAPKEY, n); } catch (e) { return false; } location.reload(); return true; };
 const KEYN = [...MAPKEY.slice(0, -1)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
 export { THREE };
 export const U = 1 / .06;
@@ -274,6 +274,17 @@ const ZONES = PLAN ? PLAN.zones : [[-56, -56, 56, 56, 0, 34], [62, -48, 152, 66,
 function zoneW(x, z) { let wm = 0, sw = 0, sh = 0, idx = -1; for (let i = 0; i < ZONES.length; i++) { const Z = ZONES[i], ex = Math.max(Z[0] - x, 0, x - Z[2]), ez = Math.max(Z[1] - z, 0, z - Z[3]); if (ex >= Z[5] || ez >= Z[5]) continue; const d = Math.hypot(ex, ez), w = 1 - sstep(0, Z[5], d); if (w > 0) { sw += w; sh += w * Z[4]; } if (w > wm) { wm = w; idx = i; } } return [wm, sw, sh, idx]; }
 function hraw(x, z) { const [wm, sw, sh] = zoneW(x, z); return (sh + (1 - wm) * hillsRaw(x, z)) / (sw + (1 - wm)); }
 const HX0 = -220, HZ0 = -250, HW = 441, HD = 461, HM = new Float32Array(HW * HD); for (let j = 0; j < HD; j++) for (let i = 0; i < HW; i++) HM[j * HW + i] = hraw(HX0 + i, HZ0 + j);
+/* Highlands: the hills are steep enough that a road could climb a slope no mech can drive. Each road is graded into a
+   ramp no steeper than 0.4, eased along its length and blended into the hills over 6 metres either side, so every point
+   has a way in for the mechs and the field does not have to be thrown away and built again. */
+if (PLAN && MAPKEY.startsWith("highlands-")) { const at = (x, z) => { const i = clamp(Math.round(x - HX0), 0, HW - 1), j = clamp(Math.round(z - HZ0), 0, HD - 1); return HM[j * HW + i]; };
+  for (const rd of PLAN.roads) { const L = Math.max(2, rd.len || Math.hypot(rd.bx - rd.ax, rd.bz - rd.az)), n = Math.ceil(L), ux = (rd.bx - rd.ax) / L, uz = (rd.bz - rd.az) / L, hs = [];
+    for (let k = 0; k <= n; k++) hs.push(at(rd.ax + ux * k, rd.az + uz * k));
+    const sm = hs.map((_, k) => { let t = 0, c = 0; for (let q = Math.max(0, k - 12); q <= Math.min(n, k + 12); q++) { t += hs[q]; c++; } return t / c; });
+    for (let pass = 0; pass < 3; pass++) { for (let k = 1; k <= n; k++) sm[k] = clamp(sm[k], sm[k - 1] - .4, sm[k - 1] + .4); for (let k = n - 1; k >= 0; k--) sm[k] = clamp(sm[k], sm[k + 1] - .4, sm[k + 1] + .4); }
+    const W = 5, F = 6, x0 = Math.floor(Math.min(rd.ax, rd.bx) - W - F), x1 = Math.ceil(Math.max(rd.ax, rd.bx) + W + F), z0 = Math.floor(Math.min(rd.az, rd.bz) - W - F), z1 = Math.ceil(Math.max(rd.az, rd.bz) + W + F);
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) { const i = x - HX0, j = z - HZ0; if (i < 0 || j < 0 || i >= HW || j >= HD) continue; const t = clamp((x - rd.ax) * ux + (z - rd.az) * uz, 0, L), d = Math.hypot(x - (rd.ax + ux * t), z - (rd.az + uz * t)); if (d > W + F) continue;
+      const w = d <= W ? 1 : 1 - (d - W) / F, kk = t | 0, f = t - kk, h = sm[kk] * (1 - f) + sm[Math.min(n, kk + 1)] * f; HM[j * HW + i] = HM[j * HW + i] * (1 - w * w * (3 - 2 * w)) + h * (w * w * (3 - 2 * w)); } } }
 export function groundH(x, z) { const fx = clamp(x - HX0, 0, HW - 1.001), fz = clamp(z - HZ0, 0, HD - 1.001), i = fx | 0, j = fz | 0, u = fx - i, v = fz - j, k = j * HW + i; return (HM[k] * (1 - u) + HM[k + 1] * u) * (1 - v) + (HM[k + HW] * (1 - u) + HM[k + HW + 1] * u) * v; }
 export const wild = (x, z) => 1 - zoneW(x, z)[0];   // 0 on built ground, 1 out in the hills
 export const slopeAt = (x, z) => Math.hypot(groundH(x + 1, z) - groundH(x - 1, z), groundH(x, z + 1) - groundH(x, z - 1)) / 2;
