@@ -591,7 +591,10 @@ export function render(t, dt, hurt, cool, fromAbove) { if (ROOFS) ROOFS.visible 
   renderer.setRenderTarget(null); renderer.render(postScene, postCam);
 }
 makeRTs();
+/* compile shaders ahead of time for the picture the world is really drawn into (the low-resolution target, which wants its
+   colour left linear), so the first frame a thing is seen does not stop to build its shader */
+export function compileFor(s = scene) { const was = renderer.getRenderTarget(); renderer.setRenderTarget(colorRT); try { renderer.compile(s, cam); } catch (e) {} renderer.setRenderTarget(was); }
 /* compile every effect's shader while the field loads, so the first shot, puff and blast of the match do not stall a frame */
 { const at = new THREE.Vector3(0, -400 * U, 0); puff(at, { n: 2 }); puff(at, { n: 2, dark: true }); ringFx(at, "#ffffff", 2, .05); tracer(at, at.clone().setX(30 * U)); chunksFx(at, "#888888", 1, 1); flash(at, "#ffffff", 0, .05);
-  try { renderer.compile(scene, cam); } catch (e) {} }
+  compileFor(scene); }
 Math.random = _mr;   // the field is built; from here on, chance is chance

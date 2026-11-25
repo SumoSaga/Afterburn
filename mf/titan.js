@@ -9,7 +9,7 @@
 import { THREE, U, clamp, lerp, charMat, grad } from "./engine.js";
 import { loadModel, puppet as wear } from "./puppet.js";
 import { MECH_BLOCKS } from "./mechblocks.js";
-import { build, box as B, hull as H, drum as C, loft as Lf, ball as Bl } from "./parts.js";
+import { build as build0, box as B, hull as H, drum as C, loft as Lf, ball as Bl } from "./parts.js";
 
 const SCHEMES = {
   you: { frame: "#34373a", plate: "#b9b3a4", plate2: "#8f8a80", accent: "#c45a1e", dark: "#1e2022", glow: [.5, 2.6, 3.2], steel: "#a3a8ab", canvas: "#7a6a4c", cream: "#e2dac4" },
@@ -32,16 +32,31 @@ const TRIFLE = await loadModel("titan-rifle.glb", "mfTRifle"), TS = 2.4, R2 = Ma
 // the same rifle as the pilot sees it from the cockpit: marked as something held, so it is drawn over the world
 export function cockpitRifle() { if (!TRIFLE) return null; return modelGun("you", TRIFLE.held || (TRIFLE.held = TRIFLE.mk("#ffffff", "held", "0.6"))); }
 function modelGun(team, mat0) { let src = null; TRIFLE.scene.traverse((o) => { if (o.isMesh) src = o; }); const pos = src.geometry.attributes.position, idx = src.geometry.index.array, body = [], drum = [];
+  if (TRIFLE.geos) return gunFrom(TRIFLE.geos, mat0 || TRIFLE.mats[team] || TRIFLE.mats.you);
   for (let i = 0; i < idx.length; i += 3) { let ul = 9, uh = -9, zm = 0, zh = -9; for (let k = 0; k < 3; k++) { const v = idx[i + k], u = (pos.getX(v) + pos.getY(v)) * R2, z = pos.getZ(v); ul = Math.min(ul, u); uh = Math.max(uh, u); zm += z / 3; zh = Math.max(zh, z); }
     (ul > -.335 && uh < -.03 && zm < -.065 && zh < -.035 ? drum : body).push(idx[i], idx[i + 1], idx[i + 2]); }
   const M = new THREE.Matrix4().set(TS * R2, -TS * R2, 0, 0, 0, 0, TS, -.03 * TS, -TS * R2, -TS * R2, 0, -.68 * TS, 0, 0, 0, 1), mat = mat0 || TRIFLE.mats[team] || TRIFLE.mats.you;
-  const part = (ix) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", pos.clone()); g.setAttribute("normal", src.geometry.attributes.normal.clone()); g.setAttribute("uv", src.geometry.attributes.uv.clone()); g.setIndex(ix); g.applyMatrix4(M); const m = new THREE.Mesh(g, mat); m.castShadow = true; m.frustumCulled = false; return m; };
-  const g = new THREE.Group(), mag = new THREE.Group(), dm = part(drum); g.add(part(body)); mag.add(dm); g.add(mag);
+  const part = (ix) => { const g = new THREE.BufferGeometry(); g.setAttribute("position", pos.clone()); g.setAttribute("normal", src.geometry.attributes.normal.clone()); g.setAttribute("uv", src.geometry.attributes.uv.clone()); g.setIndex(ix); g.applyMatrix4(M); return g; };
+  TRIFLE.geos = { body: part(body), drum: part(drum) }; return gunFrom(TRIFLE.geos, mat); }
+// the rifle's two shapes are cut once and shared by every Titan that carries one
+function gunFrom(G, mat) { const mk = (geo) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.frustumCulled = false; return m; };
+  const g = new THREE.Group(), mag = new THREE.Group(), dm = mk(G.drum); g.add(mk(G.body)); mag.add(dm); g.add(mag);
   const at = (u, z) => new THREE.Vector3(0, (z - .03) * TS, -(u + .68) * TS);
   return { g, mag, drum: dm, grip: at(-.4, -.1), fore: at(.05, -.1), well: at(-.18, -.15), muzzle: at(.675, .03) }; }
+/* Building a walker's pieces is the slow part of making one (every block gets its own grime worked out vertex by vertex), so
+   the finished shapes are kept. A second Titan of the same side, frame, paint and kit takes the shapes the first one made,
+   and only gets new joints to hang them on. CK names the rig being built; CN counts its pieces in the order they are made. */
+const GCACHE = new Map(); let CK = null, CN = 0;
+function build(parent, list, S, glowMat, mat) {
+  if (!CK) return build0(parent, list, S, glowMat, mat);
+  const k = CK + "#" + CN++, hit = GCACHE.get(k);
+  if (hit) { for (const [geo, glow] of hit) { const m = new THREE.Mesh(geo, glow ? glowMat : mat || charMat); if (!glow) m.castShadow = m.receiveShadow = true; parent.add(m); } return; }
+  const n0 = parent.children.length; build0(parent, list, S, glowMat, mat); GCACHE.set(k, parent.children.slice(n0).filter((m) => m.isMesh).map((m) => [m.geometry, m.material === glowMat])); }
 const joint = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
 
 export function makeRig(team, o = {}) {
+  CK = [team, o.cls, o.mech, o.accent || "", (o.lo && o.lo.prim) || ""].join("|"); CN = 0; try { return makeRig0(team, o); } finally { CK = null; } }
+function makeRig0(team, o) {
   const MB = MECH_BLOCKS[o.cls] || MECH_BLOCKS.medium, MD = MB.dims, L1 = MD.L1, L2 = MD.L2, ANK = MD.ANK, HIP_Y = MD.ANK + MD.L1 + MD.L2 - .1, HV = o.cls === "heavy", HIP_X = MD.HIP_X * (HV ? 1.55 : 1), SH_X = MD.SH_X * (HV ? 1.45 : 1), SH_Y = MD.SH_Y, A1 = MD.A1, A2 = MD.A2;   // each frame has its own body, cut from its own model
   const S = { ...(SCHEMES[team] || SCHEMES.you), grit: .85, gritScale: 1.9, ...o }, Sm = { ...S, mud: .75 }, glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(...S.glow) }), hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.9, .7) });
   const size = 1, bulk = 1, gsc = o.cls === "light" ? .84 : o.cls === "heavy" ? 1.08 : 1; const root = new THREE.Group(); root.scale.setScalar(U * size);   // a light is smaller and leaner, a heavy bigger and broader
@@ -166,6 +181,7 @@ export function makeRig(team, o = {}) {
   /* The rest of the loadout on the body, so a pilot can read it in half a second: the ordnance on the left shoulder,
      the defensive kit on the left forearm (or the back, or the legs), each lit in its own colour. */
   const MODS = {};   // where each hardpoint module sits, so the garage can point the camera at it and draw its picture
+  if (CK && o.lo) { CK += "|" + [o.lo.q, o.lo.e, o.lo.kit].join(","); CN = 0; }   // the kit hung on the body has shapes of its own
   if (o.lo) { const T0 = MB.parts.torso, g0 = MB.g, xs = T0.map((r) => r[0] * g0), ys = T0.map((r) => (r[1] + r[3]) * g0), zs = T0.map((r) => r[2] * g0), top = Math.max(...ys), back = Math.max(...zs), left = Math.min(...xs);
     const lit = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) }), LIT = { arc: lit(.6, 2.2, 3.4), fire: lit(3.4, 1.4, .4), red: lit(3.4, .5, .3), cyan: lit(.5, 2.6, 3.2), violet: lit(1.8, 1.1, 3.2), white: lit(2.6, 2.6, 2.4) };
     const QM = { cluster: ["fire", [B(.8, .62, .9, 0, 0, 0, "plate2"), ...[-.2, .2].flatMap((x) => [-.15, .15].map((y) => C(.14, .3, x, y + .31, -.5, "dark", "z", 8))), B(.82, .08, .92, 0, .62, 0, "accent")]],

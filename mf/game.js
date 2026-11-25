@@ -2,7 +2,7 @@
    The battle itself (squads, vehicles, points, the commander's map) is in mf/battle.js.
    Everything here is in metres; the engine draws at U units to the metre. */
 import { THREE, U, clamp, lerp, V3, rnd, $, CFG, DEF, saveCfg, renderer, scene, cam, gunScene, gunMat, makeRTs, render, BOXES, hitsBox, free, freeG, boxesNear, groundH, WORLD, rayBox, rayWorld,
-  post, flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat, PLAN, MAPKEY, MAPNAME, SALT, retryField, setMap as pickMap } from "./engine.js";
+  post, flash, puff, ringFx, flareFx, chunksFx, tracer, fxLayer, SOL, WEATHER, charMat, PLAN, MAPKEY, MAPNAME, SALT, retryField, setMap as pickMap , compileFor } from "./engine.js";
 import { VM, gunProp, heldProp } from "./hands.js";
 import { iconOf, iconLater, signOf } from "./icons.js";
 import { GARAGE, GARAGE_FOV } from "./garage.js";
@@ -30,7 +30,7 @@ function axis(B, ax, delta, stepOK, hits) {
   for (const b of boxesNear(p.x, p.z, B.r)) { if (!hitsBox(p.x, p.y, p.z, B.h, b, B.r)) continue;
     if (ax === 1) { if (delta < 0) { p.y = b.max[1]; if (B.vel.y < -9 && B.onLand) B.onLand(-B.vel.y); B.grounded = true; } else p.y = b.min[1] - B.h - .001; B.vel.y = 0; }
     else { const up = b.max[1] - p.y;
-      if (stepOK && up > 0 && up <= .5 && free(p.x, b.max[1] + .001, p.z, B.h, B.r)) { p.y = b.max[1] + .001; continue; }   // a low lip: step up onto it
+      if (stepOK && up > 0 && up <= (B.step || .5) && free(p.x, b.max[1] + .001, p.z, B.h, B.r)) { p.y = b.max[1] + .001; if (B.step) B.lagY = Math.min(2.2, (B.lagY || 0) + up); continue; }   // a low lip: step up onto it (a Titan steps over a fence, a crate or a car the same way, and its body rises after its feet)
       p.setComponent(ax, delta > 0 ? b.min[ax] - B.r - .001 : b.max[ax] + B.r + .001); hits.push({ ax, n: delta > 0 ? -1 : 1, b }); B.vel.setComponent(ax, 0); } } 
   // the ground itself: hills are walked up, and landed on
   const gh = groundH(p.x, p.z); if (p.y < gh) { if (ax === 1 && delta < 0 && B.vel.y < -9 && B.onLand) B.onLand(-B.vel.y); p.y = gh; if (B.vel.y < 0) B.vel.y = 0; B.grounded = true; }
@@ -290,7 +290,7 @@ function makeTitan(team, x, z, yaw, kit = null) {
   const myF = (B.fac && B.fac.you) || LOAD.side, fac = team === "you" ? myF : myF === "militia" ? "machine" : "militia";   // each side is one faction, and the two sides are opposite
   const cls = kit && BYF.machine[kit.chassis] ? kit.chassis : team === "you" ? LOAD.chassis : ["medium", "medium", "heavy", "light"][Math.floor(rnd() * 4)], mech = BYF[fac][cls], ch = { ...MECHS[mech], ...CHASSIS[cls] }, lo = kit ? fixLoadout(cls, kit.tlo) : team === "you" ? LOAD.tlo[cls] : fixLoadout(cls, BUILDS[cls][Math.floor(rnd() * BUILDS[cls].length)]), rig = makeRig(team, { cls, mech, lo, ...(team === "you" ? { accent: kit ? kit.paint : LOAD.paint } : {}) }); scene.add(rig.root);
   const t = { team, rig, mech, batt: true, smoke: 0, smokeT: 0, pos: V3(x, .05, z), vel: V3(), yaw, r: cls === "heavy" ? 1.7 : cls === "light" ? 1.3 : 1.5, h: ch.h, eye: ch.eye, ward: 0, wardT: 0, markT: 0, drT: 0, fortT: 0, ocT: 0, hoverT: 0, spin: 0, chg: 0, cans: 2, shield: 0, hull: ch.hull, hullMax: ch.hull, speed: ch.speed, dashMax: ch.dash, shieldT: 9, hitT: 9, alive: true, doom: 0, doomed: false, vortex: 0, vortexCd: 0, pulseCd: 0, core: 0, coreT: 0, ammo: PRIM[lo.prim].mag, reload: 0, cls, lo, plate: 0, locks: 0, lockT: 0, slowT: 0, tetherT: 0, smartT: 0, coaxT: 1, vmode: "close", fireCd: 0, dash: ch.dash, dashT: 0, dashing: 0, grounded: true,
-    cd: 2 + rnd(), rk: 4 + rnd() * 4, think: 0, flow: null, strafe: 1, strafeT: 0, walk: 0, kneel: 0, kneelTo: 0, hatch: 0, hatchTo: 0, aimYaw: 0, aimPitch: 0, recoil: 0, punch: 0, punchCd: 0, busy: false, land: 1 };
+    cd: 2 + rnd(), rk: 4 + rnd() * 4, think: 0, flow: null, strafe: 1, strafeT: 0, walk: 0, kneel: 0, kneelTo: 0, hatch: 0, hatchTo: 0, aimYaw: 0, aimPitch: 0, recoil: 0, punch: 0, punchCd: 0, busy: false, land: 1, step: cls === "heavy" ? 1.9 : 1.7, lagY: 0 };
   if (lo.kit === "turbo") { t.dashMax++; t.dash++; } if (lo.kit === "overcore") t.core = .2;
   if (team === "you" && P.campCore) t.core = Math.max(t.core, P.campCore); TITANS.push(t); return t;
 }
@@ -301,7 +301,7 @@ const seatPt = (t) => titanPoint(t, 0, chestY(t) + .05, .1), hatchPt = (t) => ti
 function placeTitan(t, dt) {
   t.kneel = approach(t.kneel, t.kneelTo, dt * 1.5); t.hatch = approach(t.hatch, t.hatchTo, dt * 2.4); t.recoil = Math.max(0, t.recoil - dt * 6); t.land = Math.max(0, t.land - dt * 1.1); if (t.punch > 0) t.punch -= dt; t.punchCd -= dt;
   const fwd = -t.vel.x * Math.sin(t.yaw) - t.vel.z * Math.cos(t.yaw), sp = Math.hypot(t.vel.x, t.vel.z);
-  t.rig.root.position.set(t.pos.x * U, t.pos.y * U, t.pos.z * U); t.rig.root.rotation.y = t.yaw; t.rig.root.visible = t !== P.titan || MAP.on;
+  t.lagY = Math.max(0, (t.lagY || 0) - dt * (2 + t.lagY * 4)); t.rig.root.position.set(t.pos.x * U, (t.pos.y - t.lagY) * U, t.pos.z * U); t.rig.root.rotation.y = t.yaw; t.rig.root.visible = t !== P.titan || MAP.on;
   t.rig.pose(dt, { speed: sp * (fwd < -.5 ? -1 : 1), kneel: Math.max(t.kneel, ease(t.land) * .7), hatch: t.hatch, aimYaw: t.aimYaw, aimPitch: t.aimPitch, recoil: t.recoil, punch: t.punch > 0 ? Math.sin(clamp(1 - t.punch / .45, 0, 1) * Math.PI) : 0, limp: t.doom > 0 || t.doomed, reload: t.reload > 0 ? clamp(1 - t.reload / 2.2, 0, 1) : -1 });
 }
 const muzzleOf = (t) => t.rig.muzzle.getWorldPosition(V3());
@@ -332,8 +332,9 @@ function stepTitans(dt) { stepRodeo(dt); stepFires(dt); dropRodeo();
     if (o || s.t <= 0) { scene.remove(s.mesh); SNARES.splice(i, 1); if (o) { o.tetherT = 4; ringFx(toU(V3(s.x, groundH(s.x, s.z) + .5, s.z)), "#ffb060", 6 * U, .6); snd("shield_hit", { pos: [s.x, 1, s.z], pitch: .5, gain: 1.3 }); if (o === P.titan) say("A snare has you. Your legs are held for 4 seconds.", 2.5); else say("Snared.", 1.5); } } }
   for (let i = LATER.length - 1; i >= 0; i--) { const l = LATER[i]; l.t -= dt; if (l.t <= 0) { LATER.splice(i, 1); l.fn(); } }
   for (let i = DROPS.length - 1; i >= 0; i--) { const D = DROPS[i]; D.t += dt; const gy = groundH(D.x, D.z), k = Math.min(1, D.t / D.dur), y = lerp(gy + 150, gy + 2.5, k * k); D.pod.position.set(D.x * U, y * U, D.z * U);
+    if (D.mk) { const s = 1 + .07 * Math.sin(D.t * 10); D.mk.ring.scale.set(s, 1, s); D.mk.arrow.position.y = (10 + Math.sin(D.t * 6) * 1.5) * U; D.mk.arrow.rotation.y += dt * 2.5; }
     if (rnd() < dt * 60) puff(V3(D.x * U, (y + 4) * U, D.z * U), { n: 5, color: "#ffb060", hot: 3, size: 6, life: .5, drag: 1, vel: () => V3((rnd() - .5) * 30, 60 + rnd() * 80, (rnd() - .5) * 30) });
-    if (k >= 1) { DROPS.splice(i, 1); scene.remove(D.pod); snd("titanfall", { pos: [D.x, 1, D.z] }); const at = V3(D.x, gy + .05, D.z); if (D.ghost) { const p = toU(at); flareFx(p, "#ffb060", 9, 1.1); ringFx(p.clone().setY(p.y + 1), "#f2c46a", 11 * U, .7); chunksFx(p.clone().setY(p.y + 3), "#5c4c3a", 8, 70); continue; } const t = makeTitan(D.team, D.x, D.z, D.yaw); t.pos.y = gy + .05; placeTitan(t, .016); if (D.team === "you") P.mine = t;
+    if (k >= 1) { DROPS.splice(i, 1); scene.remove(D.pod); if (D.mk) scene.remove(D.mk.g); snd("titanfall", { pos: [D.x, 1, D.z] }); const at = V3(D.x, gy + .05, D.z); if (D.ghost) { const p = toU(at); flareFx(p, "#ffb060", 9, 1.1); ringFx(p.clone().setY(p.y + 1), "#f2c46a", 11 * U, .7); chunksFx(p.clone().setY(p.y + 3), "#5c4c3a", 8, 70); continue; } const t = makeTitan(D.team, D.x, D.z, D.yaw); t.pos.y = gy + .05; placeTitan(t, .016); if (D.team === "you") P.mine = t;
       const p = toU(at); flareFx(p, "#ffb060", 9, 1.1); ringFx(p.clone().setY(p.y + 1), "#f2c46a", 11 * U, .7); chunksFx(p.clone().setY(p.y + 3), "#5c4c3a", 8, 70);
       puff(p, { n: 40, color: "#ad9677", dark: true, opacity: .5, size: 8, life: 2.6, grow: 2.2, drag: 1.4, vel: () => { const a = rnd() * 6.28; return V3(Math.cos(a) * (60 + rnd() * 90), 8 + rnd() * 30, Math.sin(a) * (60 + rnd() * 90)); } });
       const d = Math.hypot(D.x - P.pos.x, D.z - P.pos.z); P.shake = Math.max(P.shake, clamp(9 / (d + 4), 0, .9));
@@ -438,8 +439,16 @@ function stepTitanAI(t, dt) { aiAbility(t, dt);
       if (end && W.fire && B.mp !== "guest" && i === 0) addFire(end.x, end.z, 3, 3, 400, t.team);
       if (end) tracer(mz, toU(end), "#ffb070", 9000, 1.5); }); }
 }
+/* Where a Titan is coming down: a ring on the ground in the caller's colour, a faint glow inside it, a thin beam up to the
+   sky and an arrow over the ring pointing down. It is there from the call to the landing, so friends get out of the way and
+   foes know what is coming. The shapes and colours are made once and shared by every drop. */
+const DZ = { ring: new THREE.RingGeometry(3.9 * U, 5.1 * U, 24, 1).rotateX(-Math.PI / 2), disc: new THREE.CircleGeometry(3.9 * U, 24).rotateX(-Math.PI / 2), arrow: new THREE.ConeGeometry(2.2 * U, 4 * U, 4).rotateX(Math.PI), beam: new THREE.BoxGeometry(.3 * U, 1, .3 * U), mats: {} };
+const dzMat = (col, o) => DZ.mats[col + o] || (DZ.mats[col + o] = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: o, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+function dropMark(team, x, z) { const col = team === "you" ? "#5ec8ff" : "#ff5a3c", gy = groundH(x, z), g = new THREE.Group(); g.position.set(x * U, (gy + .4) * U, z * U);
+  const ring = new THREE.Mesh(DZ.ring, dzMat(col, .85)), disc = new THREE.Mesh(DZ.disc, dzMat(col, .22)), arrow = new THREE.Mesh(DZ.arrow, dzMat(col, 1)), beam = new THREE.Mesh(DZ.beam, dzMat(col, .22));
+  beam.scale.y = 70 * U; beam.position.y = 35 * U; arrow.position.y = 10 * U; for (const m of [ring, disc, arrow, beam]) m.renderOrder = 3; g.add(ring, disc, arrow, beam); scene.add(g); return { g, ring, arrow }; }
 function callTitan(team, x, z, yaw) { const pod = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(3.2 * U, 5 * U, 3.2 * U), new THREE.MeshToonMaterial({ color: "#332a21" })), fire = new THREE.Mesh(new THREE.BoxGeometry(2.4 * U, 9 * U, 2.4 * U), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2, .7) }));
-  fire.position.y = 7 * U; pod.add(body, fire); pod.position.set(x * U, 150 * U, z * U); scene.add(pod); DROPS.push({ team, x, z, yaw, t: 0, dur: 2.4, pod }); }
+  fire.position.y = 7 * U; pod.add(body, fire); pod.position.set(x * U, 150 * U, z * U); scene.add(pod); DROPS.push({ team, x, z, yaw, t: 0, dur: 2.4, pod, mk: dropMark(team, x, z) }); }
 function tryCallTitan() {
   if (PLAN && PLAN.indoor) { say("No mech can come down through the deck. This fight is on foot.", 2.5); return; } if (P.mine || DROPS.some((D) => D.team === "you" && !D.ghost)) return; if (P.meter < 100) { say("Your Titan is not ready yet. The meter fills over time and with every grunt you put down.", 2.5); return; }
   cam.getWorldDirection(_d); _o.copy(P.pos).setY(P.pos.y + P.eye); const t = rayWorld(_o, _d, 60), at = _o.clone().addScaledVector(_d, t);
@@ -496,7 +505,7 @@ function stepRide(dt) { const t = P.titan; if (!t.alive || t.doom > 0) { throwCl
   if (t.fortT > 0) { t.fortT -= dt; wx = wz = 0; }
   if (t.dashing > 0) t.dashing -= dt; else { friction(t, 4, dt); accelerate(t, wx, wz, t.speed * (loOf(t).e === "gunshield" && t.wardT > 0 ? .6 : 1) * (t.tetherT > 0 ? .1 : 1) * ((K.ShiftLeft || K.ShiftRight) && t.reload <= 0 ? 1.45 : 1), 3.2, dt); }
   t.vel.y -= 22 * dt; if (t.hoverT > 0) { t.hoverT -= dt; t.vel.y = t.hoverT > 2.3 ? 8 : Math.max(t.vel.y, 0); } moveBody(t, dt); hallGuard(t); const tr = (t.slowT > 0 ? .35 : 1) * 2.6; t.yaw += clamp(angD(t.yaw, P.yaw), -tr * dt, tr * dt); t.aimYaw = clamp(angD(t.yaw, P.yaw), -1.1, 1.1); t.aimPitch = P.pitch;
-  t.walk += Math.hypot(t.vel.x, t.vel.z) * dt; P.pos.copy(t.pos); P.vel.copy(t.vel); P.grounded = t.grounded;
+  t.walk += Math.hypot(t.vel.x, t.vel.z) * dt; P.pos.copy(t.pos); P.pos.y -= t.lagY || 0; P.vel.copy(t.vel); P.grounded = t.grounded;
 }
 
 /* ---------- what the pilot holds ---------- */
@@ -1300,8 +1309,20 @@ function advance(dt) {
   if (active() || (B.mp && started)) { acc += dt; while (acc >= H) { stepPilot(H); acc -= H; } stepGun(dt); stepBattle(dt); stepTitans(dt); if (!B.mp && !foeCalled && B.time > 100 && !B.over) callFoe(); if (!P.mine && !B.over) P.meter = Math.min(100, P.meter + .8 * dt); if (B.mp) netTick(dt); }
   try { SOL.update(dt); } catch (e) { if (!advance.w1) { advance.w1 = 1; console.error("[soldiers]", e); } }
 }
+/* Building a Titan is slow the first time each kind is made, so the kinds this match can call in are built once ahead of
+   time, one every few frames on the menu and one every second and a half in the match, and their shaders compiled. When a
+   Titan really falls it takes those finished shapes and lands without a hitch. */
+const WARM = new Set(); let warmT = 0;
+function warmTitans(dt) { if (PLAN && PLAN.indoor) return; warmT -= dt; if (warmT > 0) return; warmT = started ? 1.5 : .25;
+  const myF = (B.fac && B.fac.you) || LOAD.side, foeF = myF === "militia" ? "machine" : "militia", want = [["you", myF, LOAD.chassis, LOAD.tlo[LOAD.chassis], LOAD.paint]];
+  for (const cls of ["medium", "heavy", "light"]) for (const b of BUILDS[cls]) want.push(["foe", foeF, cls, fixLoadout(cls, b), null]);
+  for (const [team, fac, cls, lo, accent] of want) { const mech = BYF[fac] && BYF[fac][cls]; if (!mech || !lo) continue; const k = [team, mech, cls, JSON.stringify(lo), accent].join("|"); if (WARM.has(k)) continue; WARM.add(k);
+    const r = makeRig(team, { cls, mech, lo, ...(accent ? { accent } : {}) }); r.root.position.set(0, -400 * U, 0); scene.add(r.root);
+    if (!WARM.done) { WARM.done = true; const a = dropMark("you", 0, 0), b = dropMark("foe", 0, 0); a.g.position.y = b.g.position.y = -400 * U; compileFor(scene); r.wreck(); compileFor(scene); scene.remove(a.g, b.g); }
+    scene.remove(r.root); return; } }
 function frame(now) {
   requestAnimationFrame(frame);
+  try { warmTitans(Math.min(.05, Math.max(0, (now - last) / 1000))); } catch (e) {}
   const dt = clamp((now - last) / 1000, 0, .05); last = now; clock += dt;   // never negative: a frame stamped earlier than the last one used to wind the hurt and chill tints up instead of down, and they stayed on the edges of the view
   if (!window.__hold) advance(dt);
   hurtFx = Math.max(0, hurtFx - dt * 1.6); coolFx = Math.max(0, coolFx - dt * 2.5); P.shake = Math.max(0, P.shake - dt * 1.5);
@@ -1434,6 +1455,6 @@ try { const aj = JSON.parse(sessionStorage.getItem("ab-autojoin") || "null"); if
   const go = (n) => pickMap(kind.value + "-" + (String(n).replace(/\D/g, "").slice(0, 6) || "1") + "-" + size.value + role.value);
   $("map-go").onclick = () => go(num.value || "1"); $("map-new").onclick = () => go(1000 + Math.floor(Math.random() * 9000));
   $("map-now").textContent = "You are on " + MAPNAME + ", and you " + (OP.atk === "you" ? "attack" : "defend") + ". " + SECN + " sectors: " + POINTS.map((p) => p.name + " " + p.label.toLowerCase() + (p.roof ? " (roofed)" : "")).join(", ") + "."; }
-window.__mf = { DMN, mechSpread, spreadMul, baseSpread, SEEK, FOOT, ATW, weakHit, get critT() { return critT; }, aimDbg() { aimRay(0); const best = rayWorld(_o, _d, 220), th = titanHit(_o, _d, best, "you"); return { o: _o.toArray().map((v) => +v.toFixed(1)), d: _d.toArray().map((v) => +v.toFixed(2)), world: +best.toFixed(1), hit: th.who ? th.who.team + " at " + th.best.toFixed(1) : null, later: LATER.length }; }, FIRES, addFire, useKit, HANDLING, cone, income, lastStep, GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
+window.__mf = { callTitan, DROPS, moveBody, DMN, mechSpread, spreadMul, baseSpread, SEEK, FOOT, ATW, weakHit, get critT() { return critT; }, aimDbg() { aimRay(0); const best = rayWorld(_o, _d, 220), th = titanHit(_o, _d, best, "you"); return { o: _o.toArray().map((v) => +v.toFixed(1)), d: _d.toArray().map((v) => +v.toFixed(2)), world: +best.toFixed(1), hit: th.who ? th.who.team + " at " + th.best.toFixed(1) : null, later: LATER.length }; }, FIRES, addFire, useKit, HANDLING, cone, income, lastStep, GRUNTS, ALLIES, bounds, oob, post, OP, renderer, scene, cannon, CR, CK, gunScene, TITANS, makeTitan, hurtTitan, startEnter, K, PLAN, MAPKEY, groundH, VM, startSwap, startNade, startKnife, NADES, NET, RPS, MY, cut, get ROSTER() { return ROSTER; }, makeFigure, send, snapshot, useUtil, snd, SND, B, MAP, setMap, deploy, SQUADS, ALLIES, VEH, POINTS, LOAD, P, K, GRUNTS, TITANS, DROPS, CFG, BOXES, stepPilot, stepTitans, fireCarbine, fireCannon, callTitan, callFoe, startEnter, startExit, tryCallTitan, CK, ROCKETS, fireRockets, doPunch, useKey, hurtTitan, restart, SOL, U, cam,
   get started() { return started; }, sim(sec) { for (let i = 0; i < sec * 30; i++) advance(1 / 30); }, mouse(v) { mouseDown = v; }, force() { started = true; noLock = true; $("start").style.display = "none"; $("hud").style.display = "block"; restart(); } };
 requestAnimationFrame(frame);

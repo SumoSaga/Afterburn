@@ -192,7 +192,7 @@ const COL = { you: [.5, 2.4, 3], foe: [3.2, .5, .3], none: [1.5, 1.4, 1.2] };
 const GS = 2, NX = 160, NZ = 170, GX0 = -160, GZ0 = -190, NN = NX * NZ, PASS = new Uint8Array(NN), WALK = new Uint8Array(NN);
 export const NAVDBG = { PASS, WALK, GS, NX, NZ, GX0, GZ0 };
 export function buildPass() { for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = GX0 + (i + .5) * GS, z = GZ0 + (j + .5) * GS, s = slopeAt(x, z), edge = i < 1 || j < 1 || i > NX - 2 || j > NZ - 2;
-  PASS[j * NX + i] = !edge && s < .6 && freeG(x, z, 4.4, 1.6, .55) ? 1 : 0; WALK[j * NX + i] = !edge && s < 1.15 && freeG(x, z, 1.7, .5, .4) ? 1 : 0; } }
+  PASS[j * NX + i] = !edge && s < .6 && freeG(x, z, 4.4, 1.6, 1.65) ? 1 : 0;   /* a Titan steps over anything lower than about 1.7 m, so the drive map looks above it */ WALK[j * NX + i] = !edge && s < 1.15 && freeG(x, z, 1.7, .5, .4) ? 1 : 0; } }
 const ci = (x) => clamp(Math.floor((x - GX0) / GS), 0, NX - 1), cj = (z) => clamp(Math.floor((z - GZ0) / GS), 0, NZ - 1), cx = (i) => GX0 + (i + .5) * GS, cz = (j) => GZ0 + (j + .5) * GS;
 function nearCell(G, i, j) { if (G[j * NX + i]) return j * NX + i; for (let r = 1; r < 40; r++) { let bd = 1e9, b = -1; for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= NX || nj >= NZ || !G[nj * NX + ni]) continue; const d = di * di + dj * dj; if (d < bd) { bd = d; b = nj * NX + ni; } } if (b >= 0) return b; } return -1; }
 // the nearest spot to (x, z) that a soldier can stand on: the spot itself when it is clear
