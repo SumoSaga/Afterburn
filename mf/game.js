@@ -30,13 +30,22 @@ function axis(B, ax, delta, stepOK, hits) {
   for (const b of boxesNear(p.x, p.z, B.r)) { if (!hitsBox(p.x, p.y, p.z, B.h, b, B.r)) continue;
     if (ax === 1) { if (delta < 0) { p.y = b.max[1]; if (B.vel.y < -9 && B.onLand) B.onLand(-B.vel.y); B.grounded = true; } else p.y = b.min[1] - B.h - .001; B.vel.y = 0; }
     else { const up = b.max[1] - p.y;
-      if (stepOK && up > 0 && up <= (B.step || .5) && free(p.x, b.max[1] + .001, p.z, B.h, B.r)) { p.y = b.max[1] + .001; if (B.step) B.lagY = Math.min(2.2, (B.lagY || 0) + up); continue; }   // a low lip: step up onto it (a Titan steps over a fence, a crate or a car the same way, and its body rises after its feet)
+      if (stepOK && up > 0 && up <= (B.step || .5) && free(p.x, b.max[1] + .001, p.z, B.h, B.r)) { p.y = b.max[1] + .001; B.lagY = Math.min(2.2, (B.lagY || 0) + up); continue; }   // a low lip: step up onto it (a Titan steps over a fence, a crate or a car the same way, and its body rises after its feet)
       p.setComponent(ax, delta > 0 ? b.min[ax] - B.r - .001 : b.max[ax] + B.r + .001); hits.push({ ax, n: delta > 0 ? -1 : 1, b }); B.vel.setComponent(ax, 0); } } 
   // the ground itself: hills are walked up, and landed on
   const gh = groundH(p.x, p.z); if (p.y < gh) { if (ax === 1 && delta < 0 && B.vel.y < -9 && B.onLand) B.onLand(-B.vel.y); p.y = gh; if (B.vel.y < 0) B.vel.y = 0; B.grounded = true; }
   if (ax !== 1) p.setComponent(ax, clamp(p.getComponent(ax), ax === 0 ? WORLD.x0 + 1 : WORLD.z0 + 1, ax === 0 ? WORLD.x1 - 1 : WORLD.z1 - 1)); }
-function moveBody(B, dt) { const hits = [], was = B.grounded; B.grounded = false; const n = Math.max(1, Math.ceil(B.vel.length() * dt / .2)), s = dt / n;
-  for (let i = 0; i < n; i++) { axis(B, 0, B.vel.x * s, was, hits); axis(B, 2, B.vel.z * s, was, hits); axis(B, 1, B.vel.y * s, was, hits); } return { hits, was }; }
+function moveBody(B, dt) { const hits = [], was = B.grounded, x0 = B.pos.x, z0 = B.pos.z; B.grounded = false; const n = Math.max(1, Math.ceil(B.vel.length() * dt / .2)), s = dt / n;
+  for (let i = 0; i < n; i++) { axis(B, 0, B.vel.x * s, was, hits); axis(B, 2, B.vel.z * s, was, hits); axis(B, 1, B.vel.y * s, was, hits); }
+  if (was && !B.grounded && B.vel.y <= .5) stickDown(B, .3 + Math.hypot(B.pos.x - x0, B.pos.z - z0) * 1.25);
+  return { hits, was }; }
+/* Walking, running or sliding down a hill moves a body sideways off the slope faster than it falls, so it used to spend most
+   frames a few centimetres in the air: no grip, no sprint, slides cut short, and a camera that hopped. A body that was on the
+   ground and is not jumping now keeps its feet on the ground (or on a box top) as long as the ground is within reach below:
+   a little more than the slope could drop in the distance it just moved. Anything further down is a real ledge, and it falls. */
+function stickDown(B, reach) { const p = B.pos; let top = groundH(p.x, p.z);
+  for (const b of boxesNear(p.x, p.z, B.r)) if (p.x + B.r > b.min[0] && p.x - B.r < b.max[0] && p.z + B.r > b.min[2] && p.z - B.r < b.max[2] && b.max[1] <= p.y + .01 && b.max[1] > top) top = b.max[1];
+  if (p.y - top > reach || !free(p.x, top + .001, p.z, B.h, B.r)) return; p.y = top + (top > groundH(p.x, p.z) ? .001 : 0); B.vel.y = 0; B.grounded = true; }
 function accelerate(B, wx, wz, wishSpeed, accel, dt) { const cur = B.vel.x * wx + B.vel.z * wz, add = wishSpeed - cur; if (add <= 0) return; const a = Math.min(accel * wishSpeed * dt, add); B.vel.x += wx * a; B.vel.z += wz * a; }
 function friction(B, f, dt) { const s = Math.hypot(B.vel.x, B.vel.z); if (s < .01) { B.vel.x = B.vel.z = 0; return; } const k = Math.max(0, s - Math.max(s, 2.5) * f * dt) / s; B.vel.x *= k; B.vel.z *= k; }
 
@@ -126,7 +135,7 @@ function stepPilot(dt) {
     if (crouchKey && !P.sliding && !P.crouchLatch) { if (hs() > 5.6) { P.sliding = true; if (P.slideCd <= 0) { const s = hs(), k = (s + CFG.slideBoost) / s; P.vel.x *= k; P.vel.z *= k; P.slideCd = 1.8; } } else P.crouchLatch = true; }
     if (P.sliding && (!crouchKey || hs() < 3.5)) { P.sliding = false; if (crouchKey) P.crouchLatch = true; }
     if (P.jumpBuf > 0) { P.jumpBuf = 0; P.coyote = 0; P.vel.y = CFG.jump; P.grounded = false; P.sliding = false; }
-    else if (P.sliding) { friction(P, .5, dt); accelerate(P, wx, wz, 1.5, 6, dt); if (rnd() < dt * 30) puff(toU(P.pos).setY(P.pos.y * U + 2), { n: 2, color: "#ad9677", dark: true, opacity: .4, size: 4, life: .5, grow: 1.5, drag: 2, vel: () => V3((rnd() - .5) * 20, 8, (rnd() - .5) * 20) }); }
+    else if (P.sliding) { friction(P, .5, dt); accelerate(P, wx, wz, 1.5, 6, dt); { const gx = (groundH(P.pos.x + .5, P.pos.z) - groundH(P.pos.x - .5, P.pos.z)), gz = (groundH(P.pos.x, P.pos.z + .5) - groundH(P.pos.x, P.pos.z - .5)), sl = Math.hypot(gx, gz); if (sl > .05) { const a = CFG.gravity * sl / Math.sqrt(1 + sl * sl) * dt; P.vel.x -= gx / sl * a; P.vel.z -= gz / sl * a; const v = hs(); if (v > 16) { P.vel.x *= 16 / v; P.vel.z *= 16 / v; } } }   /* a slide runs faster down a hill and slows going up one */ if (rnd() < dt * 30) puff(toU(P.pos).setY(P.pos.y * U + 2), { n: 2, color: "#ad9677", dark: true, opacity: .4, size: 4, life: .5, grow: 1.5, drag: 2, vel: () => V3((rnd() - .5) * 20, 8, (rnd() - .5) * 20) }); }
     else { friction(P, 7, dt); accelerate(P, wx, wz, P.crouchLatch && crouchKey ? 3 : (P.ads > .5 ? 3.2 : (K.ShiftLeft || K.ShiftRight) && mz > 0 ? CFG.sprint : CFG.walk) * (P.stimT > 0 ? 1.4 : 1) * (P.weapon === 1 ? atw().mv : 1), 11, dt); }
   } else {
     P.sliding = false;
@@ -1331,10 +1340,10 @@ function frame(now) {
   else if (seqCam()) { const [p, yaw, pitch] = seqCam(); cam.position.set(p.x * U, p.y * U, p.z * U); cam.rotation.set(pitch, yaw, 0); if (Math.abs(cam.fov - 84) > .05) { cam.fov = lerp(cam.fov, 84, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
   else { const t = P.titan, sh = P.shake * .06;
     const wallRoll = P.wall ? -(P.wall.ax === 0 ? P.wall.n * Math.cos(P.yaw) : -P.wall.n * Math.sin(P.yaw)) * .2 : 0;
-    P.roll = lerp(P.roll, wallRoll + (P.sliding ? .04 : 0), 1 - Math.exp(-dt * 10)); P.dip = Math.max(0, P.dip - dt * .9);
+    P.roll = lerp(P.roll, wallRoll + (P.sliding ? .04 : 0), 1 - Math.exp(-dt * 10)); P.dip = Math.max(0, P.dip - dt * .9); P.lagY = Math.max(0, (P.lagY || 0) - dt * (1.5 + (P.lagY || 0) * 10));
     P.eye = t ? t.eye - TITAN.KNEEL * Math.max(t.kneel, ease(t.land) * .7) : lerp(Math.min(P.eye, 1.8), P.h - .12 - (P.dead > 0 ? .9 : 0), 1 - Math.exp(-dt * 14));
     const moving = P.grounded && !P.sliding && !t ? Math.min(1, hs() / 9) : 0, bob = t ? Math.abs(Math.sin(t.walk * 1.1)) * .09 : Math.abs(Math.sin(P.bob)) * .035 * moving;
-    cam.position.set(P.pos.x * U, (P.pos.y + P.eye - P.dip + bob) * U, P.pos.z * U); cam.rotation.set(P.pitch + VM.cam.pitch + (rnd() - .5) * sh, P.yaw + (rnd() - .5) * sh, P.roll + VM.cam.roll + (P.dead > 0 ? .5 : 0) + (rnd() - .5) * sh);
+    cam.position.set(P.pos.x * U, (P.pos.y + P.eye - P.dip - (P.titan ? 0 : P.lagY || 0) + bob) * U, P.pos.z * U); cam.rotation.set(P.pitch + VM.cam.pitch + (rnd() - .5) * sh, P.yaw + (rnd() - .5) * sh, P.roll + VM.cam.roll + (P.dead > 0 ? .5 : 0) + (rnd() - .5) * sh);
     const fov = !started && GARAGE.on ? GARAGE_FOV : (t ? 88 : CFG.fov * (1 - (P.ads || 0) * (P.weapon === 1 ? .3 : pw().zoom))) + clamp((hs() - 9) / 8, 0, 1) * 9 * (1 - (P.ads || 0)) + (P.stimT > 0 ? 6 : 0); if (Math.abs(cam.fov - fov) > .05) { cam.fov = lerp(cam.fov, fov, 1 - Math.exp(-dt * 6)); cam.updateProjectionMatrix(); } }
   const t = P.titan;
   render(clock, dt, Math.max(MAP.on ? 0 : hurtFx, P.dead > 0 && !MAP.on ? .8 : 0, t ? (1 - t.hull / t.hullMax) * .4 : (1 - P.hp / HP) * .5), Math.max(coolFx, P.charge * .6), MAP.on);
